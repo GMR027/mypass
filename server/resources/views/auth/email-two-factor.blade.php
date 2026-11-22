@@ -39,7 +39,7 @@
         </a>
     </p>
 
-    <script>
+    <script nonce="{{ $cspNonce }}">
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const status = document.getElementById('status');
         const error = document.getElementById('error');

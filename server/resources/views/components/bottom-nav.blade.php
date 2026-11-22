@@ -27,7 +27,7 @@
             'key' => 'perfil',
             'label' => __('Perfil'),
             'icon' => 'account_circle',
-            'href' => route('settings.security'),
+            'href' => route('settings.profile'),
             'tab' => null,
         ],
     ];

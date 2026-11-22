@@ -50,27 +50,23 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         manager.createNotificationChannel(
             NotificationChannel(
                 channelId,
-                "Vencimiento de documentos",
+                context.getString(R.string.reminder_channel_name),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
-                description = "Avisa cuando un documento está por vencer."
+                description = context.getString(R.string.reminder_channel_description)
             },
         )
 
         val title = when {
-            expired > 0 && soon > 0 -> "Documentos vencidos y por vencer"
-            expired > 0 -> "Tienes documentos vencidos"
-            else -> "Documentos por vencer"
+            expired > 0 && soon > 0 -> context.getString(R.string.reminder_title_both)
+            expired > 0 -> context.getString(R.string.reminder_title_expired)
+            else -> context.getString(R.string.reminder_title_soon)
         }
-        val parts = buildList {
-            if (expired > 0) {
-                add("$expired vencido${if (expired == 1) "" else "s"}")
-            }
-            if (soon > 0) {
-                add("$soon por vencer en los próximos 7 días")
-            }
+        val message = when {
+            expired > 0 && soon > 0 -> context.getString(R.string.reminder_body_both, expired, soon)
+            expired > 0 -> context.getString(R.string.reminder_body_expired, expired)
+            else -> context.getString(R.string.reminder_body_soon, soon)
         }
-        val message = parts.joinToString(" y ")
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP

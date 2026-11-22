@@ -40,10 +40,15 @@
             </div>
         </div>
 
-        <label class="flex items-center gap-3 text-[16px] font-medium text-on-surface">
-            <input type="checkbox" name="remember" value="1" class="mp-checkbox" @checked(old('remember'))>
-            {{ __('Recordarme en este equipo') }}
-        </label>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <label class="flex items-center gap-3 text-[16px] font-medium text-on-surface">
+                <input type="checkbox" name="remember" value="1" class="mp-checkbox" @checked(old('remember'))>
+                {{ __('Recordarme en este equipo') }}
+            </label>
+            <a href="{{ route('password.request') }}" class="text-[15px] font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary">
+                {{ __('¿Olvidaste tu contraseña?') }}
+            </a>
+        </div>
 
         <button type="submit" class="mp-btn mp-btn-primary w-full">
             {{ __('Entrar') }}

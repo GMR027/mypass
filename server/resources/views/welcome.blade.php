@@ -185,7 +185,11 @@
     <footer class="border-t border-outline-variant/60 py-8">
         <div class="mp-container flex flex-col items-center justify-between gap-2 text-sm text-on-surface-variant sm:flex-row">
             <p>© {{ date('Y') }} mypass</p>
-            <p>{{ __('Sin anuncios · Tus llaves se quedan contigo') }}</p>
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                <a href="{{ route('legal.privacy') }}" class="hover:text-on-surface hover:underline">{{ __('Privacidad') }}</a>
+                <a href="{{ route('legal.terms') }}" class="hover:text-on-surface hover:underline">{{ __('Términos') }}</a>
+                <span>{{ __('Sin anuncios · Tus llaves se quedan contigo') }}</span>
+            </div>
         </div>
     </footer>
 </body>

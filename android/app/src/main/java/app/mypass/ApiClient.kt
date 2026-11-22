@@ -6,6 +6,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import java.util.UUID
 
 class ApiException(val statusCode: Int, message: String) : Exception(message)
@@ -54,6 +55,19 @@ object ApiClient {
     fun listItems(token: String): JSONArray {
         val response = request("GET", "/items", token, null, null)
         return JSONObject(response).getJSONArray("data")
+    }
+
+    fun listNotifications(token: String): JSONObject {
+        val response = request("GET", "/notifications", token, null, null)
+        return JSONObject(response)
+    }
+
+    fun markNotificationRead(token: String, id: String) {
+        request("POST", "/notifications/$id/read", token, null, null)
+    }
+
+    fun markAllNotificationsRead(token: String) {
+        request("POST", "/notifications/read-all", token, null, null)
     }
 
     fun createItem(
@@ -134,6 +148,10 @@ object ApiClient {
         request("POST", "/contacts/$id/accept", token, null, null)
     }
 
+    fun blockContact(token: String, id: String) {
+        request("POST", "/contacts/$id/block", token, null, null)
+    }
+
     fun contactPublicKey(token: String, id: String): String {
         val response = request("GET", "/contacts/$id/public-key", token, null, null)
         return JSONObject(response).getJSONObject("data").getString("public_key")
@@ -156,6 +174,10 @@ object ApiClient {
 
     fun declineShare(token: String, id: String) {
         request("POST", "/shares/$id/decline", token, null, null)
+    }
+
+    fun revokeShare(token: String, id: String) {
+        request("POST", "/shares/$id/revoke", token, null, null)
     }
 
     fun listShareRequests(token: String): JSONObject {
@@ -217,6 +239,26 @@ object ApiClient {
         return JSONObject(response).getJSONObject("data")
     }
 
+    fun updateDevice(
+        token: String,
+        id: String,
+        pinSalt: String? = null,
+        pinParams: JSONObject? = null,
+        biometricWrappedMasterKey: String? = null,
+    ) {
+        val body = JSONObject()
+        if (pinSalt != null) {
+            body.put("pin_salt", pinSalt)
+        }
+        if (pinParams != null) {
+            body.put("pin_params", pinParams)
+        }
+        if (biometricWrappedMasterKey != null) {
+            body.put("biometric_wrapped_master_key", biometricWrappedMasterKey)
+        }
+        request("PATCH", "/devices/$id", token, body.toString().toByteArray(), "application/json")
+    }
+
     fun registerDevice(
         token: String,
         publicKey: String,
@@ -236,7 +278,7 @@ object ApiClient {
             .put("wrapped_master_key", wrappedMasterKey)
             .put("pin_salt", pinSalt)
             .put("pin_params", params)
-            .put("app_version", "0.1.0")
+            .put("app_version", "0.2.0")
         val response = request("POST", "/devices", token, body.toString().toByteArray(), "application/json")
         return JSONObject(response).getJSONObject("data").getString("id")
     }
@@ -281,6 +323,10 @@ object ApiClient {
         connection.connectTimeout = 15_000
         connection.readTimeout = 60_000
         connection.setRequestProperty("Accept", "application/json")
+        connection.setRequestProperty(
+            "Accept-Language",
+            if (Locale.getDefault().language == "en") "en" else "es-MX",
+        )
         if (token != null) {
             connection.setRequestProperty("Authorization", "Bearer $token")
         }

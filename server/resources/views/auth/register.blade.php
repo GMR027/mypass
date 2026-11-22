@@ -100,7 +100,7 @@
         <p>{{ __('No requerimos tarjeta de crédito ni datos bancarios para comenzar.') }}</p>
     </div>
 
-    <script>
+    <script nonce="{{ $cspNonce }}">
         const password = document.getElementById('password');
         const confirmation = document.getElementById('password_confirmation');
         const match = document.getElementById('password-match');

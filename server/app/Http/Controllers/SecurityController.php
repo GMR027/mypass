@@ -19,9 +19,11 @@ class SecurityController extends Controller
 
         return view('settings.security', [
             'user' => $user,
+            'hasVault' => $user->keys()->exists(),
             'totpEnabled' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at !== null,
             'totpPending' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at === null,
             'emailEnabled' => $user->email_two_factor_enabled,
+            'events' => $user->auditEvents()->latest('created_at')->limit(10)->get(),
         ]);
     }
 

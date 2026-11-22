@@ -94,7 +94,7 @@
             </form>
         </div>
 
-        <script>
+        <script nonce="{{ $cspNonce }}">
             const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
             const sendButton = document.getElementById('send-email-code');
             const emailStatus = document.getElementById('email-status');

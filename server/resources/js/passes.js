@@ -418,6 +418,7 @@ class WalletApp {
         this.empty = document.getElementById('passes-empty');
         this.workspace = document.getElementById('passes-workspace');
         this.filters = document.getElementById('pass-filters');
+        this.search = document.getElementById('pass-search');
         this.activeCount = document.getElementById('pass-active-count');
         this.archiveToggle = document.getElementById('pass-archive-toggle');
         this.archive = document.getElementById('pass-archive');
@@ -437,6 +438,8 @@ class WalletApp {
         this.presentButton = document.getElementById('pass-present');
         this.shareButton = document.getElementById('pass-share');
         this.copyButton = document.getElementById('pass-copy');
+        this.downloadButton = document.getElementById('pass-download');
+        this.printButton = document.getElementById('pass-print');
         this.editButton = document.getElementById('pass-edit');
         this.quickPresent = document.getElementById('pass-quick-present');
         this.addToggle = document.getElementById('pass-add-toggle');
@@ -461,6 +464,14 @@ class WalletApp {
             this.filter = button.dataset.passFilter;
             const filtered = this.filteredActive();
             if (!filtered.some((pass) => pass.item.id === this.selectedId)) {
+                this.selectedId = filtered[0]?.item.id ?? null;
+            }
+            this.refresh();
+        });
+
+        this.search?.addEventListener('input', () => {
+            const filtered = this.filteredActive();
+            if (!filtered.some((entry) => entry.item.id === this.selectedId)) {
                 this.selectedId = filtered[0]?.item.id ?? null;
             }
             this.refresh();
@@ -503,6 +514,8 @@ class WalletApp {
         this.quickPresent?.addEventListener('click', () => this.presentSelected());
         this.presentButton?.addEventListener('click', () => this.presentSelected());
         this.copyButton?.addEventListener('click', () => this.copySelected());
+        this.downloadButton?.addEventListener('click', () => this.downloadSelected());
+        this.printButton?.addEventListener('click', () => this.printSelected());
         this.shareButton?.addEventListener('click', () => this.shareSelected());
         this.editButton?.addEventListener('click', () => this.editSelected());
         this.archiveToggle?.addEventListener('click', () => this.toggleArchive());
@@ -568,10 +581,26 @@ class WalletApp {
 
     filteredActive() {
         const active = this.activePasses();
-        if (this.filter === 'all') {
-            return active;
+        const query = (this.search?.value ?? '').trim().toLowerCase();
+        const filtered = this.filter === 'all'
+            ? active
+            : active.filter((entry) => entry.pass.category === this.filter);
+
+        if (!query) {
+            return filtered;
         }
-        return active.filter((entry) => entry.pass.category === this.filter);
+
+        return filtered.filter((entry) => {
+            const pass = entry.pass;
+            const haystack = [
+                pass.title,
+                pass.issuer,
+                pass.holder,
+                ...Object.values(pass.fields || {}),
+            ].filter(Boolean).join(' ').toLowerCase();
+
+            return haystack.includes(query);
+        });
     }
 
     entries() {
@@ -625,10 +654,19 @@ class WalletApp {
         this.stack.dataset.view = this.view;
 
         if (entries.length === 0) {
+            const searching = (this.search?.value ?? '').trim().length > 0;
             const emptyFilter = el('div', 'mp-empty');
             emptyFilter.appendChild(icon('filter_alt_off', 'text-[30px] text-outline'));
-            emptyFilter.appendChild(el('p', 'mt-2 font-semibold', t('No hay pases en esta categoría.')));
-            emptyFilter.appendChild(el('p', 'mp-hint mt-1', t('Prueba con otro filtro o crea un pase nuevo.')));
+            emptyFilter.appendChild(el(
+                'p',
+                'mt-2 font-semibold',
+                searching ? t('No hay pases que coincidan.') : t('No hay pases en esta categoría.'),
+            ));
+            emptyFilter.appendChild(el(
+                'p',
+                'mp-hint mt-1',
+                searching ? t('Prueba con otra búsqueda.') : t('Prueba con otro filtro o crea un pase nuevo.'),
+            ));
             this.stack.appendChild(emptyFilter);
             return;
         }
@@ -676,6 +714,8 @@ class WalletApp {
             this.codeFormatBadge.textContent = t('QR');
             this.presentButton.disabled = true;
             this.copyButton.disabled = true;
+            this.downloadButton.disabled = true;
+            this.printButton.disabled = true;
             this.shareButton.disabled = true;
             this.editButton.disabled = true;
             return;
@@ -707,6 +747,8 @@ class WalletApp {
         const shareAllowed = pass.options?.share !== false && this.options.canShare();
         this.presentButton.disabled = false;
         this.copyButton.disabled = false;
+        this.downloadButton.disabled = false;
+        this.printButton.disabled = false;
         this.editButton.disabled = false;
         this.shareButton.disabled = !shareAllowed;
         this.shareButton.title = shareAllowed ? '' : t('Agrega un contacto de confianza para compartir.');
@@ -849,9 +891,106 @@ class WalletApp {
         try {
             await navigator.clipboard.writeText(payload);
             this.options.toast(t('Código copiado.'));
+            setTimeout(async () => {
+                try {
+                    const current = await navigator.clipboard.readText();
+                    if (current === payload) {
+                        await navigator.clipboard.writeText('');
+                    }
+                } catch {
+                    // Clipboard access can be denied; the code was still copied.
+                }
+            }, 60_000);
         } catch {
             this.options.toast(t('No se pudo copiar el código.'));
         }
+    }
+
+    downloadSelected() {
+        const entry = this.selectedEntry();
+        const canvas = this.codeCanvas?.querySelector('canvas');
+        if (!entry || !canvas) {
+            this.options.toast(t('No se pudo generar la imagen del código.'));
+            return;
+        }
+
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = `mypass-${entry.pass.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pase'}.png`;
+        link.click();
+        this.options.toast(t('Código descargado como imagen.'));
+    }
+
+    printSelected() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            return;
+        }
+
+        const canvas = this.codeCanvas?.querySelector('canvas');
+        const popup = window.open('', '_blank');
+        if (!popup) {
+            this.options.toast(t('El navegador bloqueó la ventana de impresión.'));
+            return;
+        }
+        popup.opener = null;
+
+        const doc = popup.document;
+        doc.title = entry.pass.title;
+        const style = doc.createElement('style');
+        style.textContent = `
+            body { font-family: system-ui, sans-serif; color: #13202b; padding: 32px; }
+            h1 { font-size: 26px; margin: 0 0 6px; }
+            p { margin: 4px 0; color: #475569; }
+            .code { margin: 24px auto; max-width: 360px; }
+            .code img { width: 100%; display: block; }
+            dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin-top: 20px; }
+            dt { font-weight: 700; }
+            dd { margin: 0; }
+            .footer { margin-top: 28px; font-size: 12px; color: #64748b; }
+        `;
+        doc.head.appendChild(style);
+
+        const title = doc.createElement('h1');
+        title.textContent = entry.pass.title;
+        doc.body.appendChild(title);
+        const subtitle = doc.createElement('p');
+        subtitle.textContent = [entry.pass.issuer, entry.pass.holder].filter(Boolean).join(' · ');
+        doc.body.appendChild(subtitle);
+
+        if (canvas) {
+            const code = doc.createElement('div');
+            code.className = 'code';
+            const image = doc.createElement('img');
+            image.src = canvas.toDataURL('image/png');
+            image.alt = t('Código del pase');
+            code.appendChild(image);
+            doc.body.appendChild(code);
+        }
+
+        const fields = entry.pass.fields || {};
+        const details = doc.createElement('dl');
+        for (const [label, value] of Object.entries(fields)) {
+            if (!value) {
+                continue;
+            }
+            const term = doc.createElement('dt');
+            term.textContent = label;
+            const description = doc.createElement('dd');
+            description.textContent = value;
+            details.append(term, description);
+        }
+        if (details.children.length > 0) {
+            doc.body.appendChild(details);
+        }
+
+        const footer = doc.createElement('p');
+        footer.className = 'footer';
+        footer.textContent = t('Generado por mypass · Guarda este pase en un lugar seguro.');
+        doc.body.appendChild(footer);
+
+        popup.focus();
+        popup.setTimeout(() => popup.print(), 300);
     }
 
     shareSelected() {
@@ -874,6 +1013,9 @@ class WalletApp {
         this.items = [];
         this.selectedId = null;
         this.filter = 'all';
+        if (this.search) {
+            this.search.value = '';
+        }
         this.stack?.replaceChildren();
         this.archive?.replaceChildren();
         this.closeAddMenu();

@@ -57,6 +57,63 @@ class VaultStore(context: Context) {
     fun opsLimit(): Long = prefs.getLong(KEY_OPS_LIMIT, 0L)
     fun memLimit(): Long = prefs.getLong(KEY_MEM_LIMIT, 0L)
 
+    fun biometricEnabled(): Boolean {
+        return prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
+            && prefs.contains(KEY_BIOMETRIC_CIPHERTEXT)
+            && prefs.contains(KEY_BIOMETRIC_IV)
+    }
+
+    fun saveBiometricWrapped(ciphertext: String, iv: String) {
+        prefs.edit()
+            .putString(KEY_BIOMETRIC_CIPHERTEXT, ciphertext)
+            .putString(KEY_BIOMETRIC_IV, iv)
+            .putBoolean(KEY_BIOMETRIC_ENABLED, true)
+            .apply()
+    }
+
+    fun biometricCiphertext(): String? = prefs.getString(KEY_BIOMETRIC_CIPHERTEXT, null)
+    fun biometricIv(): String? = prefs.getString(KEY_BIOMETRIC_IV, null)
+
+    fun clearBiometric() {
+        prefs.edit()
+            .remove(KEY_BIOMETRIC_CIPHERTEXT)
+            .remove(KEY_BIOMETRIC_IV)
+            .remove(KEY_BIOMETRIC_ENABLED)
+            .apply()
+        BiometricUnlock.deleteKey()
+    }
+
+    fun pinFailedAttempts(): Int = prefs.getInt(KEY_PIN_FAILED_ATTEMPTS, 0)
+
+    fun pinLockUntil(): Long = prefs.getLong(KEY_PIN_LOCK_UNTIL, 0L)
+
+    fun registerPinFailure(now: Long): Long {
+        val attempts = pinFailedAttempts() + 1
+        val lockSeconds = when {
+            attempts < 5 -> 0L
+            attempts == 5 -> 30L
+            attempts == 6 -> 60L
+            attempts == 7 -> 120L
+            attempts == 8 -> 300L
+            else -> 900L
+        }
+        val lockUntil = if (lockSeconds > 0) now + lockSeconds * 1_000 else 0L
+
+        prefs.edit()
+            .putInt(KEY_PIN_FAILED_ATTEMPTS, attempts)
+            .putLong(KEY_PIN_LOCK_UNTIL, lockUntil)
+            .apply()
+
+        return lockUntil
+    }
+
+    fun clearPinFailures() {
+        prefs.edit()
+            .remove(KEY_PIN_FAILED_ATTEMPTS)
+            .remove(KEY_PIN_LOCK_UNTIL)
+            .apply()
+    }
+
     fun deviceId(): String {
         val existing = prefs.getString(KEY_DEVICE_ID, null)
         if (existing != null) {
@@ -216,6 +273,7 @@ class VaultStore(context: Context) {
         vaultDir.listFiles()?.forEach { it.delete() }
         prefs.edit().clear().apply()
         tokenStore.clear()
+        BiometricUnlock.deleteKey()
     }
 
     companion object {
@@ -227,6 +285,11 @@ class VaultStore(context: Context) {
         const val KEY_SERVER_DEVICE_ID = "server_device_id"
         const val KEY_SIMPLE_MODE = "simple_mode"
         const val KEY_EMAIL = "email"
+        const val KEY_BIOMETRIC_CIPHERTEXT = "biometric_ciphertext"
+        const val KEY_BIOMETRIC_IV = "biometric_iv"
+        const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        const val KEY_PIN_FAILED_ATTEMPTS = "pin_failed_attempts"
+        const val KEY_PIN_LOCK_UNTIL = "pin_lock_until"
 
         fun now(): String = java.time.Instant.now().toString()
     }

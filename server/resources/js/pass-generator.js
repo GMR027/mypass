@@ -206,6 +206,7 @@ class PassGenerator {
         this.state = this.emptyState();
         this.ocrBusy = false;
         this.previewTimer = null;
+        this.cameraStream = null;
         this.fieldElements = new Map();
         this.bind();
     }
@@ -239,6 +240,7 @@ class PassGenerator {
             },
             categoryTouched: false,
             confidence: 0,
+            pdfPage: 1,
             isNew: true,
         };
     }
@@ -253,6 +255,8 @@ class PassGenerator {
         this.fileInput = document.getElementById('generator-file');
         this.fileInfo = document.getElementById('generator-file-info');
         this.fileName = document.getElementById('generator-file-name');
+        this.pdfPageWrap = document.getElementById('generator-pdf-page-wrap');
+        this.pdfPageInput = document.getElementById('generator-pdf-page');
         this.progressWrap = document.getElementById('generator-ocr-progress-wrap');
         this.progressBar = document.getElementById('generator-ocr-progress');
         this.progressPercent = document.getElementById('generator-ocr-percent');
@@ -272,6 +276,11 @@ class PassGenerator {
         this.preview = document.getElementById('generator-preview');
         this.status = document.getElementById('generator-status');
         this.error = document.getElementById('generator-error');
+        this.cameraButton = document.getElementById('generator-camera');
+        this.cameraModal = document.getElementById('generator-camera-modal');
+        this.cameraVideo = document.getElementById('generator-camera-video');
+        this.cameraError = document.getElementById('generator-camera-error');
+        this.cameraCapture = document.getElementById('generator-camera-capture');
         this.saveButton = document.getElementById('generator-save');
         this.saveTop = document.getElementById('generator-save-top');
         this.shareButton = document.getElementById('generator-share');
@@ -394,6 +403,20 @@ class PassGenerator {
                 this.closeTemplates();
             }
         });
+
+        this.pdfPageInput?.addEventListener('change', () => {
+            const value = Number.parseInt(this.pdfPageInput.value, 10);
+            this.state.pdfPage = Number.isFinite(value) && value > 0 ? value : 1;
+            if (this.state.file && (this.state.file.type === 'application/pdf' || /\.pdf$/i.test(this.state.file.name))) {
+                this.extractCurrentFile();
+            }
+        });
+
+        this.cameraButton?.addEventListener('click', () => this.openCamera());
+        document.getElementById('generator-camera-close')?.addEventListener('click', () => this.closeCamera());
+        document.getElementById('generator-camera-cancel')?.addEventListener('click', () => this.closeCamera());
+        this.cameraCapture?.addEventListener('click', () => this.captureCamera());
+        this.cameraModal?.addEventListener('close', () => this.stopCamera());
 
         this.saveButton?.addEventListener('click', () => this.save());
         this.saveTop?.addEventListener('click', () => this.save());
@@ -638,6 +661,16 @@ class PassGenerator {
         if (this.reextract) {
             this.reextract.disabled = !hasFile || this.ocrBusy;
         }
+        const isPdf = hasFile && (
+            this.state.file.type === 'application/pdf' ||
+            /\.pdf$/i.test(this.state.file.name)
+        );
+        if (this.pdfPageWrap) {
+            this.pdfPageWrap.hidden = !isPdf;
+        }
+        if (this.pdfPageInput) {
+            this.pdfPageInput.value = String(this.state.pdfPage || 1);
+        }
     }
 
     renderPreview() {
@@ -841,6 +874,80 @@ class PassGenerator {
         }
     }
 
+    async openCamera() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            this.showError(t('Este navegador no permite usar la cámara.'));
+            return;
+        }
+
+        this.hideError();
+        if (this.cameraError) {
+            this.cameraError.hidden = true;
+        }
+        this.cameraModal?.showModal();
+
+        try {
+            this.cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: false,
+            });
+            if (this.cameraVideo) {
+                this.cameraVideo.srcObject = this.cameraStream;
+            }
+        } catch {
+            this.stopCamera();
+            if (this.cameraError) {
+                this.cameraError.textContent = t('No se pudo abrir la cámara. Revisa el permiso del navegador.');
+                this.cameraError.hidden = false;
+            }
+        }
+    }
+
+    stopCamera() {
+        for (const track of this.cameraStream?.getTracks() ?? []) {
+            track.stop();
+        }
+        this.cameraStream = null;
+        if (this.cameraVideo) {
+            this.cameraVideo.srcObject = null;
+        }
+    }
+
+    closeCamera() {
+        this.stopCamera();
+        if (this.cameraModal?.open) {
+            this.cameraModal.close();
+        }
+    }
+
+    async captureCamera() {
+        const video = this.cameraVideo;
+        if (!video || !video.videoWidth || !video.videoHeight) {
+            if (this.cameraError) {
+                this.cameraError.textContent = t('La cámara todavía no está lista.');
+                this.cameraError.hidden = false;
+            }
+            return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+
+        if (!blob) {
+            if (this.cameraError) {
+                this.cameraError.textContent = t('No se pudo capturar la foto.');
+                this.cameraError.hidden = false;
+            }
+            return;
+        }
+
+        this.closeCamera();
+        this.handleFile(new File([blob], `camara-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    }
+
     handleFile(file) {
         this.hideError();
         this.setStatus('');
@@ -866,6 +973,7 @@ class PassGenerator {
     clearFile() {
         this.state.file = null;
         this.state.fileName = '';
+        this.state.pdfPage = 1;
         if (this.fileInput) {
             this.fileInput.value = '';
         }
@@ -892,7 +1000,7 @@ class PassGenerator {
             const isPdf = this.state.file.type === 'application/pdf' || /\.pdf$/i.test(this.state.file.name);
 
             if (isPdf) {
-                const result = await this.analyzePdf(this.state.file);
+                const result = await this.analyzePdf(this.state.file, this.state.pdfPage);
                 text = result.text;
                 barcode = result.barcode;
             } else {
@@ -921,7 +1029,7 @@ class PassGenerator {
         return { text, barcode };
     }
 
-    async analyzePdf(file) {
+    async analyzePdf(file, selectedPage = 1) {
         const pdfjs = await import('pdfjs-dist');
         const workerModule = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
         pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
@@ -929,6 +1037,7 @@ class PassGenerator {
         const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer() });
         const doc = await loadingTask.promise;
         const pages = Math.min(doc.numPages, 2);
+        const ocrPageNumber = Math.min(Math.max(selectedPage, 1), doc.numPages);
         let text = '';
         let firstCanvas = null;
 
@@ -942,7 +1051,7 @@ class PassGenerator {
                 .trim();
             text += `${pageText}\n`;
 
-            if (!firstCanvas) {
+            if (!firstCanvas && pageNumber === ocrPageNumber) {
                 const viewport = page.getViewport({ scale: 2.2 });
                 firstCanvas = document.createElement('canvas');
                 firstCanvas.width = Math.min(2400, Math.round(viewport.width));
@@ -958,6 +1067,22 @@ class PassGenerator {
             }
         }
 
+        if (!firstCanvas) {
+            const page = await doc.getPage(ocrPageNumber);
+            const viewport = page.getViewport({ scale: 2.2 });
+            firstCanvas = document.createElement('canvas');
+            firstCanvas.width = Math.min(2400, Math.round(viewport.width));
+            firstCanvas.height = Math.round(viewport.height * (firstCanvas.width / viewport.width));
+            const context = firstCanvas.getContext('2d');
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, firstCanvas.width, firstCanvas.height);
+            await page.render({
+                canvasContext: context,
+                canvas: firstCanvas,
+                viewport: page.getViewport({ scale: firstCanvas.width / viewport.width }),
+            }).promise;
+        }
+
         await loadingTask.destroy();
 
         let barcode = null;
@@ -970,10 +1095,6 @@ class PassGenerator {
         if (text.length >= 40) {
             this.setProgress(100, t('Texto extraído del PDF.'));
             return { text, barcode };
-        }
-
-        if (!firstCanvas) {
-            throw new Error(t('El PDF no tiene páginas legibles.'));
         }
 
         const ocrText = await this.recognize(firstCanvas);
@@ -1202,6 +1323,16 @@ class PassGenerator {
         try {
             await navigator.clipboard.writeText(payload);
             this.options.toast(t('Código copiado.'));
+            setTimeout(async () => {
+                try {
+                    const current = await navigator.clipboard.readText();
+                    if (current === payload) {
+                        await navigator.clipboard.writeText('');
+                    }
+                } catch {
+                    // Clipboard access can be denied; the code was still copied.
+                }
+            }, 60_000);
         } catch {
             this.options.toast(t('No se pudo copiar el código.'));
         }

@@ -122,6 +122,37 @@
                     </div>
                 </div>
             </div>
+
+            <div class="mp-card mp-card-pad mt-5">
+                <div class="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                    <div class="flex items-start gap-3">
+                        <span class="mp-icon-tile">
+                            <x-icon name="dialpad" class="text-[23px]" />
+                        </span>
+                        <div>
+                            <h2 class="mp-title-sm">{{ __('Abrir con llave de emergencia') }}</h2>
+                            <p class="mp-hint mt-1">{{ __('Si guardaste el número de 16 o 32 dígitos, escríbelo aquí. No necesitas el archivo .mypss.') }}</p>
+                        </div>
+                    </div>
+                    <span class="mp-badge mp-badge-neutral shrink-0">{{ __('Solo en este navegador') }}</span>
+                </div>
+
+                <form id="emergency-key-form" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div class="flex-1">
+                        <label for="emergency-key" class="mp-label">{{ __('Llave de emergencia') }}</label>
+                        <input id="emergency-key" type="text" inputmode="numeric" autocomplete="off"
+                               maxlength="64" class="mp-input font-mono tracking-[0.12em]"
+                               placeholder="0000 0000 0000 0000 0000 0000 0000 0000">
+                    </div>
+                    <button type="submit" class="mp-btn mp-btn-secondary shrink-0">
+                        <x-icon name="lock_open" class="text-[20px]" />
+                        {{ __('Abrir bóveda') }}
+                    </button>
+                </form>
+
+                <p id="emergency-key-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                <p id="emergency-key-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+            </div>
         </section>
 
         <section id="vault-unlocked" hidden>
@@ -202,6 +233,15 @@
                                 <span data-filter-count="{{ $filter }}" class="text-sm font-bold opacity-80">0</span>
                             </button>
                         @endforeach
+                    </div>
+
+                    <div class="relative mt-4 max-w-md">
+                        <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+                            <x-icon name="search" class="text-[21px]" />
+                        </span>
+                        <input id="doc-search" type="search" class="mp-input pl-12"
+                               placeholder="{{ __('Buscar por título o archivo') }}"
+                               aria-label="{{ __('Buscar documentos') }}">
                     </div>
 
                     <div id="items-empty" class="mp-empty mt-5" hidden>
@@ -451,6 +491,47 @@
                     <button id="add-submit" type="submit" class="mp-btn mp-btn-primary">
                         <x-icon name="save" class="text-[20px]" />
                         {{ __('Guardar en mi bóveda') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <dialog id="edit-item-modal" class="mp-dialog" aria-labelledby="edit-item-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="edit" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="edit-item-title" class="mp-title-md">{{ __('Editar documento') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Cambia el título o la caducidad. El archivo no se modifica.') }}</p>
+                    </div>
+                </div>
+                <button id="edit-item-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <form id="edit-item-form" class="space-y-4">
+                <div>
+                    <label for="edit-item-name" class="mp-label">{{ __('Título') }}</label>
+                    <input id="edit-item-name" type="text" required maxlength="200" class="mp-input">
+                </div>
+
+                <div>
+                    <label for="edit-item-expires" class="mp-label">{{ __('Caducidad (opcional)') }}</label>
+                    <input id="edit-item-expires" type="date" class="mp-input">
+                </div>
+
+                <p id="edit-item-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
+
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button id="edit-item-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
+                    <button id="edit-item-submit" type="submit" class="mp-btn mp-btn-primary">
+                        <x-icon name="save" class="text-[20px]" />
+                        {{ __('Guardar cambios') }}
                     </button>
                 </div>
             </form>

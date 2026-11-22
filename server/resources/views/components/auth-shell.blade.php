@@ -106,6 +106,10 @@
                     <x-icon name="arrow_back" class="text-[18px]" />
                     {{ __('Volver al inicio') }}
                 </a>
+                <div class="mt-3 flex flex-wrap items-center justify-center gap-3">
+                    <a href="{{ route('legal.privacy') }}" class="hover:text-on-surface hover:underline">{{ __('Privacidad') }}</a>
+                    <a href="{{ route('legal.terms') }}" class="hover:text-on-surface hover:underline">{{ __('Términos') }}</a>
+                </div>
                 <p class="mt-3">© {{ date('Y') }} mypass · {{ __('Sin anuncios · Tus llaves se quedan contigo') }}</p>
             </footer>
         </main>

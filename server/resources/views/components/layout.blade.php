@@ -18,6 +18,7 @@
     @php
         $isSpanish = str_starts_with(app()->getLocale(), 'es');
         $user = auth()->user();
+        $unreadNotifications = $user?->userNotifications()->whereNull('read_at')->count() ?? 0;
         $vaultTab = request()->routeIs('vault') ? request()->query('tab', 'docs') : null;
         $activeNav = match (true) {
             request()->routeIs('dashboard') => 'inicio',
@@ -67,6 +68,17 @@
                            @if (! $isSpanish) aria-current="true" @endif>EN</a>
                     </div>
 
+                    <a href="{{ route('notifications.index') }}"
+                       aria-label="{{ __('Notificaciones') }}"
+                       class="relative inline-flex h-11 w-11 items-center justify-center rounded-xl text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface">
+                        <x-icon name="notifications" class="text-[21px]" />
+                        @if ($unreadNotifications > 0)
+                            <span class="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-on-primary">
+                                {{ $unreadNotifications > 9 ? '9+' : $unreadNotifications }}
+                            </span>
+                        @endif
+                    </a>
+
                     <a href="{{ route('settings.security') }}"
                        aria-label="{{ __('Seguridad y perfil') }}"
                        class="hidden min-h-11 items-center gap-1.5 rounded-xl px-3 text-[15px] font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface md:inline-flex">
@@ -82,7 +94,7 @@
                         </button>
                     </form>
 
-                    <a href="{{ route('settings.security') }}"
+                    <a href="{{ route('settings.profile') }}"
                        class="ml-0.5 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-base font-bold uppercase text-on-primary"
                        aria-label="{{ __('Abrir mi perfil') }}">
                         {{ mb_substr($user->name ?: $user->email, 0, 1) }}
@@ -113,7 +125,11 @@
     <footer class="border-t border-outline-variant/60 pt-8 pb-28 lg:pb-8">
         <div class="mp-container flex flex-col items-center justify-between gap-2 text-sm text-on-surface-variant sm:flex-row">
             <p>© {{ date('Y') }} mypass</p>
-            <p>{{ __('Sin anuncios · Tus llaves se quedan contigo') }}</p>
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                <a href="{{ route('legal.privacy') }}" class="hover:text-on-surface hover:underline">{{ __('Privacidad') }}</a>
+                <a href="{{ route('legal.terms') }}" class="hover:text-on-surface hover:underline">{{ __('Términos') }}</a>
+                <span>{{ __('Sin anuncios · Tus llaves se quedan contigo') }}</span>
+            </div>
         </div>
     </footer>
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -22,7 +23,7 @@ class ContactController extends Controller
         return response()->json(['data' => $contacts]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, AuditLogger $audit): JsonResponse
     {
         $data = $request->validate([
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255'],
@@ -73,10 +74,14 @@ class ContactController extends Controller
             ],
         ]);
 
+        $audit->log($request->user(), 'contact_requested', [
+            'contact' => $contactUser->name,
+        ]);
+
         return response()->json(['data' => $this->payload($contact)], 201);
     }
 
-    public function accept(Request $request, string $contact): JsonResponse
+    public function accept(Request $request, string $contact, AuditLogger $audit): JsonResponse
     {
         $contact = $request->user()->contacts()->findOrFail($contact);
 
@@ -97,6 +102,10 @@ class ContactController extends Controller
                 'contact_id' => $contact->id,
                 'from' => $request->user()->name,
             ],
+        ]);
+
+        $audit->log($request->user(), 'contact_accepted', [
+            'contact_id' => $contact->id,
         ]);
 
         return response()->json(['data' => $this->payload($contact)]);
@@ -124,13 +133,17 @@ class ContactController extends Controller
         ]);
     }
 
-    public function block(Request $request, string $contact): JsonResponse
+    public function block(Request $request, string $contact, AuditLogger $audit): JsonResponse
     {
         $contact = $request->user()->contacts()->findOrFail($contact);
         $contact->forceFill(['status' => 'blocked'])->save();
         Contact::where('user_id', $contact->contact_user_id)
             ->where('contact_user_id', $request->user()->id)
             ->update(['status' => 'blocked']);
+
+        $audit->log($request->user(), 'contact_blocked', [
+            'contact_id' => $contact->id,
+        ]);
 
         return response()->json(['message' => __('Contacto bloqueado.')]);
     }

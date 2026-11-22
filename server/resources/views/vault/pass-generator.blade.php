@@ -65,6 +65,11 @@
                         <input id="generator-file" type="file" accept="image/*,application/pdf" class="sr-only">
                     </label>
 
+                    <button id="generator-camera" type="button" class="mp-btn mp-btn-secondary mp-btn-sm mt-3">
+                        <x-icon name="photo_camera" class="text-[19px]" />
+                        {{ __('Usar cámara') }}
+                    </button>
+
                     <div id="generator-file-info" class="mt-3 hidden items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3">
                         <div class="flex min-w-0 items-center gap-2">
                             <x-icon name="description" class="text-[22px] shrink-0 text-primary" />
@@ -73,6 +78,13 @@
                         <button id="generator-file-clear" type="button" class="mp-btn mp-btn-quiet mp-btn-sm shrink-0" aria-label="{{ __('Quitar archivo') }}">
                             <x-icon name="close" class="text-[18px]" />
                         </button>
+                    </div>
+
+                    <div id="generator-pdf-page-wrap" class="mt-3 flex items-center gap-3 rounded-xl bg-surface-container-low p-3" hidden>
+                        <label for="generator-pdf-page" class="text-sm font-semibold text-on-surface">{{ __('Página del PDF para OCR') }}</label>
+                        <input id="generator-pdf-page" type="number" min="1" max="50" value="1"
+                               class="mp-input w-24 text-center" inputmode="numeric">
+                        <span class="text-sm text-on-surface-variant">{{ __('Se usa para el código y el OCR.') }}</span>
                     </div>
 
                     <div id="generator-ocr-progress-wrap" class="mt-4" hidden>
@@ -288,4 +300,37 @@
             </aside>
         </div>
     </div>
+
+    <dialog id="generator-camera-modal" class="mp-dialog" aria-labelledby="generator-camera-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="photo_camera" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="generator-camera-title" class="mp-title-md">{{ __('Capturar con la cámara') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Enfoca el boleto completo. La imagen se procesa solo en este navegador.') }}</p>
+                    </div>
+                </div>
+                <button id="generator-camera-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <div class="overflow-hidden rounded-xl bg-black">
+                <video id="generator-camera-video" class="max-h-[60vh] w-full object-contain" autoplay playsinline muted></video>
+            </div>
+
+            <p id="generator-camera-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+
+            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button id="generator-camera-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
+                <button id="generator-camera-capture" type="button" class="mp-btn mp-btn-primary">
+                    <x-icon name="photo_camera" class="text-[20px]" />
+                    {{ __('Capturar foto') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
 </section>

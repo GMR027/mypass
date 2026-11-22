@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureEmailTwoFactorVerified;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetApiLocale;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
@@ -20,8 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'email-2fa' => EnsureEmailTwoFactorVerified::class,
         ]);
 
-        $middleware->appendToGroup('web', SetLocale::class);
-        $middleware->appendToGroup('api', SetApiLocale::class);
+        $middleware->appendToGroup('web', [SetLocale::class, SecurityHeaders::class]);
+        $middleware->appendToGroup('api', [SetApiLocale::class, SecurityHeaders::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

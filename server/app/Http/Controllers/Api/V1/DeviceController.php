@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -56,10 +57,35 @@ class DeviceController extends Controller
         ]);
     }
 
-    public function revoke(Request $request, string $device): JsonResponse
+    public function update(Request $request, string $device): JsonResponse
+    {
+        $device = $request->user()->devices()->findOrFail($device);
+
+        if ($device->isRevoked()) {
+            return response()->json(['message' => __('Este celular está bloqueado.')], 409);
+        }
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:120'],
+            'pin_salt' => ['sometimes', 'nullable', 'string'],
+            'pin_params' => ['sometimes', 'nullable', 'array'],
+            'biometric_wrapped_master_key' => ['sometimes', 'nullable', 'string'],
+            'app_version' => ['sometimes', 'nullable', 'string', 'max:40'],
+        ]);
+
+        $device->fill($data)->save();
+
+        return response()->json(['data' => $this->payload($device)]);
+    }
+
+    public function revoke(Request $request, string $device, AuditLogger $audit): JsonResponse
     {
         $device = $request->user()->devices()->findOrFail($device);
         $device->forceFill(['revoked_at' => now()])->save();
+        $audit->log($request->user(), 'device_revoked', [
+            'device' => $device->name,
+            'platform' => $device->platform,
+        ]);
 
         return response()->json(['message' => __('Celular bloqueado.')]);
     }

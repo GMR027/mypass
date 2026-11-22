@@ -37,20 +37,19 @@ Bóveda personal cifrada de extremo a extremo para documentos, boletos, tarjetas
 - Modo simple en web y Android.
 - Traducción completa ES/EN en web, incluidos mensajes de validación y autenticación.
 - Página de inicio pública.
-- Backend con **35 pruebas y 188 aserciones pasando**.
+- Backend con **57 pruebas y 273 aserciones pasando**.
+- Billetera de pases, generador OCR, presentación QR, notificaciones y desbloqueo con huella en Android.
+- Recuperación de cuenta, cambio de frase de bóveda, llave de emergencia y auto-bloqueo web.
 
 ### Estado visual
 
-**El diseño visual definitivo todavía no está aplicado.**
+**El diseño visual ya está aplicado en web y Android.**
 
-La interfaz actual es funcional y utilitaria:
-
-- Tailwind base, fondo blanco, textos grises, contenedor `max-w-3xl`.
-- Sin logo definitivo, sin paleta de marca, sin tipografía propia, sin iconografía final.
-- Sin componentes visuales reutilizables más allá de `components/layout.blade.php`.
-- La bóveda web sigue apilada; las pestañas **Documentos / Familia / Dispositivos** son una recomendación del brief, aún no implementadas.
-
-Todo eso se reemplazará cuando lleguen los esqueletos visuales.
+- Tokens de marca, tipografía Plus Jakarta Sans autoalojada e iconografía Material Symbols.
+- Componentes reutilizables (`mp-*`, `Components.kt`) y navegación inferior de cuatro elementos: **Inicio · Bóveda · Pases · Perfil**.
+- Bóveda web con pestañas **Documentos / Pases / Familia / Dispositivos**.
+- Billetera de pases, editor, presentación a pantalla completa y generador OCR.
+- Páginas de perfil, seguridad, privacidad y términos.
 
 ---
 
@@ -66,7 +65,7 @@ Estos documentos ya describen estructura, textos exactos, estados, accesibilidad
 | Panel | `/dashboard` | `dashboard.blade.php` | Entregado |
 | Onboarding y llave de emergencia | `/onboarding` | `onboarding.blade.php`, `onboarding.js` | Entregado |
 | Bóveda web | `/vault` | `vault.blade.php`, `vault.js` | Entregado, guardado aparte en `pantalla-boveda-web.md` |
-| Seguridad y preferencias | `/settings/security` | `settings/security.blade.php` | **Siguiente brief web** |
+| Seguridad y preferencias | `/settings/security` | `settings/security.blade.php` | Aplicado |
 
 ### Briefs de Android pendientes
 

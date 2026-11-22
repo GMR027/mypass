@@ -32,3 +32,22 @@ if (document.getElementById('vault-app')) {
         console.error('No se pudo cargar la bóveda', error);
     });
 }
+
+if (document.getElementById('vault-security-app')) {
+    import('./vault-security').catch((error) => {
+        console.error('No se pudo cargar la seguridad de la bóveda', error);
+    });
+}
+
+document.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-confirm]');
+
+    if (!target) {
+        return;
+    }
+
+    if (!window.confirm(target.dataset.confirm)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }
+});

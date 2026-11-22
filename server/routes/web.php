@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\V1\ShareController;
 use App\Http\Controllers\Api\V1\ShareRequestController;
 use App\Http\Controllers\Api\V1\VaultItemController;
 use App\Http\Controllers\LanguageController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SecurityController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +21,9 @@ Route::get('/', function () {
 });
 
 Route::get('/language/{locale}', [LanguageController::class, 'switch'])->name('language.switch');
+
+Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
+Route::view('/terms', 'legal.terms')->name('legal.terms');
 
 Route::middleware(['auth', 'email-2fa'])->group(function () {
     Route::get('/dashboard', function () {
@@ -42,6 +47,12 @@ Route::middleware(['auth', 'email-2fa'])->group(function () {
     Route::redirect('/passes', '/vault?tab=pases')->name('passes');
     Route::redirect('/passes/generator', '/vault?tab=generador')->name('passes.generator');
 
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+
+    Route::get('/settings/profile', [ProfileController::class, 'show'])->name('settings.profile');
+    Route::delete('/settings/account', [ProfileController::class, 'destroy'])->name('settings.account.destroy');
     Route::get('/settings/security', [SecurityController::class, 'show'])->name('settings.security');
     Route::get('/api/web/security', [SecurityController::class, 'status'])->name('web.security.status');
     Route::post('/api/web/security/email-two-factor', [SecurityController::class, 'updateEmailTwoFactor'])

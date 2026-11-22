@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Share;
 use App\Models\ShareRequest;
 use App\Models\UserNotification;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -33,7 +34,7 @@ class ShareController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, AuditLogger $audit): JsonResponse
     {
         $data = $request->validate([
             'contact_id' => ['required', 'uuid'],
@@ -91,6 +92,12 @@ class ShareController extends Controller
             ],
         ]);
 
+        $audit->log($request->user(), 'share_sent', [
+            'share_id' => $share->id,
+            'mode' => $share->mode,
+            'item_type' => $item->type,
+        ]);
+
         return response()->json(['data' => $this->payload($share, $request->user()->id)], 201);
     }
 
@@ -110,7 +117,7 @@ class ShareController extends Controller
         ]);
     }
 
-    public function accept(Request $request, string $share): JsonResponse
+    public function accept(Request $request, string $share, AuditLogger $audit): JsonResponse
     {
         $data = $request->validate([
             'recipient_item_id' => ['required', 'uuid'],
@@ -152,10 +159,14 @@ class ShareController extends Controller
             ],
         ]);
 
+        $audit->log($request->user(), 'share_accepted', [
+            'share_id' => $share->id,
+        ]);
+
         return response()->json(['data' => $this->payload($share, $request->user()->id)]);
     }
 
-    public function decline(Request $request, string $share): JsonResponse
+    public function decline(Request $request, string $share, AuditLogger $audit): JsonResponse
     {
         $share = $request->user()->sharesReceived()->findOrFail($share);
 
@@ -165,10 +176,14 @@ class ShareController extends Controller
 
         $share->forceFill(['status' => 'declined'])->save();
 
+        $audit->log($request->user(), 'share_declined', [
+            'share_id' => $share->id,
+        ]);
+
         return response()->json(['message' => __('Envío rechazado.')]);
     }
 
-    public function revoke(Request $request, string $share): JsonResponse
+    public function revoke(Request $request, string $share, AuditLogger $audit): JsonResponse
     {
         $share = $request->user()->sharesSent()->findOrFail($share);
 
@@ -187,6 +202,10 @@ class ShareController extends Controller
                 'transferred_at' => null,
             ])->save();
         }
+
+        $audit->log($request->user(), 'share_revoked', [
+            'share_id' => $share->id,
+        ]);
 
         return response()->json(['message' => __('Envío cancelado.')]);
     }

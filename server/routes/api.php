@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\BlobController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\KeyController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PairingController;
 use App\Http\Controllers\Api\V1\ShareController;
 use App\Http\Controllers\Api\V1\ShareRequestController;
@@ -16,7 +17,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/health', fn () => response()->json([
         'status' => 'ok',
         'app' => 'mypass',
-        'version' => '0.1.0',
+        'version' => '0.2.0',
         'time' => now()->toIso8601String(),
     ]));
 
@@ -33,9 +34,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
 
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+        Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+
         Route::get('/devices', [DeviceController::class, 'index']);
         Route::get('/devices/{device}', [DeviceController::class, 'show']);
         Route::post('/devices', [DeviceController::class, 'store']);
+        Route::patch('/devices/{device}', [DeviceController::class, 'update']);
         Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
 
         Route::get('/keys', [KeyController::class, 'show']);

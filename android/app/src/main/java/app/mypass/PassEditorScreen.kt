@@ -1,5 +1,11 @@
 package app.mypass
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,9 +45,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 
 private data class PassFieldDefinition(
@@ -72,7 +82,42 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
     var codePayload by remember(source) { mutableStateOf(source.codePayload) }
     var codeFormat by remember(source) { mutableStateOf(source.codeFormat) }
     var themeColor by remember(source) { mutableStateOf(source.themeColor) }
+    var logo by remember(source) { mutableStateOf(source.logo) }
+    var options by remember(source) { mutableStateOf(source.options) }
     var attachSource by remember(source) { mutableStateOf(source.attachSource) }
+    val context = LocalContext.current
+    val logoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: return@runCatching
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    ?: return@runCatching
+                val maxEdge = 256
+                val scale = minOf(1f, maxEdge.toFloat() / maxOf(bitmap.width, bitmap.height))
+                val scaled = if (scale < 1f) {
+                    Bitmap.createScaledBitmap(
+                        bitmap,
+                        (bitmap.width * scale).toInt().coerceAtLeast(1),
+                        (bitmap.height * scale).toInt().coerceAtLeast(1),
+                        true,
+                    )
+                } else {
+                    bitmap
+                }
+                val output = ByteArrayOutputStream()
+                scaled.compress(Bitmap.CompressFormat.PNG, 100, output)
+                logo = "data:image/png;base64," +
+                    Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+                if (scaled !== bitmap) {
+                    scaled.recycle()
+                }
+                bitmap.recycle()
+            }
+        }
+    }
 
     val draft = source.copy(
         category = category,
@@ -84,6 +129,8 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
         codePayload = codePayload,
         codeFormat = codeFormat,
         themeColor = themeColor,
+        logo = logo,
+        options = options,
         attachSource = attachSource,
     )
     val definitions = fieldDefinitions(category)
@@ -195,6 +242,67 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
+                            text = stringResource(R.string.pass_logo),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.pass_logo_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            val bitmap = logo?.let(::decodeDataUrl)
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MpColors.SurfaceLow)
+                                        .padding(8.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MpColors.SurfaceLow),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, tint = MpColors.Primary)
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                MpButton(
+                                    text = stringResource(R.string.choose_logo),
+                                    onClick = { logoPicker.launch("image/*") },
+                                    variant = MpButtonVariant.Secondary,
+                                    fillWidth = true,
+                                )
+                                if (logo != null) {
+                                    MpButton(
+                                        text = stringResource(R.string.remove_logo),
+                                        onClick = { logo = null },
+                                        variant = MpButtonVariant.Quiet,
+                                        fillWidth = true,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
                             text = stringResource(R.string.pass_extracted_fields),
                             style = MaterialTheme.typography.titleMedium,
                         )
@@ -274,6 +382,47 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
                                 )
                             }
                         }
+                        MpTextField(
+                            value = themeColor,
+                            onValueChange = { value ->
+                                themeColor = value.take(7)
+                            },
+                            label = stringResource(R.string.pass_custom_color),
+                            placeholder = "#0c2340",
+                        )
+                        if (!Regex("^#[0-9a-fA-F]{6}$").matches(themeColor)) {
+                            Text(
+                                text = stringResource(R.string.pass_color_invalid),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.Error,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.pass_options),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        OptionRow(
+                            title = stringResource(R.string.pass_option_presentation),
+                            checked = options["presentation"] != false,
+                            onCheckedChange = { options = options + ("presentation" to it) },
+                        )
+                        OptionRow(
+                            title = stringResource(R.string.pass_option_share),
+                            checked = options["share"] != false,
+                            onCheckedChange = { options = options + ("share" to it) },
+                        )
+                        OptionRow(
+                            title = stringResource(R.string.pass_option_reminder),
+                            checked = options["reminder"] != false,
+                            onCheckedChange = { options = options + ("reminder" to it) },
+                        )
                     }
                 }
             }
@@ -385,6 +534,29 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OptionRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = CheckboxDefaults.colors(
+                checkedColor = MpColors.Primary,
+                uncheckedColor = MpColors.Outline,
+            ),
+        )
+        Text(text = title, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

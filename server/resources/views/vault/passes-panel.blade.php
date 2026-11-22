@@ -72,6 +72,15 @@
             </div>
         </div>
 
+        <div class="relative mb-4 max-w-md">
+            <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+                <x-icon name="search" class="text-[21px]" />
+            </span>
+            <input id="pass-search" type="search" class="mp-input pl-12"
+                   placeholder="{{ __('Buscar por título, entidad o titular') }}"
+                   aria-label="{{ __('Buscar pases') }}">
+        </div>
+
         <div class="mb-5 flex flex-col justify-between gap-3 border-b border-outline-variant/50 pb-3 sm:flex-row sm:items-center">
             <div id="pass-filters" class="flex gap-2 overflow-x-auto pb-1 sm:pb-0" aria-label="{{ __('Filtrar pases') }}">
                 @php
@@ -169,6 +178,14 @@
                             <button id="pass-copy" type="button" class="mp-btn mp-btn-quiet mp-btn-sm whitespace-nowrap text-[13px]">
                                 <x-icon name="content_copy" class="text-[18px]" />
                                 {{ __('Copiar código') }}
+                            </button>
+                            <button id="pass-download" type="button" class="mp-btn mp-btn-quiet mp-btn-sm whitespace-nowrap text-[13px]">
+                                <x-icon name="download" class="text-[18px]" />
+                                {{ __('Descargar QR') }}
+                            </button>
+                            <button id="pass-print" type="button" class="mp-btn mp-btn-quiet mp-btn-sm whitespace-nowrap text-[13px]">
+                                <x-icon name="print" class="text-[18px]" />
+                                {{ __('Imprimir') }}
                             </button>
                         </div>
                         <button id="pass-edit" type="button" class="mp-btn mp-btn-secondary mp-btn-sm">

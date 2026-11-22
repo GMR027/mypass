@@ -85,6 +85,11 @@ data class PassDraft(
     val codeSource: String = "generated",
     val themeColor: String = "#0c2340",
     val logo: String? = null,
+    val options: Map<String, Boolean> = mapOf(
+        "presentation" to true,
+        "share" to true,
+        "reminder" to true,
+    ),
     val ocrText: String = "",
     val sourcePath: String? = null,
     val sourceMime: String? = null,
@@ -106,6 +111,7 @@ data class UiShare(
     val itemType: String,
     val mode: String,
     val expiresAt: String?,
+    val isOutgoing: Boolean = false,
 )
 
 data class UiShareRequest(
@@ -116,9 +122,19 @@ data class UiShareRequest(
     val purpose: String,
 )
 
+data class UiNotification(
+    val id: String,
+    val type: String,
+    val from: String,
+    val documentType: String,
+    val read: Boolean,
+    val createdAt: String?,
+)
+
 data class UiItem(
     val id: String,
     val type: String,
+    val state: String = "active",
     val title: String,
     val mime: String,
     val originalName: String,
@@ -141,10 +157,12 @@ data class UiState(
     val contacts: List<UiContact> = emptyList(),
     val incomingShares: List<UiShare> = emptyList(),
     val shareRequests: List<UiShareRequest> = emptyList(),
+    val notifications: List<UiNotification> = emptyList(),
     val familyStatus: String? = null,
     val twoFactorToken: String? = null,
     val twoFactorMethods: List<String> = emptyList(),
     val simpleMode: Boolean = false,
+    val biometricEnabled: Boolean = false,
     val viewerPath: String? = null,
     val viewerMime: String? = null,
     val viewerName: String? = null,
@@ -175,6 +193,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> Screen.Login
             },
             simpleMode = store.simpleMode(),
+            biometricEnabled = store.biometricEnabled(),
             email = store.email(),
         )
     }
@@ -245,6 +264,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             status = null,
                             twoFactorToken = null,
                             twoFactorMethods = emptyList(),
+                            biometricEnabled = store.biometricEnabled(),
                         )
                     }
                 }
@@ -285,6 +305,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val accountEmail = body.optJSONObject("user")?.optString("email")
                         ?.takeIf { it.isNotBlank() }
                         ?: _state.value.email
+                    if (store.hasVault() && store.email().isNotBlank() && store.email() != accountEmail) {
+                        store.clearAll()
+                    }
                     if (accountEmail.isNotBlank()) {
                         store.saveEmail(accountEmail)
                     }
@@ -298,6 +321,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             error = null,
                             twoFactorToken = null,
                             twoFactorMethods = emptyList(),
+                            biometricEnabled = store.biometricEnabled(),
                         )
                     }
                 }
@@ -538,6 +562,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        val now = System.currentTimeMillis()
+        val lockUntil = store.pinLockUntil()
+        if (lockUntil > now) {
+            val seconds = ((lockUntil - now) / 1_000).coerceAtLeast(1)
+            _state.value = _state.value.copy(error = text(R.string.error_pin_locked, seconds))
+            return
+        }
+
         _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_opening_vault))
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -547,15 +579,194 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Crypto.memzero(kek)
                 key
             }.onSuccess { key ->
+                store.clearPinFailures()
                 masterKey = key
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(
                         screen = Screen.Home,
                         busy = false,
                         status = null,
+                        error = null,
                     )
                 }
                 sync()
+            }.onFailure {
+                val failureLockUntil = store.registerPinFailure(System.currentTimeMillis())
+                withContext(Dispatchers.Main) {
+                    if (failureLockUntil > System.currentTimeMillis()) {
+                        val seconds = ((failureLockUntil - System.currentTimeMillis()) / 1_000).coerceAtLeast(1)
+                        _state.value = _state.value.copy(
+                            busy = false,
+                            status = null,
+                            error = text(R.string.error_pin_locked, seconds),
+                        )
+                    } else {
+                        _state.value = _state.value.copy(
+                            busy = false,
+                            status = null,
+                            error = text(R.string.error_wrong_pin),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun biometricIv(): String? = store.biometricIv()
+
+    fun unlockWithBiometric(cipher: Cipher) {
+        val encrypted = store.biometricCiphertext()
+        if (encrypted == null) {
+            _state.value = _state.value.copy(
+                biometricEnabled = false,
+                error = text(R.string.error_biometric_unavailable),
+            )
+            return
+        }
+
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_opening_vault))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP))
+            }.onSuccess { key ->
+                store.clearPinFailures()
+                masterKey = key
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.Home,
+                        busy = false,
+                        status = null,
+                        error = null,
+                    )
+                }
+                sync()
+            }.onFailure {
+                store.clearBiometric()
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        biometricEnabled = false,
+                        error = text(R.string.error_biometric_failed),
+                    )
+                }
+            }
+        }
+    }
+
+    fun enableBiometric(cipher: Cipher) {
+        val key = masterKey
+        if (key == null) {
+            _state.value = _state.value.copy(error = text(R.string.error_unlock_first))
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val encrypted = cipher.doFinal(key)
+                val ciphertext = Base64.encodeToString(encrypted, Base64.NO_WRAP)
+                val iv = Base64.encodeToString(cipher.iv, Base64.NO_WRAP)
+                store.saveBiometricWrapped(ciphertext, iv)
+
+                val token = store.token()
+                val deviceId = store.serverDeviceId()
+                if (token != null && deviceId != null) {
+                    runCatching {
+                        ApiClient.updateDevice(
+                            token = token,
+                            id = deviceId,
+                            biometricWrappedMasterKey = ciphertext,
+                        )
+                    }
+                }
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        biometricEnabled = true,
+                        status = text(R.string.status_biometric_enabled),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        error = error.message ?: text(R.string.error_biometric_failed),
+                    )
+                }
+            }
+        }
+    }
+
+    fun disableBiometric() {
+        store.clearBiometric()
+        _state.value = _state.value.copy(
+            biometricEnabled = false,
+            status = text(R.string.status_biometric_disabled),
+            error = null,
+        )
+    }
+
+    fun changePin(oldPin: String, newPin: String, confirmation: String) {
+        if (newPin.length < 6 || !newPin.all(Char::isDigit)) {
+            _state.value = _state.value.copy(error = text(R.string.error_pin_length))
+            return
+        }
+
+        if (newPin != confirmation) {
+            _state.value = _state.value.copy(error = text(R.string.error_pins_differ))
+            return
+        }
+
+        val wrapped = store.wrappedMasterKey()
+        val salt = store.pinSalt()
+        if (wrapped == null || salt == null) {
+            _state.value = _state.value.copy(error = text(R.string.error_no_local_vault))
+            return
+        }
+
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_saving_pin))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val oldKek = Crypto.argon2id(oldPin, Base64.decode(salt, Base64.NO_WRAP))
+                val master = Crypto.open(oldKek, Base64.decode(wrapped, Base64.NO_WRAP))
+                Crypto.memzero(oldKek)
+
+                val newSalt = Crypto.randomBytes(16)
+                val newKek = Crypto.argon2id(newPin, newSalt)
+                val newWrapped = Crypto.seal(newKek, master)
+                Crypto.memzero(newKek)
+                Crypto.memzero(master)
+
+                val wrappedBase64 = Base64.encodeToString(newWrapped, Base64.NO_WRAP)
+                val saltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP)
+                store.savePinWrapped(wrappedBase64, saltBase64, Crypto.PIN_OPS, Crypto.PIN_MEM)
+                store.clearPinFailures()
+
+                val token = store.token()
+                val deviceId = store.serverDeviceId()
+                if (token != null && deviceId != null) {
+                    runCatching {
+                        ApiClient.updateDevice(
+                            token = token,
+                            id = deviceId,
+                            pinSalt = saltBase64,
+                            pinParams = JSONObject()
+                                .put("ops_limit", Crypto.PIN_OPS)
+                                .put("mem_limit", Crypto.PIN_MEM)
+                                .put("algorithm", "argon2id13"),
+                        )
+                    }
+                }
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = text(R.string.status_pin_changed),
+                        error = null,
+                    )
+                }
             }.onFailure {
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(
@@ -593,6 +804,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             contacts = emptyList(),
             incomingShares = emptyList(),
             shareRequests = emptyList(),
+            notifications = emptyList(),
             familyStatus = null,
             passDraft = null,
             scanForPass = false,
@@ -620,6 +832,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 fetchServer(key, token)
                 refreshItems(key)
                 loadFamily(token)
+                loadNotifications(token)
                 Reminders.checkNow(getApplication())
             }.onFailure { error ->
                 if (error.message == "Celular bloqueado.") {
@@ -677,7 +890,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadFamily(token: String) {
         val contacts = ApiClient.listContacts(token)
-        val shares = ApiClient.listShares(token).optJSONArray("incoming") ?: JSONArray()
+        val sharesResponse = ApiClient.listShares(token)
         val requests = ApiClient.listShareRequests(token)
 
         val contactList = mutableListOf<UiContact>()
@@ -694,20 +907,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val incoming = mutableListOf<UiShare>()
-        for (index in 0 until shares.length()) {
-            val share = shares.getJSONObject(index)
-            if (share.optString("status") != "pending") {
-                continue
+        for (direction in listOf("incoming" to false, "outgoing" to true)) {
+            val array = sharesResponse.optJSONArray(direction.first) ?: JSONArray()
+            for (index in 0 until array.length()) {
+                val share = array.getJSONObject(index)
+                if (share.optString("status") != "pending") {
+                    continue
+                }
+                incoming.add(
+                    UiShare(
+                        id = share.getString("id"),
+                        sender = if (direction.second) {
+                            share.optString("recipient")
+                        } else {
+                            share.optString("sender")
+                        },
+                        itemType = share.optString("item_type"),
+                        mode = share.optString("mode"),
+                        expiresAt = share.optString("expires_at").takeIf { it.isNotBlank() && it != "null" },
+                        isOutgoing = direction.second,
+                    ),
+                )
             }
-            incoming.add(
-                UiShare(
-                    id = share.getString("id"),
-                    sender = share.optString("sender"),
-                    itemType = share.optString("item_type"),
-                    mode = share.optString("mode"),
-                    expiresAt = share.optString("expires_at").takeIf { it.isNotBlank() && it != "null" },
-                ),
-            )
         }
 
         val requestList = mutableListOf<UiShareRequest>()
@@ -741,6 +962,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 shareRequests = requestList,
                 familyStatus = null,
             )
+        }
+    }
+
+    private fun loadNotifications(token: String) {
+        val response = ApiClient.listNotifications(token)
+        val array = response.optJSONArray("data") ?: JSONArray()
+        val notifications = mutableListOf<UiNotification>()
+
+        for (index in 0 until array.length()) {
+            val json = array.getJSONObject(index)
+            val data = json.optJSONObject("data") ?: JSONObject()
+            notifications.add(
+                UiNotification(
+                    id = json.getString("id"),
+                    type = json.optString("type"),
+                    from = data.optString("from"),
+                    documentType = data.optString("document_type"),
+                    read = !json.isNull("read_at") &&
+                        json.optString("read_at").isNotBlank() &&
+                        json.optString("read_at") != "null",
+                    createdAt = json.optString("created_at").takeIf { it.isNotBlank() && it != "null" },
+                ),
+            )
+        }
+
+        viewModelScope.launch(Dispatchers.Main) {
+            _state.value = _state.value.copy(notifications = notifications)
+        }
+    }
+
+    fun markNotificationRead(id: String) {
+        val token = store.token() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                ApiClient.markNotificationRead(token, id)
+                loadNotifications(token)
+            }
+        }
+    }
+
+    fun markAllNotificationsRead() {
+        val token = store.token() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                ApiClient.markAllNotificationsRead(token)
+                loadNotifications(token)
+            }
         }
     }
 
@@ -914,6 +1182,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun newPass(category: String) {
+        _state.value = _state.value.copy(
+            screen = Screen.PassEditor,
+            passDraft = PassDraft(
+                category = category,
+                themeColor = passThemeColor(category, null),
+                isNew = true,
+            ),
+            error = null,
+            status = null,
+        )
+    }
+
     fun editPass(item: UiItem) {
         val pass = item.pass ?: return
         val local = store.findItem(item.id)
@@ -933,6 +1214,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 codeSource = pass.codeSource,
                 themeColor = pass.themeColor,
                 logo = pass.logo,
+                options = pass.options,
                 ocrText = item.ocrText,
                 isNew = false,
             ),
@@ -957,7 +1239,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val token = store.token()
         val id = draft.itemId ?: store.newItemId()
         val type = if (draft.category == "id" || draft.category == "membership") "card" else "ticket"
-        val expiresAt = draft.fields["expires"] ?: draft.fields["date"]
+        val expiresAt = if (draft.options["reminder"] != false) {
+            draft.fields["expires"] ?: draft.fields["date"]
+        } else {
+            null
+        }
 
         _state.value = _state.value.copy(
             busy = true,
@@ -1107,6 +1393,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             codeFormat = barcode?.format ?: "qr",
             codeSource = if (barcode != null) "decoded" else "generated",
             themeColor = passThemeColor(category, null),
+            options = mapOf(
+                "presentation" to true,
+                "share" to true,
+                "reminder" to true,
+            ),
             ocrText = ocrText,
             sourcePath = sourcePath,
             sourceMime = sourceMime,
@@ -1173,9 +1464,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .put(
                 "options",
                 JSONObject()
-                    .put("presentation", true)
-                    .put("share", true)
-                    .put("reminder", true),
+                    .put("presentation", draft.options["presentation"] != false)
+                    .put("share", draft.options["share"] != false)
+                    .put("reminder", draft.options["reminder"] != false),
             )
     }
 
@@ -1266,6 +1557,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(error = error.message ?: text(R.string.error_add_contact))
+                }
+            }
+        }
+    }
+
+    fun blockContact(id: String) {
+        val token = store.token() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                ApiClient.blockContact(token, id)
+                loadFamily(token)
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(error = error.message ?: text(R.string.error_block_contact))
+                }
+            }
+        }
+    }
+
+    fun revokeShare(id: String) {
+        val token = store.token() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                ApiClient.revokeShare(token, id)
+                loadFamily(token)
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(error = error.message ?: text(R.string.error_revoke_share))
                 }
             }
         }
@@ -1553,6 +1872,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             UiItem(
                 id = item.id,
                 type = item.type,
+                state = item.state,
                 title = title,
                 mime = metadata?.optString("mime") ?: "",
                 originalName = metadata?.optString("original_name") ?: "documento",

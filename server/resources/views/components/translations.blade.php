@@ -1,4 +1,4 @@
-<script>
+<script nonce="{{ $cspNonce }}">
     window.mypassTranslations = @json($jsTranslations ?? []);
     window.mypassLocale = @json(app()->getLocale());
     window.mypassT = function (key) {

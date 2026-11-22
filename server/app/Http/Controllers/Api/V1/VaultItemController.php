@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Blob;
 use App\Models\VaultItem;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -90,9 +91,13 @@ class VaultItemController extends Controller
         return response()->json(['data' => $this->payload($item)]);
     }
 
-    public function destroy(Request $request, string $item): JsonResponse
+    public function destroy(Request $request, string $item, AuditLogger $audit): JsonResponse
     {
         $item = $request->user()->items()->findOrFail($item);
+        $audit->log($request->user(), 'item_deleted', [
+            'item_id' => $item->id,
+            'type' => $item->type,
+        ]);
         $item->delete();
 
         return response()->json(['message' => __('Documento movido a la papelera.')]);

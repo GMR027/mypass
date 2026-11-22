@@ -182,7 +182,7 @@
         </div>
     </div>
 
-    <script type="module">
+    <script type="module" nonce="{{ $cspNonce }}">
         // El código de onboarding se carga desde resources/js/onboarding.js.
     </script>
 </x-layout>

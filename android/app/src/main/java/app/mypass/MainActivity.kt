@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
@@ -122,14 +121,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.delay
 import java.io.File
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val handler = Handler(Looper.getMainLooper())
     private val lockRunnable = Runnable { viewModel.lock() }
@@ -598,6 +599,17 @@ private fun PinSetupScreen(state: UiState, viewModel: MainViewModel) {
 @Composable
 private fun LockedScreen(state: UiState, viewModel: MainViewModel) {
     var pin by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    val biometricReady = state.biometricEnabled &&
+        activity != null &&
+        BiometricUnlock.isAvailable(context)
+
+    LaunchedEffect(state.error) {
+        if (state.error != null) {
+            pin = ""
+        }
+    }
 
     AuthShell {
         AuthCard(
@@ -606,6 +618,17 @@ private fun LockedScreen(state: UiState, viewModel: MainViewModel) {
             subtitle = stringResource(R.string.locked_help),
             state = state,
         ) {
+            if (biometricReady) {
+                MpButton(
+                    text = stringResource(R.string.unlock_with_biometric),
+                    onClick = { startBiometricUnlock(activity, viewModel) },
+                    variant = MpButtonVariant.Secondary,
+                    icon = Icons.Filled.Lock,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             MpPasswordField(
                 value = pin,
                 onValueChange = { value -> pin = value.filter(Char::isDigit).take(12) },
@@ -626,6 +649,61 @@ private fun LockedScreen(state: UiState, viewModel: MainViewModel) {
             )
         }
     }
+}
+
+private fun startBiometricUnlock(activity: FragmentActivity, viewModel: MainViewModel) {
+    val iv = viewModel.biometricIv()
+    if (iv == null) {
+        viewModel.showError(activity.getString(R.string.error_biometric_unavailable))
+        return
+    }
+
+    runCatching {
+        BiometricUnlock.decryptCipher(android.util.Base64.decode(iv, android.util.Base64.NO_WRAP))
+    }.onSuccess { cipher ->
+        BiometricUnlock.showPrompt(
+            activity = activity,
+            cipher = cipher,
+            title = activity.getString(R.string.open_vault),
+            subtitle = activity.getString(R.string.biometric_subtitle),
+            onSuccess = viewModel::unlockWithBiometric,
+            onError = { errorCode ->
+                when (errorCode) {
+                    BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+                    BiometricPrompt.ERROR_USER_CANCELED,
+                    BiometricPrompt.ERROR_CANCELED -> Unit
+                    else -> viewModel.showError(activity.getString(R.string.error_biometric_failed))
+                }
+            },
+        )
+    }.onFailure {
+        viewModel.disableBiometric()
+        viewModel.showError(activity.getString(R.string.error_biometric_failed))
+    }
+}
+
+private fun startBiometricEnrollment(activity: FragmentActivity, viewModel: MainViewModel) {
+    runCatching { BiometricUnlock.encryptCipher() }
+        .onSuccess { cipher ->
+            BiometricUnlock.showPrompt(
+                activity = activity,
+                cipher = cipher,
+                title = activity.getString(R.string.biometric_title),
+                subtitle = activity.getString(R.string.biometric_subtitle),
+                onSuccess = viewModel::enableBiometric,
+                onError = { errorCode ->
+                    when (errorCode) {
+                        BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+                        BiometricPrompt.ERROR_USER_CANCELED,
+                        BiometricPrompt.ERROR_CANCELED -> Unit
+                        else -> viewModel.showError(activity.getString(R.string.error_biometric_failed))
+                    }
+                },
+            )
+        }
+        .onFailure {
+            viewModel.showError(activity.getString(R.string.error_biometric_failed))
+        }
 }
 
 @Composable
@@ -997,8 +1075,24 @@ private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
     var requestContactId by remember { mutableStateOf("") }
     var requestType by remember { mutableStateOf("") }
     var requestPurpose by remember { mutableStateOf("") }
+    var blockContact by remember { mutableStateOf<UiContact?>(null) }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
+    val incomingShares = state.incomingShares.filter { !it.isOutgoing }
+    val outgoingShares = state.incomingShares.filter { it.isOutgoing }
     val effectiveContactId = requestContactId.ifBlank { acceptedContacts.firstOrNull()?.id.orEmpty() }
+
+    if (blockContact != null) {
+        ConfirmDialog(
+            title = stringResource(R.string.confirm_block_contact_title),
+            message = stringResource(R.string.confirm_block_contact_body),
+            confirmLabel = stringResource(R.string.block_contact),
+            onConfirm = {
+                viewModel.blockContact(blockContact!!.id)
+                blockContact = null
+            },
+            onDismiss = { blockContact = null },
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SubScreenHeader(
@@ -1088,7 +1182,11 @@ private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
                 }
             } else {
                 lazyItems(state.contacts, key = { it.id }) { contact ->
-                    ContactCard(contact = contact, onAccept = { viewModel.acceptContact(contact.id) })
+                    ContactCard(
+                        contact = contact,
+                        onAccept = { viewModel.acceptContact(contact.id) },
+                        onBlock = { blockContact = contact },
+                    )
                 }
             }
 
@@ -1096,16 +1194,28 @@ private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
                 Text(stringResource(R.string.shared_with_me), style = MaterialTheme.typography.titleLarge)
             }
 
-            if (state.incomingShares.isEmpty()) {
+            if (incomingShares.isEmpty()) {
                 item {
                     MpEmptyState(icon = Icons.Filled.Email, title = stringResource(R.string.no_shares))
                 }
             } else {
-                lazyItems(state.incomingShares, key = { it.id }) { share ->
+                lazyItems(incomingShares, key = { it.id }) { share ->
                     ShareCard(
                         share = share,
                         onAccept = { viewModel.acceptShare(share.id) },
                         onDecline = { viewModel.declineShare(share.id) },
+                    )
+                }
+            }
+
+            if (outgoingShares.isNotEmpty()) {
+                item {
+                    Text(stringResource(R.string.outgoing_shares), style = MaterialTheme.typography.titleLarge)
+                }
+                lazyItems(outgoingShares, key = { "out-${it.id}" }) { share ->
+                    OutgoingShareCard(
+                        share = share,
+                        onCancel = { viewModel.revokeShare(share.id) },
                     )
                 }
             }
@@ -1185,7 +1295,11 @@ private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
-private fun ContactCard(contact: UiContact, onAccept: () -> Unit) {
+private fun ContactCard(
+    contact: UiContact,
+    onAccept: () -> Unit,
+    onBlock: () -> Unit,
+) {
     MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1224,6 +1338,39 @@ private fun ContactCard(contact: UiContact, onAccept: () -> Unit) {
                     variant = MpButtonVariant.Secondary,
                     modifier = Modifier.widthIn(max = 160.dp),
                 )
+            }
+        }
+        if (contact.status == "accepted") {
+            TextButton(onClick = onBlock) {
+                Text(
+                    text = stringResource(R.string.block_contact),
+                    color = MpColors.Error,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OutgoingShareCard(share: UiShare, onCancel: () -> Unit) {
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ItemTypeIcon(type = share.itemType, size = 44)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.sent_to, share.sender),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    MpBadge(
+                        text = stringResource(if (share.mode == "transfer") R.string.transfer_label else R.string.copy_label),
+                        tone = if (share.mode == "transfer") MpBadgeTone.Warning else MpBadgeTone.Neutral,
+                    )
+                }
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.cancel_send), color = MpColors.Error)
+                }
             }
         }
     }
@@ -1314,7 +1461,20 @@ private fun ShareRequestCard(request: UiShareRequest, onDecline: () -> Unit, onC
 @Composable
 private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
     val context = LocalContext.current
+    val activity = context as? FragmentActivity
     val currentLanguage = LocalConfiguration.current.locales[0]?.language.orEmpty()
+    val biometricAvailable = activity != null && BiometricUnlock.isAvailable(context)
+    var showPinDialog by remember { mutableStateOf(false) }
+
+    if (showPinDialog) {
+        ChangePinDialog(
+            onDismiss = { showPinDialog = false },
+            onSave = { current, next, confirmation ->
+                viewModel.changePin(current, next, confirmation)
+                showPinDialog = false
+            },
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         MpTopBar(state = state, onLock = viewModel::lock)
@@ -1333,6 +1493,8 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                     )
                 }
             }
+
+            item { MpStatusBanner(state.status, state.error) }
 
             item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
@@ -1394,16 +1556,77 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
 
             item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        MpIconTile(icon = Icons.Filled.Lock, size = 46)
-                        Column {
-                            Text(stringResource(R.string.security_title), style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                stringResource(R.string.security_web),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MpColors.OnSurfaceVariant,
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            MpIconTile(icon = Icons.Filled.Lock, size = 46)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(stringResource(R.string.biometric_title), style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    stringResource(R.string.biometric_subtitle),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MpColors.OnSurfaceVariant,
+                                )
+                            }
+                            if (state.biometricEnabled) {
+                                MpBadge(
+                                    text = stringResource(R.string.biometric_enabled),
+                                    tone = MpBadgeTone.Primary,
+                                )
+                            }
                         }
+
+                        if (state.biometricEnabled) {
+                            MpButton(
+                                text = stringResource(R.string.biometric_disable),
+                                onClick = viewModel::disableBiometric,
+                                variant = MpButtonVariant.Quiet,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            MpButton(
+                                text = stringResource(R.string.biometric_enable),
+                                onClick = {
+                                    if (activity != null) {
+                                        startBiometricEnrollment(activity, viewModel)
+                                    }
+                                },
+                                variant = MpButtonVariant.Secondary,
+                                icon = Icons.Filled.Lock,
+                                enabled = biometricAvailable && !state.busy,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (!biometricAvailable) {
+                                Text(
+                                    text = stringResource(R.string.biometric_unavailable),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MpColors.OnSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            MpIconTile(icon = Icons.Filled.Lock, size = 46)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(stringResource(R.string.security_title), style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    stringResource(R.string.security_web),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MpColors.OnSurfaceVariant,
+                                )
+                            }
+                        }
+                        MpButton(
+                            text = stringResource(R.string.change_pin),
+                            onClick = { showPinDialog = true },
+                            variant = MpButtonVariant.Secondary,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
@@ -1432,7 +1655,7 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
 
             item {
                 Text(
-                    text = stringResource(R.string.version, "0.1.0"),
+                    text = stringResource(R.string.version, "0.2.0"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MpColors.OnSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
@@ -1440,6 +1663,61 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
             }
         }
     }
+}
+
+@Composable
+private fun ChangePinDialog(
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+) {
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
+        containerColor = Color.White,
+        title = { Text(stringResource(R.string.change_pin_title), style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MpPasswordField(
+                    value = current,
+                    onValueChange = { current = it.filter(Char::isDigit).take(12) },
+                    label = stringResource(R.string.current_pin),
+                    keyboardType = KeyboardType.NumberPassword,
+                )
+                MpPasswordField(
+                    value = next,
+                    onValueChange = { next = it.filter(Char::isDigit).take(12) },
+                    label = stringResource(R.string.new_pin),
+                    keyboardType = KeyboardType.NumberPassword,
+                )
+                MpPasswordField(
+                    value = confirmation,
+                    onValueChange = { confirmation = it.filter(Char::isDigit).take(12) },
+                    label = stringResource(R.string.confirm_new_pin),
+                    keyboardType = KeyboardType.NumberPassword,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(current, next, confirmation) },
+                enabled = current.length >= 6 &&
+                    next.length >= 6 &&
+                    confirmation.length >= 6 &&
+                    next == confirmation,
+            ) {
+                Text(stringResource(R.string.save_pin), color = MpColors.Primary, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
+            }
+        },
+    )
 }
 
 @Composable

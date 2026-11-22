@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -81,7 +82,7 @@ import java.util.Locale
 
 @Composable
 fun HomeScreen(state: UiState, viewModel: MainViewModel) {
-    val passes = state.items.filter { it.pass != null && !isExpired(it) }
+    val passes = state.items.filter { it.pass != null && !isExpired(it) && it.state != "transferred" }
     val expiring = state.items.count { item ->
         if (item.pass != null) {
             return@count false
@@ -163,6 +164,16 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                 item { ExpiryBanner(count = expiring) }
             }
 
+            if (state.notifications.isNotEmpty()) {
+                item {
+                    NotificationsCard(
+                        notifications = state.notifications,
+                        onRead = viewModel::markNotificationRead,
+                        onReadAll = viewModel::markAllNotificationsRead,
+                    )
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -219,6 +230,88 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
+private fun NotificationsCard(
+    notifications: List<UiNotification>,
+    onRead: (String) -> Unit,
+    onReadAll: () -> Unit,
+) {
+    val unread = notifications.count { !it.read }
+
+    MpCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.notifications_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (unread > 0) {
+                    MpBadge(
+                        text = unread.toString(),
+                        tone = MpBadgeTone.Primary,
+                    )
+                }
+            }
+
+            notifications.take(3).forEach { notification ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            if (!notification.read) {
+                                onRead(notification.id)
+                            }
+                        }
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (!notification.read) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(MpColors.Primary),
+                        )
+                    }
+                    Text(
+                        text = notificationMessage(notification),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (notification.read) MpColors.OnSurfaceVariant else MpColors.OnSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (unread > 0) {
+                TextButton(onClick = onReadAll) {
+                    Text(stringResource(R.string.mark_all_read), color = MpColors.Primary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun notificationMessage(notification: UiNotification): String {
+    val someone = stringResource(R.string.someone)
+    val document = stringResource(R.string.document)
+    val name = notification.from.ifBlank { someone }
+    val documentType = notification.documentType.ifBlank { document }
+
+    return when (notification.type) {
+        "contact_request" -> stringResource(R.string.notif_contact_request, name)
+        "contact_accepted" -> stringResource(R.string.notif_contact_accepted, name)
+        "share_received" -> stringResource(R.string.notif_share_received, name)
+        "share_accepted" -> stringResource(R.string.notif_share_accepted, name)
+        "document_request" -> stringResource(R.string.notif_document_request, name, documentType)
+        else -> stringResource(R.string.notif_default)
+    }
+}
+
+@Composable
 private fun QuickAction(
     title: String,
     subtitle: String,
@@ -251,6 +344,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     var presentingItem by remember { mutableStateOf<UiItem?>(null) }
     var shareItem by remember { mutableStateOf<UiItem?>(null) }
     var deleteItem by remember { mutableStateOf<UiItem?>(null) }
+    var showNewPassDialog by remember { mutableStateOf(false) }
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -260,8 +354,8 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     }
 
     val allPasses = state.items.filter { it.pass != null }
-    val active = allPasses.filterNot { isExpired(it) }
-    val archived = allPasses.filter { isExpired(it) }
+    val active = allPasses.filterNot { isExpired(it) || it.state == "transferred" }
+    val archived = allPasses.filter { isExpired(it) || it.state == "transferred" }
     val filtered = if (filter == "all") active else active.filter { it.pass?.category == filter }
     val selected = allPasses.firstOrNull { it.id == selectedId } ?: active.firstOrNull()
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
@@ -303,6 +397,16 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
         PassPresentationDialog(item = item, onDismiss = { presentingItem = null })
     }
 
+    if (showNewPassDialog) {
+        NewPassDialog(
+            onDismiss = { showNewPassDialog = false },
+            onSelect = { category ->
+                showNewPassDialog = false
+                viewModel.newPass(category)
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         MpTopBar(state = state, onLock = viewModel::lock)
         LazyColumn(
@@ -327,23 +431,33 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
             item { MpStatusBanner(state.status, state.error) }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     MpButton(
-                        text = stringResource(R.string.scan_pass),
-                        onClick = { viewModel.openScanner(true) },
+                        text = stringResource(R.string.create_pass_from_scratch),
+                        onClick = { showNewPassDialog = true },
                         icon = Icons.Filled.Add,
-                        enabled = !state.busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                    MpButton(
-                        text = stringResource(R.string.import_file),
-                        onClick = {
-                            importLauncher.launch(arrayOf("application/pdf", "image/*"))
-                        },
                         variant = MpButtonVariant.Secondary,
                         enabled = !state.busy,
-                        modifier = Modifier.weight(1f),
+                        fillWidth = true,
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MpButton(
+                            text = stringResource(R.string.scan_pass),
+                            onClick = { viewModel.openScanner(true) },
+                            icon = Icons.Filled.Add,
+                            enabled = !state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MpButton(
+                            text = stringResource(R.string.import_file),
+                            onClick = {
+                                importLauncher.launch(arrayOf("application/pdf", "image/*"))
+                            },
+                            variant = MpButtonVariant.Secondary,
+                            enabled = !state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
 
@@ -453,6 +567,60 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
+private fun NewPassDialog(
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    val categories = listOf(
+        "flight" to R.string.flight,
+        "event" to R.string.event,
+        "transit" to R.string.transit,
+        "id" to R.string.identity,
+        "membership" to R.string.membership,
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
+        containerColor = Color.White,
+        title = { Text(stringResource(R.string.create_pass_from_scratch), style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.choose_pass_type),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MpColors.OnSurfaceVariant,
+                )
+                categories.forEach { (category, label) ->
+                    TextButton(
+                        onClick = { onSelect(category) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(label),
+                            modifier = Modifier.weight(1f),
+                            color = MpColors.OnSurface,
+                            textAlign = TextAlign.Start,
+                        )
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = MpColors.Primary,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
+            }
+        },
+    )
+}
+
+@Composable
 private fun PassDetailCard(
     item: UiItem,
     hasContacts: Boolean,
@@ -541,6 +709,7 @@ private fun PassDetailCard(
                 MpButton(
                     text = stringResource(R.string.present_code),
                     onClick = onPresent,
+                    enabled = pass.options["presentation"] != false,
                     leadingIcon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_qr_code),
@@ -614,7 +783,15 @@ internal fun PassCompactCard(
         ) {
             PassCardHeader(
                 pass = pass,
-                badge = if (archived) stringResource(R.string.expired_pass) else categoryLabel(pass.category),
+                badge = if (archived) {
+                    if (item.state == "transferred") {
+                        stringResource(R.string.transferred)
+                    } else {
+                        stringResource(R.string.expired_pass)
+                    }
+                } else {
+                    categoryLabel(pass.category)
+                },
                 dark = !archived,
             )
             PassCardBody(pass = pass, compact = true, dark = !archived)
@@ -1077,7 +1254,7 @@ private fun passGradient(pass: UiPass): Brush {
     return Brush.linearGradient(listOf(base, dark))
 }
 
-private fun decodeDataUrl(value: String): Bitmap? {
+internal fun decodeDataUrl(value: String): Bitmap? {
     return runCatching {
         val payload = value.substringAfter(',', value)
         val bytes = Base64.decode(payload, Base64.DEFAULT)

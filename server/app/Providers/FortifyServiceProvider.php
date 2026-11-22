@@ -6,6 +6,10 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
+use App\Services\AuditLogger;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -33,6 +37,10 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::loginView(fn () => view('auth.login'));
         Fortify::registerView(fn () => view('auth.register'));
+        Fortify::requestPasswordResetLinkView(fn () => view('auth.forgot-password'));
+        Fortify::resetPasswordView(fn (Request $request) => view('auth.reset-password', [
+            'request' => $request,
+        ]));
         Fortify::twoFactorChallengeView(fn () => view('auth.two-factor-challenge'));
 
         Fortify::createUsersUsing(CreateNewUser::class);
@@ -47,6 +55,20 @@ class FortifyServiceProvider extends ServiceProvider
                 session(['email_two_factor_verified' => $event->user->id]);
             },
         );
+
+        Event::listen(Login::class, function (Login $event): void {
+            app(AuditLogger::class)->log($event->user, 'login_web');
+        });
+
+        Event::listen(Logout::class, function (Logout $event): void {
+            if ($event->user !== null) {
+                app(AuditLogger::class)->log($event->user, 'logout_web');
+            }
+        });
+
+        Event::listen(Registered::class, function (Registered $event): void {
+            app(AuditLogger::class)->log($event->user, 'account_created');
+        });
 
         RateLimiter::for('login', function (Request $request) {
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());

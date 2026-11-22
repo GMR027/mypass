@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\ShareRequest;
 use App\Models\UserNotification;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -30,7 +31,7 @@ class ShareRequestController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, AuditLogger $audit): JsonResponse
     {
         $data = $request->validate([
             'contact_id' => ['required', 'uuid'],
@@ -62,10 +63,15 @@ class ShareRequestController extends Controller
             ],
         ]);
 
+        $audit->log($request->user(), 'document_requested', [
+            'request_id' => $shareRequest->id,
+            'document_type' => $shareRequest->document_type,
+        ]);
+
         return response()->json(['data' => $this->payload($shareRequest, $request->user()->id)], 201);
     }
 
-    public function decline(Request $request, string $shareRequest): JsonResponse
+    public function decline(Request $request, string $shareRequest, AuditLogger $audit): JsonResponse
     {
         $shareRequest = $request->user()->shareRequestsReceived()->findOrFail($shareRequest);
 
@@ -78,10 +84,14 @@ class ShareRequestController extends Controller
             'responded_at' => now(),
         ])->save();
 
+        $audit->log($request->user(), 'document_request_declined', [
+            'request_id' => $shareRequest->id,
+        ]);
+
         return response()->json(['message' => __('Solicitud rechazada.')]);
     }
 
-    public function cancel(Request $request, string $shareRequest): JsonResponse
+    public function cancel(Request $request, string $shareRequest, AuditLogger $audit): JsonResponse
     {
         $shareRequest = $request->user()->shareRequestsMade()->findOrFail($shareRequest);
 
@@ -93,6 +103,10 @@ class ShareRequestController extends Controller
             'status' => 'cancelled',
             'responded_at' => now(),
         ])->save();
+
+        $audit->log($request->user(), 'document_request_cancelled', [
+            'request_id' => $shareRequest->id,
+        ]);
 
         return response()->json(['message' => __('Solicitud cancelada.')]);
     }

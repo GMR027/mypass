@@ -44,8 +44,14 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
   - aviso de documentos por vencer;
   - página de inicio pública;
   - interfaz completa en español e inglés, con selector de idioma.
-- Pruebas de API y de navegador pasando.
-- App Android mínima en Kotlin + Compose, instalada en la tablet de pruebas.
+- Pruebas de API y de navegador pasando (57 pruebas, 273 aserciones).
+- App Android en Kotlin + Compose, instalada en la tablet de pruebas.
+- Billetera de pases con pestañas Documentos, Pases, Familia y Dispositivos.
+- Generador de pases con OCR local (Tesseract.js), PDF.js, ZXing y códigos QR/PDF417/Aztec/Code 128.
+- Desbloqueo de Android con PIN y, cuando el dispositivo lo permite, huella o credencial del sistema.
+- Recuperación de cuenta web, cambio de contraseña, cambio de frase de bóveda, regeneración de llave de emergencia y eliminación de cuenta.
+- Auto-bloqueo de la bóveda web, cabeceras CSP y centro de notificaciones.
+- Páginas legales de privacidad y términos.
 - Tablet: Xiaomi Pad 6, Android 13 (API 33), sin biometría fuerte.
 
 ## Requisitos locales
@@ -128,6 +134,10 @@ También se puede usar otro dispositivo Android 13+ para probar antes.
 - `GET /api/v1/blobs/{id}`
 - `GET|POST /api/v1/items`
 - `GET|PATCH|DELETE /api/v1/items/{id}`
+- `GET /api/v1/notifications`
+- `POST /api/v1/notifications/{id}/read`
+- `POST /api/v1/notifications/read-all`
+- `PATCH /api/v1/devices/{id}`
 - `GET|POST /api/v1/contacts`
 - `GET|POST /api/v1/shares`
 - `GET|POST /api/v1/share-requests`
@@ -142,6 +152,8 @@ Todos los endpoints protegidos usan `Authorization: Bearer <token>`.
 
 ## Siguiente trabajo
 
-1. Desplegar en el clúster x86_64 con HTTPS y respaldo local.
-2. Aplicar el diseño visual definitivo.
-3. Añadir pruebas automatizadas en Android para OCR y notificaciones.
+1. Desplegar en el clúster x86_64 con HTTPS, SMTP, respaldo local y monitorización.
+2. Probar el escaneo con cámara y un boleto físico real en un Android con huella.
+3. Añadir pruebas automatizadas en Android para OCR, biometría, notificaciones y sincronización.
+4. Completar la paridad fina: visor de PDF en Android con selector de página, exportación/impresión de pases y búsqueda en la app.
+5. Revisar el aviso legal con asesoría antes de abrir el servicio al público.

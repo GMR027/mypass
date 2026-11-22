@@ -19,12 +19,17 @@ const recoveryFile = document.getElementById('recovery-file');
 const recoveryDropZone = document.getElementById('recovery-drop-zone');
 const recoveryFileStatus = document.getElementById('recovery-file-status');
 const recoveryFileError = document.getElementById('recovery-file-error');
+const emergencyForm = document.getElementById('emergency-key-form');
+const emergencyKeyInput = document.getElementById('emergency-key');
+const emergencyStatus = document.getElementById('emergency-key-status');
+const emergencyError = document.getElementById('emergency-key-error');
 const lockButton = document.getElementById('vault-lock');
 const addForm = document.getElementById('add-form');
 const addError = document.getElementById('add-error');
 const addStatus = document.getElementById('add-status');
 const addSubmit = document.getElementById('add-submit');
 const itemList = document.getElementById('item-list');
+const docSearch = document.getElementById('doc-search');
 const itemFileName = document.getElementById('item-file-name');
 const expiryBanner = document.getElementById('expiry-banner');
 const expiryList = document.getElementById('expiry-list');
@@ -66,7 +71,16 @@ const sharesEmpty = document.getElementById('shares-empty');
 const requestsEmpty = document.getElementById('requests-empty');
 const itemsEmptyTitle = document.getElementById('items-empty-title');
 const itemsEmptyCopy = document.getElementById('items-empty-copy');
-const addDocumentModal = document.getElementById('add-document-modal');const addDocumentOpen = document.getElementById('add-document-open');
+const addDocumentModal = document.getElementById('add-document-modal');
+const addDocumentOpen = document.getElementById('add-document-open');
+const editItemModal = document.getElementById('edit-item-modal');
+const editItemForm = document.getElementById('edit-item-form');
+const editItemName = document.getElementById('edit-item-name');
+const editItemExpires = document.getElementById('edit-item-expires');
+const editItemError = document.getElementById('edit-item-error');
+const editItemSubmit = document.getElementById('edit-item-submit');
+const editItemClose = document.getElementById('edit-item-close');
+const editItemCancel = document.getElementById('edit-item-cancel');
 const addDocumentClose = document.getElementById('add-document-close');
 const addDocumentCancel = document.getElementById('add-document-cancel');
 const manageAccessModal = document.getElementById('manage-access-modal');
@@ -114,9 +128,14 @@ let identityPublicKey = null;
 let identityPrivateKey = null;
 let acceptedContacts = [];
 let sharingItem = null;
+let editingItem = null;
 let outgoingShares = [];
 let currentFilter = 'all';
+let currentSearch = '';
 let toastTimer = null;
+let lastActivityAt = Date.now();
+let hiddenAt = null;
+const autoLockKey = 'mypass.autoLockMinutes';
 
 const toB64 = (bytes) => sodium.to_base64(bytes, sodium.base64_variants.ORIGINAL);
 const fromB64 = (value) => sodium.from_base64(value, sodium.base64_variants.ORIGINAL);
@@ -430,10 +449,13 @@ async function finishUnlock(keys, candidateKey) {
     }
 
     masterKey = candidateKey;
+    lastActivityAt = Date.now();
     passphraseInput.value = '';
     hideError(unlockError);
     hideError(recoveryFileError);
+    hideError(emergencyError);
     recoveryFileStatus.textContent = '';
+    emergencyStatus.textContent = '';
     locked.hidden = true;
     unlocked.hidden = false;
     setVaultStatus(true);
@@ -579,6 +601,72 @@ async function handleRecoveryFile(file) {
 
     await sodium.ready;
     await unlockFromFile(file);
+}
+
+async function unlockFromEmergencyKey(event) {
+    event.preventDefault();
+    hideError(emergencyError);
+    emergencyStatus.textContent = t('Comprobando la llave…');
+
+    const digits = emergencyKeyInput.value.replace(/\D/g, '');
+    const button = emergencyForm.querySelector('button[type="submit"]');
+
+    if (![16, 32].includes(digits.length)) {
+        emergencyStatus.textContent = '';
+        showError(emergencyError, t('La llave de emergencia debe tener 16 o 32 dígitos.'));
+        return;
+    }
+
+    button.disabled = true;
+    let recoveryKek = null;
+
+    try {
+        await sodium.ready;
+        const keys = await fetchKeys();
+
+        if (!keys?.recovery_wrapped_master_key || !keys.recovery_nonce) {
+            throw new Error(t('Esta bóveda no tiene una llave de emergencia configurada.'));
+        }
+
+        const params = keys.recovery_kdf_params ?? {};
+        if (!keys.recovery_kdf_salt || !params.ops_limit || !params.mem_limit) {
+            throw new Error(t('La bóveda no tiene los parámetros de la llave de emergencia.'));
+        }
+
+        recoveryKek = sodium.crypto_pwhash(
+            32,
+            sodium.from_string(digits),
+            fromB64(keys.recovery_kdf_salt),
+            params.ops_limit,
+            params.mem_limit,
+            sodium.crypto_pwhash_ALG_ARGON2ID13,
+        );
+
+        let candidate;
+        try {
+            candidate = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null,
+                fromB64(keys.recovery_wrapped_master_key),
+                new Uint8Array(0),
+                fromB64(keys.recovery_nonce),
+                recoveryKek,
+            );
+        } catch {
+            throw new Error(t('La llave de emergencia no corresponde a esta bóveda.'));
+        }
+
+        emergencyStatus.textContent = t('Bóveda abierta con la llave de emergencia.');
+        emergencyKeyInput.value = '';
+        await finishUnlock(keys, candidate);
+    } catch (error) {
+        emergencyStatus.textContent = '';
+        showError(emergencyError, error.message || t('No se pudo abrir la bóveda con esa llave.'));
+    } finally {
+        if (recoveryKek) {
+            sodium.memzero(recoveryKek);
+        }
+        button.disabled = false;
+    }
 }
 
 function setupRecoveryDropZone() {
@@ -1683,17 +1771,31 @@ function typeIcon(type) {
 
 function renderItems() {
     const documentItems = items.filter((item) => !item.metadata?.pass);
-    const filteredItems = currentFilter === 'all'
-        ? documentItems
-        : documentItems.filter((item) => item.type === currentFilter);
+    const query = currentSearch.trim().toLowerCase();
+    const filteredItems = documentItems.filter((item) => {
+        if (currentFilter !== 'all' && item.type !== currentFilter) {
+            return false;
+        }
+        if (!query) {
+            return true;
+        }
+
+        return [item.metadata?.title, item.metadata?.original_name, typeLabel(item.type)]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(query));
+    });
 
     itemsEmpty.hidden = filteredItems.length > 0;
     if (documentItems.length === 0) {
         itemsEmptyTitle.textContent = t('No tienes documentos todavía.');
         itemsEmptyCopy.textContent = t('Agrega tu primer documento y quedará cifrado antes de salir de tu equipo.');
     } else if (filteredItems.length === 0) {
-        itemsEmptyTitle.textContent = t('No hay documentos en esta categoría.');
-        itemsEmptyCopy.textContent = t('Prueba con otro filtro o agrega un documento nuevo.');
+        itemsEmptyTitle.textContent = query
+            ? t('No hay documentos que coincidan.')
+            : t('No hay documentos en esta categoría.');
+        itemsEmptyCopy.textContent = query
+            ? t('Prueba con otra búsqueda.')
+            : t('Prueba con otro filtro o agrega un documento nuevo.');
     }
 
     const counts = {
@@ -1750,6 +1852,18 @@ function renderItems() {
 
         const actions = el('div', 'mt-5 flex flex-wrap gap-2 border-t border-outline-variant/50 pt-4');
 
+        if (item.blob_id) {
+            const view = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Ver'));
+            view.type = 'button';
+            view.addEventListener('click', () => viewItem(item, view));
+            actions.appendChild(view);
+        }
+
+        const edit = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Editar'));
+        edit.type = 'button';
+        edit.addEventListener('click', () => openEditItem(item));
+        actions.appendChild(edit);
+
         if (acceptedContacts.length > 0 && item.state !== 'transferred') {
             const share = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Enviar'));
             share.type = 'button';
@@ -1771,6 +1885,106 @@ function renderItems() {
 
         li.appendChild(actions);
         itemList.appendChild(li);
+    }
+}
+
+async function viewItem(item, button) {
+    if (!item.blob_id || !item.metadata) {
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = t('Abriendo…');
+
+    try {
+        const response = await fetch(`${blobBase}/${item.blob_id}`, {
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo abrir el archivo.'));
+        }
+
+        const decrypted = decryptFile(new Uint8Array(await response.arrayBuffer()));
+        const blob = new Blob([decrypted], {
+            type: item.metadata.mime || 'application/octet-stream',
+        });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank', 'noopener');
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+        showError(vaultError, error.message || t('No se pudo abrir el archivo.'));
+    } finally {
+        button.disabled = false;
+        button.textContent = t('Ver');
+    }
+}
+
+function openEditItem(item) {
+    editingItem = item;
+    hideError(editItemError);
+    editItemName.value = item.metadata?.title || '';
+    editItemExpires.value = item.expires_at ? item.expires_at.slice(0, 10) : '';
+    openDialog(editItemModal);
+    editItemName.focus();
+}
+
+async function saveItemMetadata(event) {
+    event.preventDefault();
+    hideError(editItemError);
+
+    if (!editingItem) {
+        return;
+    }
+
+    const title = editItemName.value.trim();
+    if (!title) {
+        showError(editItemError, t('Escribe un título.'));
+        return;
+    }
+
+    editItemSubmit.disabled = true;
+    setButtonText(editItemSubmit, t('Guardando…'));
+
+    try {
+        const expiresAt = editItemExpires.value || null;
+        const metadata = {
+            ...editingItem.metadata,
+            title,
+            expires_at: expiresAt,
+        };
+        const response = await fetch(`${itemsUrl}/${editingItem.id}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                type: editingItem.type,
+                encrypted_metadata: encryptJson(metadata),
+                expires_at: expiresAt,
+                version: editingItem.version,
+            }),
+        });
+
+        if (response.status === 409) {
+            throw new Error(t('El documento cambió en otro dispositivo. Vuelve a cargarlo.'));
+        }
+
+        if (!response.ok) {
+            throw new Error(t('No se pudo guardar el documento.'));
+        }
+
+        closeDialog(editItemModal);
+        editingItem = null;
+        await loadItems();
+        showToast(t('Documento actualizado.'));
+    } catch (error) {
+        showError(editItemError, error.message || t('No se pudo guardar el documento.'));
+    } finally {
+        editItemSubmit.disabled = false;
+        setButtonText(editItemSubmit, t('Guardar cambios'));
     }
 }
 
@@ -1945,7 +2159,52 @@ async function addItem(event) {
     }
 }
 
-function lock() {
+function autoLockMinutes() {
+    const value = Number.parseInt(localStorage.getItem(autoLockKey) ?? '10', 10);
+    return Number.isFinite(value) ? value : 10;
+}
+
+function markActivity() {
+    lastActivityAt = Date.now();
+}
+
+function canAutoLock() {
+    return Boolean(masterKey)
+        && !wallet?.presentation?.open
+        && !passGenerator?.ocrBusy
+        && !document.querySelector('dialog[open]');
+}
+
+function checkAutoLock() {
+    const minutes = autoLockMinutes();
+
+    if (minutes <= 0 || !canAutoLock()) {
+        return;
+    }
+
+    if (Date.now() - lastActivityAt >= minutes * 60_000) {
+        lock(t('La bóveda se bloqueó por inactividad.'));
+    }
+}
+
+function handleVisibilityChange() {
+    if (document.hidden) {
+        hiddenAt = Date.now();
+        return;
+    }
+
+    const minutes = autoLockMinutes();
+    const hiddenLimit = Math.min(Math.max(minutes, 1) * 60_000, 120_000);
+
+    if (minutes > 0 && masterKey && hiddenAt && Date.now() - hiddenAt >= hiddenLimit) {
+        lock(t('La bóveda se bloqueó mientras estabas fuera.'));
+    }
+
+    hiddenAt = null;
+    markActivity();
+}
+
+function lock(reason = '') {
     if (masterKey) {
         sodium.memzero(masterKey);
     }
@@ -1959,10 +2218,16 @@ function lock() {
     items = [];
     outgoingShares = [];
     currentFilter = 'all';
+    currentSearch = '';
+    if (docSearch) {
+        docSearch.value = '';
+    }
     closeShareModal();
     closeDialog(addDocumentModal);
+    closeDialog(editItemModal);
     closeDialog(manageAccessModal);
     closeDialog(confirmModal);
+    editingItem = null;
     if (toast) {
         toast.hidden = true;
     }
@@ -1979,6 +2244,8 @@ function lock() {
     if (recoveryFileStatus) {
         recoveryFileStatus.textContent = '';
     }
+    emergencyKeyInput.value = '';
+    emergencyStatus.textContent = '';
     stopPairing();
     if (pairingCodeBox) {
         pairingCodeBox.hidden = true;
@@ -2000,8 +2267,14 @@ function lock() {
     }
     hideError(unlockError);
     hideError(recoveryFileError);
+    hideError(emergencyError);
     hideError(pairingError);
     hideError(vaultError);
+    lastActivityAt = Date.now();
+
+    if (reason) {
+        showError(unlockError, reason);
+    }
 }
 
 function initialTab() {
@@ -2151,8 +2424,14 @@ if (app) {
     });
 
     unlockForm?.addEventListener('submit', unlock);
+    emergencyForm?.addEventListener('submit', unlockFromEmergencyKey);
     addForm?.addEventListener('submit', addItem);
-    lockButton?.addEventListener('click', lock);
+    lockButton?.addEventListener('click', () => lock());
+    document.addEventListener('pointerdown', markActivity, { passive: true });
+    document.addEventListener('keydown', markActivity);
+    document.addEventListener('wheel', markActivity, { passive: true });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    setInterval(checkAutoLock, 30_000);
     pairingCreate?.addEventListener('click', createPairing);
     contactForm?.addEventListener('submit', addContact);
     requestForm?.addEventListener('submit', createRequest);
@@ -2176,6 +2455,9 @@ if (app) {
     });
     addDocumentClose?.addEventListener('click', () => closeDialog(addDocumentModal));
     addDocumentCancel?.addEventListener('click', () => closeDialog(addDocumentModal));
+    editItemForm?.addEventListener('submit', saveItemMetadata);
+    editItemClose?.addEventListener('click', () => closeDialog(editItemModal));
+    editItemCancel?.addEventListener('click', () => closeDialog(editItemModal));
     manageAccessClose?.addEventListener('click', () => closeDialog(manageAccessModal));
     manageAccessDone?.addEventListener('click', () => closeDialog(manageAccessModal));
     pairingCopy?.addEventListener('click', async () => {
@@ -2212,7 +2494,11 @@ if (app) {
             renderItems();
         });
     });
-    for (const dialog of [addDocumentModal, shareModal, manageAccessModal]) {
+    docSearch?.addEventListener('input', () => {
+        currentSearch = docSearch.value;
+        renderItems();
+    });
+    for (const dialog of [addDocumentModal, editItemModal, shareModal, manageAccessModal]) {
         dialog?.addEventListener('click', (event) => {
             if (event.target === dialog) {
                 closeDialog(dialog);

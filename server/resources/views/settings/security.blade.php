@@ -1,9 +1,15 @@
 <x-layout :title="__('Seguridad')">
     <div class="mx-auto max-w-4xl">
-        <div class="mb-8">
-            <p class="mp-eyebrow">{{ __('Seguridad') }}</p>
-            <h1 class="mp-title-lg mt-2">{{ __('Seguridad y preferencias') }}</h1>
-            <p class="mp-body mt-2 max-w-2xl">{{ __('Agrega un segundo paso al entrar. Puedes usar una app de autenticación o recibir un código en tu correo.') }}</p>
+        <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+                <p class="mp-eyebrow">{{ __('Seguridad') }}</p>
+                <h1 class="mp-title-lg mt-2">{{ __('Seguridad y preferencias') }}</h1>
+                <p class="mp-body mt-2 max-w-2xl">{{ __('Agrega un segundo paso al entrar. Puedes usar una app de autenticación o recibir un código en tu correo.') }}</p>
+            </div>
+            <a href="{{ route('settings.profile') }}" class="mp-btn mp-btn-secondary shrink-0">
+                <x-icon name="person" class="text-[20px]" />
+                {{ __('Volver al perfil') }}
+            </a>
         </div>
 
         <section class="mp-card mp-card-pad">
@@ -125,6 +131,103 @@
             <p id="email-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
         </section>
 
+        <section id="vault-security-app" class="mp-card mp-card-pad mt-5"
+                 data-keys-url="{{ route('web.keys.show') }}"
+                 data-email="{{ $user->email }}">
+            <div class="flex items-start gap-4">
+                <span class="mp-icon-tile">
+                    <x-icon name="key" class="text-[24px]" />
+                </span>
+                <div>
+                    <h2 class="mp-title-sm">{{ __('Seguridad de la bóveda') }}</h2>
+                    <p class="mp-hint mt-1 max-w-2xl">{{ __('Cambia la frase que abre tus documentos o genera una llave de emergencia nueva. Estas acciones no modifican tus documentos.') }}</p>
+                </div>
+            </div>
+
+            @if (! $hasVault)
+                <div class="mt-5 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4">
+                    <p class="font-semibold text-on-surface">{{ __('Tu bóveda todavía no está configurada.') }}</p>
+                    <p class="mp-hint mt-1">{{ __('Primero crea la llave de la bóveda y guarda tu llave de emergencia.') }}</p>
+                    <a href="{{ route('onboarding') }}" class="mp-btn mp-btn-primary mt-4">
+                        <x-icon name="vpn_key" class="text-[21px]" />
+                        {{ __('Configurar mi bóveda') }}
+                    </a>
+                </div>
+            @else
+                <div class="mt-6 grid gap-6 lg:grid-cols-2">
+                    <form id="vault-change-passphrase-form" class="rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 md:p-5">
+                        <h3 class="font-semibold text-on-surface">{{ __('Cambiar la frase de la bóveda') }}</h3>
+                        <p class="mp-hint mt-1">{{ __('Necesitas la frase actual. La frase nueva debe tener al menos 12 caracteres.') }}</p>
+
+                        <div class="mt-4 space-y-3">
+                            <div>
+                                <label for="vault-current-passphrase" class="mp-label">{{ __('Frase actual') }}</label>
+                                <input id="vault-current-passphrase" type="password" required autocomplete="current-password" class="mp-input">
+                            </div>
+                            <div>
+                                <label for="vault-new-passphrase" class="mp-label">{{ __('Frase nueva') }}</label>
+                                <input id="vault-new-passphrase" type="password" required minlength="12" autocomplete="new-password" class="mp-input">
+                            </div>
+                            <div>
+                                <label for="vault-new-passphrase-confirmation" class="mp-label">{{ __('Repite la frase nueva') }}</label>
+                                <input id="vault-new-passphrase-confirmation" type="password" required minlength="12" autocomplete="new-password" class="mp-input">
+                            </div>
+                        </div>
+
+                        <p id="vault-change-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                        <p id="vault-change-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+
+                        <button type="submit" class="mp-btn mp-btn-primary mt-4 w-full">
+                            <x-icon name="lock_reset" class="text-[20px]" />
+                            {{ __('Cambiar frase') }}
+                        </button>
+                    </form>
+
+                    <form id="vault-recovery-form" class="rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 md:p-5">
+                        <h3 class="font-semibold text-on-surface">{{ __('Regenerar llave de emergencia') }}</h3>
+                        <p class="mp-hint mt-1">{{ __('La llave anterior dejará de funcionar. Guarda la nueva antes de cerrar esta página.') }}</p>
+
+                        <div class="mt-4 space-y-3">
+                            <div>
+                                <label for="vault-recovery-passphrase" class="mp-label">{{ __('Frase actual') }}</label>
+                                <input id="vault-recovery-passphrase" type="password" required autocomplete="current-password" class="mp-input">
+                            </div>
+                            <div>
+                                <label for="vault-recovery-length" class="mp-label">{{ __('Formato de la llave') }}</label>
+                                <select id="vault-recovery-length" class="mp-select">
+                                    <option value="32">{{ __('32 dígitos (recomendado)') }}</option>
+                                    <option value="16">{{ __('16 dígitos') }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <p id="vault-recovery-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                        <p id="vault-recovery-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+
+                        <button type="submit" class="mp-btn mp-btn-secondary mt-4 w-full">
+                            <x-icon name="refresh" class="text-[20px]" />
+                            {{ __('Generar llave nueva') }}
+                        </button>
+
+                        <div id="vault-recovery-output" class="mt-4 rounded-xl border border-outline-variant/60 bg-white p-4" hidden>
+                            <p class="text-sm font-semibold text-on-surface">{{ __('Tu llave de emergencia nueva') }}</p>
+                            <p id="vault-recovery-digits" class="mt-2 break-words rounded-lg bg-surface-container-low px-3 py-4 text-center font-mono text-[19px] font-semibold tracking-[0.08em] text-on-surface"></p>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <button id="vault-recovery-copy" type="button" class="mp-btn mp-btn-quiet mp-btn-sm">
+                                    <x-icon name="content_copy" class="text-[18px]" />
+                                    {{ __('Copiar') }}
+                                </button>
+                                <button id="vault-recovery-download" type="button" class="mp-btn mp-btn-secondary mp-btn-sm">
+                                    <x-icon name="download" class="text-[18px]" />
+                                    {{ __('Descargar .mypss') }}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            @endif
+        </section>
+
         <section class="mp-card mp-card-pad mt-5">
             <div class="flex items-start gap-4">
                 <span class="mp-icon-tile">
@@ -155,6 +258,76 @@
             <p id="prefs-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
             <p id="prefs-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
         </section>
+
+        <section class="mp-card mp-card-pad mt-5">
+            <div class="flex items-start gap-4">
+                <span class="mp-icon-tile">
+                    <x-icon name="timer" class="text-[24px]" />
+                </span>
+                <div>
+                    <h2 class="mp-title-sm">{{ __('Bloqueo automático de la bóveda') }}</h2>
+                    <p class="mp-hint mt-1 max-w-2xl">{{ __('La bóveda se bloquea sola en este navegador después de un tiempo sin actividad. Se guarda solo en este dispositivo.') }}</p>
+                </div>
+            </div>
+
+            <div class="mt-5 max-w-sm">
+                <label for="auto-lock" class="mp-label">{{ __('Bloquear después de') }}</label>
+                <select id="auto-lock" class="mp-select">
+                    <option value="1">{{ __('1 minuto') }}</option>
+                    <option value="5">{{ __('5 minutos') }}</option>
+                    <option value="10">{{ __('10 minutos') }}</option>
+                    <option value="30">{{ __('30 minutos') }}</option>
+                    <option value="0">{{ __('No bloquear automáticamente') }}</option>
+                </select>
+                <p id="auto-lock-status" class="mt-2 text-[15px] font-medium text-primary" role="status"></p>
+            </div>
+        </section>
+
+        <section class="mp-card mp-card-pad mt-5">
+            <div class="flex items-start gap-4">
+                <span class="mp-icon-tile">
+                    <x-icon name="history" class="text-[24px]" />
+                </span>
+                <div>
+                    <h2 class="mp-title-sm">{{ __('Actividad reciente') }}</h2>
+                    <p class="mp-hint mt-1">{{ __('Últimos eventos de seguridad de tu cuenta. No mostramos direcciones IP completas.') }}</p>
+                </div>
+            </div>
+
+            @php
+                $eventLabels = [
+                    'login_web' => __('Inicio de sesión web'),
+                    'logout_web' => __('Cierre de sesión web'),
+                    'account_created' => __('Cuenta creada'),
+                    'account_deleted' => __('Cuenta eliminada'),
+                    'device_revoked' => __('Dispositivo bloqueado'),
+                    'contact_requested' => __('Solicitud de contacto enviada'),
+                    'contact_accepted' => __('Contacto aceptado'),
+                    'contact_blocked' => __('Contacto bloqueado'),
+                    'share_sent' => __('Documento enviado'),
+                    'share_accepted' => __('Envío aceptado'),
+                    'share_declined' => __('Envío rechazado'),
+                    'share_revoked' => __('Envío cancelado'),
+                    'document_requested' => __('Documento solicitado'),
+                    'document_request_declined' => __('Solicitud rechazada'),
+                    'document_request_cancelled' => __('Solicitud cancelada'),
+                    'item_deleted' => __('Documento eliminado'),
+                ];
+            @endphp
+
+            @if ($events->isEmpty())
+                <p class="mp-hint mt-4">{{ __('Todavía no hay actividad registrada.') }}</p>
+            @else
+                <ul class="mt-4 divide-y divide-outline-variant/40 rounded-xl border border-outline-variant/60">
+                    @foreach ($events as $event)
+                        <li class="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span class="font-medium text-on-surface">{{ $eventLabels[$event->event] ?? $event->event }}</span>
+                            <span class="text-sm text-on-surface-variant">{{ $event->created_at?->diffForHumans() }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </section>
     </div>
 
     <dialog id="settings-confirm" class="mp-dialog" aria-labelledby="settings-confirm-title">
@@ -177,7 +350,7 @@
         </div>
     </dialog>
 
-    <script>
+    <script nonce="{{ $cspNonce }}">
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const totpEnabled = @json($totpEnabled);
 
@@ -411,5 +584,20 @@
 
         simpleMode?.addEventListener('change', savePreferences);
         localeSelect?.addEventListener('change', savePreferences);
+
+        const autoLock = document.getElementById('auto-lock');
+        const autoLockStatus = document.getElementById('auto-lock-status');
+        const autoLockKey = 'mypass.autoLockMinutes';
+
+        if (autoLock) {
+            const saved = localStorage.getItem(autoLockKey);
+            autoLock.value = saved === null ? '10' : saved;
+            autoLock.addEventListener('change', () => {
+                localStorage.setItem(autoLockKey, autoLock.value);
+                autoLockStatus.textContent = autoLock.value === '0'
+                    ? window.mypassT('El bloqueo automático está desactivado.')
+                    : window.mypassTF('La bóveda se bloqueará tras :minutes minutos sin actividad.', { minutes: autoLock.value });
+            });
+        }
     </script>
 </x-layout>

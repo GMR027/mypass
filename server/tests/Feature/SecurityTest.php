@@ -69,6 +69,24 @@ class SecurityTest extends TestCase
         $this->get('/dashboard')->assertOk();
     }
 
+    public function test_web_login_is_recorded_in_the_audit_log(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'audit@example.com',
+            'password' => 'Password12345!',
+        ]);
+
+        $this->post('/login', [
+            'email' => 'audit@example.com',
+            'password' => 'Password12345!',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('audit_events', [
+            'user_id' => $user->id,
+            'event' => 'login_web',
+        ]);
+    }
+
     public function test_email_two_factor_can_be_enabled_from_settings(): void
     {
         $user = User::factory()->create();

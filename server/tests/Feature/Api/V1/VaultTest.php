@@ -140,6 +140,50 @@ class VaultTest extends TestCase
         ]);
     }
 
+    public function test_device_pin_and_biometric_wrapped_key_can_be_updated(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user, 'sanctum');
+
+        $device = $user->devices()->create([
+            'name' => 'Tablet',
+            'platform' => 'android',
+            'public_key' => 'pk',
+            'wrapped_master_key' => 'wrapped',
+        ]);
+
+        $this->patchJson("/api/v1/devices/{$device->id}", [
+            'pin_salt' => base64_encode('new-salt'),
+            'pin_params' => ['ops_limit' => 2, 'mem_limit' => 64, 'algorithm' => 'argon2id13'],
+            'biometric_wrapped_master_key' => base64_encode('biometric-key'),
+        ])->assertOk();
+
+        $device->refresh();
+        $this->assertSame(base64_encode('new-salt'), $device->pin_salt);
+        $this->assertSame('biometric-key', base64_decode($device->biometric_wrapped_master_key));
+        $this->assertSame('argon2id13', $device->pin_params['algorithm']);
+    }
+
+    public function test_revoking_a_device_is_recorded_in_the_audit_log(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user, 'sanctum');
+
+        $device = $user->devices()->create([
+            'name' => 'Tablet audit',
+            'platform' => 'android',
+            'public_key' => 'pk',
+            'wrapped_master_key' => 'wrapped',
+        ]);
+
+        $this->postJson("/api/v1/devices/{$device->id}/revoke")->assertOk();
+
+        $this->assertDatabaseHas('audit_events', [
+            'user_id' => $user->id,
+            'event' => 'device_revoked',
+        ]);
+    }
+
     public function test_web_can_list_and_revoke_devices(): void
     {
         $user = User::factory()->create();
