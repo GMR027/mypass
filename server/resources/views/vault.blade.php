@@ -152,6 +152,10 @@
                     <x-icon name="folder" class="text-[22px]" />
                     {{ __('Documentos') }}
                 </button>
+                <button id="tab-btn-passes" type="button" role="tab" aria-selected="false" aria-controls="panel-passes" data-tab="pases" class="mp-tab">
+                    <x-icon name="wallet" class="text-[22px]" />
+                    {{ __('Pases') }}
+                </button>
                 <button id="tab-btn-family" type="button" role="tab" aria-selected="false" aria-controls="panel-family" data-tab="family" class="mp-tab">
                     <x-icon name="groups" class="text-[22px]" />
                     {{ __('Familia') }}
@@ -210,6 +214,9 @@
 
                     <ul id="item-list" class="mp-grid-docs mt-5"></ul>
                 </section>
+
+                @include('vault.passes-panel')
+                @include('vault.pass-generator')
 
                 <section id="panel-family" role="tabpanel" aria-labelledby="tab-btn-family" hidden>
                     <div class="space-y-5">

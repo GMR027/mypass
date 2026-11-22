@@ -12,31 +12,83 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,18 +103,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import java.io.File
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -73,12 +134,18 @@ class MainActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val lockRunnable = Runnable { viewModel.lock() }
 
+    // Development-only switch used for visual verification on the tablet.
+    // The release build must keep this false.
+    private val allowScreenCapture = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
+        if (!allowScreenCapture) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+        }
         enableEdgeToEdge()
         Reminders.schedule(this)
         Reminders.checkNow(this)
@@ -86,23 +153,27 @@ class MainActivity : ComponentActivity() {
             val state by viewModel.state.collectAsState()
             val baseDensity = LocalDensity.current
 
-            MaterialTheme {
+            MyPassTheme {
                 CompositionLocalProvider(
                     LocalDensity provides Density(
                         density = baseDensity.density,
-                        fontScale = baseDensity.fontScale * if (state.simpleMode) 1.25f else 1f,
+                        fontScale = baseDensity.fontScale * if (state.simpleMode) 1.2f else 1f,
                     ),
                 ) {
-                    Surface(modifier = Modifier.fillMaxSize()) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MpColors.Background) {
                         BackHandler(
                             enabled = state.screen == Screen.Viewer ||
                                 state.screen == Screen.Family ||
                                 state.screen == Screen.Scan ||
-                                state.screen == Screen.Settings,
+                                state.screen == Screen.Settings ||
+                                state.screen == Screen.Passes ||
+                                state.screen == Screen.PassEditor,
                         ) {
                             when (state.screen) {
                                 Screen.Viewer -> viewModel.closeViewer()
-                                else -> viewModel.backToVault()
+                                Screen.Scan -> viewModel.backFromScan()
+                                Screen.PassEditor -> viewModel.discardPassDraft()
+                                else -> viewModel.backToHome()
                             }
                         }
                         MyPassApp(state = state, viewModel = viewModel)
@@ -133,70 +204,244 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text(text = "mypass", style = MaterialTheme.typography.headlineMedium)
-        if (state.status != null) {
-            Text(text = state.status, style = MaterialTheme.typography.bodyMedium)
-        }
-        if (state.error != null) {
-            Text(
-                text = state.error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        if (state.busy) {
-            CircularProgressIndicator()
-        }
-        Spacer(modifier = Modifier.height(12.dp))
+    val showBottomBar = state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Settings)
 
-        when (state.screen) {
-            Screen.Loading -> Text(stringResource(R.string.loading))
-            Screen.Login -> LoginScreen(viewModel)
-            Screen.Pair -> PairScreen(viewModel)
-            Screen.PinSetup -> PinSetupScreen(viewModel)
-            Screen.TwoFactor -> TwoFactorScreen(state = state, viewModel = viewModel)
-            Screen.Locked -> LockedScreen(viewModel)
-            Screen.Vault -> VaultScreen(
-                state = state,
-                viewModel = viewModel,
-                onAdd = { filePicker.launch(arrayOf("application/pdf", "image/*")) },
-            )
-            Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
-            Screen.Scan -> ScannerScreen(viewModel = viewModel)
-            Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
-            Screen.Viewer -> ViewerScreen(state = state, viewModel = viewModel)
+    LaunchedEffect(state.status, state.screen) {
+        if (state.status != null && state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Settings)) {
+            delay(3500)
+            viewModel.clearStatus()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MpColors.Background)
+            .safeDrawingPadding()
+            .imePadding(),
+    ) {
+        Box(modifier = Modifier.weight(1f)) {
+            when (state.screen) {
+                Screen.Loading -> LoadingScreen()
+                Screen.Login -> LoginScreen(state = state, viewModel = viewModel)
+                Screen.Pair -> PairScreen(state = state, viewModel = viewModel)
+                Screen.PinSetup -> PinSetupScreen(state = state, viewModel = viewModel)
+                Screen.TwoFactor -> TwoFactorScreen(state = state, viewModel = viewModel)
+                Screen.Locked -> LockedScreen(state = state, viewModel = viewModel)
+                Screen.Home -> HomeScreen(state = state, viewModel = viewModel)
+                Screen.Vault -> VaultScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onAdd = { filePicker.launch(arrayOf("application/pdf", "image/*")) },
+                )
+                Screen.Passes -> PassesScreen(state = state, viewModel = viewModel)
+                Screen.PassEditor -> PassEditorScreen(state = state, viewModel = viewModel)
+                Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
+                Screen.Scan -> ScannerScreen(state = state, viewModel = viewModel)
+                Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
+                Screen.Viewer -> ViewerScreen(state = state, viewModel = viewModel)
+            }
+        }
+        if (showBottomBar) {
+            MpBottomBar(screen = state.screen, viewModel = viewModel)
         }
     }
 }
 
 @Composable
-private fun LoginScreen(viewModel: MainViewModel) {
+private fun LoadingScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            MpLogo()
+            CircularProgressIndicator(color = MpColors.Primary)
+            Text(
+                text = stringResource(R.string.loading),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MpColors.OnSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AuthShell(content: @Composable () -> Unit) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MpColors.Background),
+    ) {
+        val wide = maxWidth >= 900.dp
+
+        if (wide) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(top = 24.dp),
+                    color = MpColors.Primary,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(48.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        MpLogo(inverse = true)
+                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            Text(
+                                text = stringResource(R.string.auth_brand_title),
+                                style = MaterialTheme.typography.displaySmall,
+                                color = Color.White,
+                            )
+                            Text(
+                                text = stringResource(R.string.auth_brand_subtitle),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MpColors.PrimaryFixed,
+                            )
+                            AuthFeature(Icons.Filled.Lock, stringResource(R.string.auth_feature_encryption), stringResource(R.string.auth_feature_encryption_help))
+                            AuthFeature(Icons.Filled.Phone, stringResource(R.string.auth_feature_devices), stringResource(R.string.auth_feature_devices_help))
+                            AuthFeature(Icons.Filled.AccountCircle, stringResource(R.string.auth_feature_private), stringResource(R.string.auth_feature_private_help))
+                        }
+                        Text(
+                            text = stringResource(R.string.auth_brand_footer),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.PrimaryFixed.copy(alpha = 0.8f),
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(modifier = Modifier.widthIn(max = 560.dp)) {
+                        content()
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    MpLogo()
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Box(modifier = Modifier.widthIn(max = 560.dp)) {
+                    content()
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthFeature(icon: ImageVector, title: String, subtitle: String) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+        }
+        Column {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = Color.White)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MpColors.PrimaryFixed)
+        }
+    }
+}
+
+@Composable
+private fun AuthCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    state: UiState,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        MpIconTile(icon = icon, size = 64)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MpColors.OnSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                MpStatusBanner(state.status, state.error)
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoginScreen(state: UiState, viewModel: MainViewModel) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.sign_in))
-        Text(stringResource(R.string.use_same_account))
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text(stringResource(R.string.email)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text(stringResource(R.string.password)) },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { viewModel.login(email, password) },
-            enabled = !viewModel.state.value.busy,
+    AuthShell {
+        AuthCard(
+            icon = Icons.Filled.Lock,
+            title = stringResource(R.string.sign_in),
+            subtitle = stringResource(R.string.use_same_account),
+            state = state,
         ) {
-            Text(stringResource(R.string.sign_in))
+            MpTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = stringResource(R.string.email),
+                placeholder = "correo@ejemplo.com",
+                keyboardType = KeyboardType.Email,
+            )
+            MpPasswordField(
+                value = password,
+                onValueChange = { password = it },
+                label = stringResource(R.string.password),
+            )
+            MpButton(
+                text = stringResource(R.string.sign_in),
+                onClick = { viewModel.login(email, password) },
+                enabled = !state.busy,
+                loading = state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = MpColors.Primary, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.auth_login_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -214,158 +459,171 @@ private fun TwoFactorScreen(state: UiState, viewModel: MainViewModel) {
         )
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.two_factor), style = MaterialTheme.typography.headlineSmall)
-        Text(
-            when (method) {
+    AuthShell {
+        AuthCard(
+            icon = Icons.Filled.Lock,
+            title = stringResource(R.string.two_factor),
+            subtitle = when (method) {
                 "recovery" -> stringResource(R.string.two_factor_recovery_hint)
                 "email" -> stringResource(R.string.two_factor_email_hint, state.email)
                 else -> stringResource(R.string.two_factor_totp_hint)
             },
-        )
-
-        OutlinedTextField(
-            value = code,
-            onValueChange = { text ->
-                code = if (method == "recovery") {
-                    text.take(24)
-                } else {
-                    text.filter { it.isDigit() }.take(6)
+            state = state,
+        ) {
+            if (state.twoFactorMethods.size > 1) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if ("totp" in state.twoFactorMethods) {
+                        MpFilterChip("App", method == "totp") { method = "totp"; code = "" }
+                    }
+                    if ("email" in state.twoFactorMethods) {
+                        MpFilterChip("Correo", method == "email") { method = "email"; code = "" }
+                    }
+                    if ("recovery" in state.twoFactorMethods) {
+                        MpFilterChip("Recuperación", method == "recovery") { method = "recovery"; code = "" }
+                    }
                 }
-            },
-            label = {
-                Text(
-                    stringResource(
-                        if (method == "recovery") R.string.recovery_code else R.string.code,
-                    ),
-                )
-            },
-            keyboardOptions = KeyboardOptions(
+            }
+
+            MpTextField(
+                value = code,
+                onValueChange = { text ->
+                    code = if (method == "recovery") {
+                        text.take(24)
+                    } else {
+                        text.filter { it.isDigit() }.take(6)
+                    }
+                },
+                label = stringResource(if (method == "recovery") R.string.recovery_code else R.string.code),
                 keyboardType = if (method == "recovery") KeyboardType.Text else KeyboardType.Number,
-            ),
-            modifier = Modifier.fillMaxWidth(),
-        )
+            )
 
-        Button(
-            onClick = { viewModel.verifyTwoFactor(code, method) },
-            enabled = !state.busy && code.isNotBlank(),
-        ) {
-            Text(stringResource(R.string.verify))
-        }
+            MpButton(
+                text = stringResource(R.string.verify),
+                onClick = { viewModel.verifyTwoFactor(code, method) },
+                enabled = !state.busy && code.isNotBlank(),
+                loading = state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        if (method == "email") {
-            OutlinedButton(
-                onClick = viewModel::sendTwoFactorEmail,
-                enabled = !state.busy,
-            ) {
-                Text(stringResource(R.string.send_email_code))
+            if (method == "email") {
+                MpButton(
+                    text = stringResource(R.string.send_email_code),
+                    onClick = viewModel::sendTwoFactorEmail,
+                    variant = MpButtonVariant.Secondary,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-        }
 
-        if (method != "email" && "email" in state.twoFactorMethods) {
-            TextButton(onClick = { method = "email"; code = "" }) {
-                Text(stringResource(R.string.use_email_code))
-            }
-        }
-
-        if (method != "recovery" && "recovery" in state.twoFactorMethods) {
-            TextButton(onClick = { method = "recovery"; code = "" }) {
-                Text(stringResource(R.string.use_recovery_code))
-            }
-        }
-
-        if (method != "totp" && "totp" in state.twoFactorMethods) {
-            TextButton(onClick = { method = "totp"; code = "" }) {
-                Text(stringResource(R.string.use_auth_app))
-            }
-        }
-
-        OutlinedButton(onClick = viewModel::cancelTwoFactor, enabled = !state.busy) {
-            Text(stringResource(R.string.back))
+            MpTextButton(
+                text = stringResource(R.string.back),
+                onClick = viewModel::cancelTwoFactor,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }
 
 @Composable
-private fun PairScreen(viewModel: MainViewModel) {    var code by remember { mutableStateOf("") }
+private fun PairScreen(state: UiState, viewModel: MainViewModel) {
+    var code by remember { mutableStateOf("") }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.connect_computer))
-        Text(stringResource(R.string.pairing_hint))
-        OutlinedTextField(
-            value = code,
-            onValueChange = { value -> code = value.filter(Char::isDigit).take(6) },
-            label = { Text(stringResource(R.string.six_digit_code)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { viewModel.joinPairing(code) },
-            enabled = !viewModel.state.value.busy && code.length == 6,
+    AuthShell {
+        AuthCard(
+            icon = Icons.Filled.Phone,
+            title = stringResource(R.string.connect_computer),
+            subtitle = stringResource(R.string.pairing_hint),
+            state = state,
         ) {
-            Text(stringResource(R.string.connect_phone))
-        }
-        OutlinedButton(onClick = viewModel::logout) {
-            Text(stringResource(R.string.use_another_account))
+            MpTextField(
+                value = code,
+                onValueChange = { value -> code = value.filter(Char::isDigit).take(6) },
+                label = stringResource(R.string.six_digit_code),
+                keyboardType = KeyboardType.Number,
+            )
+            MpButton(
+                text = stringResource(R.string.connect_phone),
+                onClick = { viewModel.joinPairing(code) },
+                enabled = !state.busy && code.length == 6,
+                loading = state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            MpTextButton(
+                text = stringResource(R.string.use_another_account),
+                onClick = viewModel::logout,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }
 
 @Composable
-private fun PinSetupScreen(viewModel: MainViewModel) {
+private fun PinSetupScreen(state: UiState, viewModel: MainViewModel) {
     var pin by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.create_pin))
-        Text(stringResource(R.string.pin_help))
-        OutlinedTextField(
-            value = pin,
-            onValueChange = { value -> pin = value.filter(Char::isDigit).take(12) },
-            label = { Text(stringResource(R.string.pin_hint)) },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = confirmation,
-            onValueChange = { value -> confirmation = value.filter(Char::isDigit).take(12) },
-            label = { Text(stringResource(R.string.repeat_pin)) },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { viewModel.setupPin(pin, confirmation) },
-            enabled = !viewModel.state.value.busy,
+    AuthShell {
+        AuthCard(
+            icon = Icons.Filled.Lock,
+            title = stringResource(R.string.create_pin),
+            subtitle = stringResource(R.string.pin_help),
+            state = state,
         ) {
-            Text(stringResource(R.string.save_pin))
+            MpPasswordField(
+                value = pin,
+                onValueChange = { value -> pin = value.filter(Char::isDigit).take(12) },
+                label = stringResource(R.string.pin_hint),
+                keyboardType = KeyboardType.NumberPassword,
+            )
+            MpPasswordField(
+                value = confirmation,
+                onValueChange = { value -> confirmation = value.filter(Char::isDigit).take(12) },
+                label = stringResource(R.string.repeat_pin),
+                keyboardType = KeyboardType.NumberPassword,
+            )
+            MpButton(
+                text = stringResource(R.string.save_pin),
+                onClick = { viewModel.setupPin(pin, confirmation) },
+                enabled = !state.busy,
+                loading = state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
 
 @Composable
-private fun LockedScreen(viewModel: MainViewModel) {
+private fun LockedScreen(state: UiState, viewModel: MainViewModel) {
     var pin by remember { mutableStateOf("") }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.open_vault))
-        OutlinedTextField(
-            value = pin,
-            onValueChange = { value -> pin = value.filter(Char::isDigit).take(12) },
-            label = { Text(stringResource(R.string.pin)) },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { viewModel.unlock(pin) },
-            enabled = !viewModel.state.value.busy,
+    AuthShell {
+        AuthCard(
+            icon = Icons.Filled.Lock,
+            title = stringResource(R.string.open_vault),
+            subtitle = stringResource(R.string.locked_help),
+            state = state,
         ) {
-            Text(stringResource(R.string.unlock))
-        }
-        OutlinedButton(onClick = viewModel::logout) {
-            Text(stringResource(R.string.sign_out))
+            MpPasswordField(
+                value = pin,
+                onValueChange = { value -> pin = value.filter(Char::isDigit).take(12) },
+                label = stringResource(R.string.pin),
+                keyboardType = KeyboardType.NumberPassword,
+            )
+            MpButton(
+                text = stringResource(R.string.unlock),
+                onClick = { viewModel.unlock(pin) },
+                enabled = !state.busy,
+                loading = state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            MpTextButton(
+                text = stringResource(R.string.sign_out),
+                onClick = viewModel::logout,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }
@@ -378,7 +636,9 @@ private fun VaultScreen(
 ) {
     var shareItem by remember { mutableStateOf<UiItem?>(null) }
     var expiryItem by remember { mutableStateOf<UiItem?>(null) }
+    var deleteItem by remember { mutableStateOf<UiItem?>(null) }
     var search by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("all") }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
     val context = LocalContext.current
     val notificationPermission = rememberLauncherForActivityResult(
@@ -397,16 +657,24 @@ private fun VaultScreen(
         }
     }
 
-    val visibleItems = remember(state.items, search) {
+    val vaultItems = remember(state.items) { state.items.filter { it.pass == null } }
+    val visibleItems = remember(vaultItems, search, filter) {
         val query = search.trim()
-        if (query.isBlank()) {
-            state.items
-        } else {
-            state.items.filter { item ->
-                item.title.contains(query, ignoreCase = true) ||
-                    item.originalName.contains(query, ignoreCase = true) ||
-                    item.ocrText.contains(query, ignoreCase = true)
-            }
+        vaultItems.filter { item ->
+            (filter == "all" || item.type == filter) &&
+                (
+                    query.isBlank() ||
+                        item.title.contains(query, ignoreCase = true) ||
+                        item.originalName.contains(query, ignoreCase = true) ||
+                        item.ocrText.contains(query, ignoreCase = true)
+                    )
+        }
+    }
+
+    val expiring = remember(vaultItems) {
+        vaultItems.filter { item ->
+            val date = item.expiresAt?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+            date != null && ChronoUnit.DAYS.between(LocalDate.now(), date) <= 30
         }
     }
 
@@ -433,110 +701,126 @@ private fun VaultScreen(
         )
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(onClick = onAdd, enabled = !state.busy) {
-                    Text(stringResource(R.string.add_document))
-                }
-                OutlinedButton(onClick = viewModel::openScanner, enabled = !state.busy) {
-                    Text(stringResource(R.string.scan))
-                }
-                OutlinedButton(onClick = viewModel::sync, enabled = !state.busy) {
-                    Text(stringResource(R.string.sync))
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(onClick = viewModel::openFamily) {
-                    Text(stringResource(R.string.family))
-                }
-                OutlinedButton(onClick = viewModel::openSettings) {
-                    Text(stringResource(R.string.settings))
-                }
-                OutlinedButton(onClick = viewModel::lock) {
-                    Text(stringResource(R.string.lock))
-                }
-            }
-        }
+    if (deleteItem != null) {
+        ConfirmDialog(
+            title = stringResource(R.string.confirm_delete_title),
+            message = stringResource(R.string.confirm_delete_body),
+            confirmLabel = stringResource(R.string.delete),
+            onConfirm = {
+                viewModel.deleteItem(deleteItem!!)
+                deleteItem = null
+            },
+            onDismiss = { deleteItem = null },
+        )
+    }
 
-        if (state.items.isEmpty()) {
-            Text(stringResource(R.string.no_documents))
-        } else {
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                label = { Text(stringResource(R.string.search_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-        }
-
-        if (state.items.isNotEmpty() && visibleItems.isEmpty()) {
-            Text(stringResource(R.string.no_search_results, search.trim()))
-        }
-
-        LazyColumn(
+    Column(modifier = Modifier.fillMaxSize()) {
+        MpTopBar(state = state, onLock = viewModel::lock)
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = if (state.simpleMode) 560.dp else 300.dp),
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(visibleItems, key = { it.id }) { item ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(item.title, style = MaterialTheme.typography.titleMedium)
-                        Text(item.type)
-                        if (item.ocrText.isNotBlank()) {
-                            Text(
-                                item.ocrText.lineSequence().first().take(120),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        val expiry = expiryLabel(item.expiresAt)
-                        if (expiry != null) {
-                            val expired = item.expiresAt?.let { value ->
-                                runCatching {
-                                    LocalDate.parse(value.take(10)).isBefore(LocalDate.now())
-                                }.getOrDefault(false)
-                            } ?: false
-                            Text(
-                                expiry,
-                                color = if (expired) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    Color.Unspecified
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        if (item.pendingUpload) {
-                            Text(stringResource(R.string.pending_upload))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { viewModel.openItem(item) }) {
-                                Text(stringResource(R.string.open))
-                            }
-                            if (acceptedContacts.isNotEmpty()) {
-                                OutlinedButton(onClick = { shareItem = item }) {
-                                    Text(stringResource(R.string.send))
-                                }
-                            }
-                            OutlinedButton(onClick = { expiryItem = item }) {
-                                Text(
-                                    stringResource(
-                                        if (item.expiresAt == null) R.string.expiry else R.string.change_expiry,
-                                    ),
-                                )
-                            }
-                            OutlinedButton(onClick = { viewModel.deleteItem(item) }) {
-                                Text(stringResource(R.string.delete))
-                            }
-                        }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    VaultStatusCard(state)
+                    MpStatusBanner(state.status, state.error)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        MpButton(
+                            text = stringResource(R.string.add),
+                            onClick = onAdd,
+                            icon = Icons.Filled.Add,
+                            enabled = !state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MpButton(
+                            text = stringResource(R.string.scan),
+                            onClick = viewModel::openScanner,
+                            variant = MpButtonVariant.Secondary,
+                            enabled = !state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MpButton(
+                            text = stringResource(R.string.sync),
+                            onClick = viewModel::sync,
+                            variant = MpButtonVariant.Quiet,
+                            icon = Icons.Filled.Refresh,
+                            enabled = !state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
+                }
+            }
+
+            if (vaultItems.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    MpTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        label = stringResource(R.string.search_documents),
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingContent = {
+                            Icon(
+                                Icons.Filled.Search,
+                                contentDescription = null,
+                                tint = MpColors.OnSurfaceVariant,
+                            )
+                        },
+                    )
+                }
+
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        MpFilterChip(stringResource(R.string.all_documents), filter == "all") { filter = "all" }
+                        MpFilterChip(stringResource(R.string.document), filter == "document") { filter = "document" }
+                        MpFilterChip(stringResource(R.string.ticket), filter == "ticket") { filter = "ticket" }
+                        MpFilterChip(stringResource(R.string.card), filter == "card") { filter = "card" }
+                        MpFilterChip(stringResource(R.string.other), filter == "other") { filter = "other" }
+                    }
+                }
+
+                if (expiring.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        ExpiryBanner(count = expiring.size)
+                    }
+                }
+            }
+
+            if (vaultItems.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    MpEmptyState(
+                        icon = Icons.Filled.List,
+                        title = stringResource(R.string.no_documents),
+                        subtitle = stringResource(R.string.no_documents_subtitle),
+                    )
+                }
+            } else if (visibleItems.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    MpEmptyState(
+                        icon = Icons.Filled.Search,
+                        title = stringResource(R.string.no_search_results, search.trim().ifBlank { stringResource(R.string.all_documents) }),
+                    )
+                }
+            } else {
+                gridItems(visibleItems, key = { it.id }) { item ->
+                    DocumentCard(
+                        item = item,
+                        hasContacts = acceptedContacts.isNotEmpty(),
+                        onOpen = { viewModel.openItem(item) },
+                        onShare = { shareItem = item },
+                        onExpiry = { expiryItem = item },
+                        onDelete = { deleteItem = item },
+                    )
                 }
             }
         }
@@ -544,7 +828,760 @@ private fun VaultScreen(
 }
 
 @Composable
-private fun ShareDialog(
+internal fun VaultStatusCard(state: UiState) {
+    MpCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            MpIconTile(icon = Icons.Filled.Lock, size = 56)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(stringResource(R.string.vault), style = MaterialTheme.typography.headlineSmall)
+                    MpBadge(stringResource(R.string.vault_open_badge), MpBadgeTone.Primary)
+                }
+                Text(
+                    text = state.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(R.string.vault_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ExpiryBanner(count: Int) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MpColors.SecondaryFixed,
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Filled.Warning, contentDescription = null, tint = MpColors.OnSecondaryFixed)
+            Column {
+                Text(
+                    text = stringResource(R.string.expiry_soon_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MpColors.OnSecondaryFixed,
+                )
+                Text(
+                    text = if (count == 1) {
+                        stringResource(R.string.expiry_soon_count_one, count)
+                    } else {
+                        stringResource(R.string.expiry_soon_count, count)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSecondaryFixed,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentCard(
+    item: UiItem,
+    hasContacts: Boolean,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onExpiry: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val expiry = expiryLabel(item.expiresAt)
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ItemTypeIcon(type = item.type)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = typeLabel(item.type),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MpColors.Primary,
+                    )
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 6.dp),
+                    ) {
+                        if (item.pendingUpload) {
+                            MpBadge(stringResource(R.string.pending_upload), MpBadgeTone.Warning)
+                        }
+                        if (expiry != null) {
+                            val expired = item.expiresAt?.let { value ->
+                                runCatching { LocalDate.parse(value.take(10)).isBefore(LocalDate.now()) }
+                                    .getOrDefault(false)
+                            } ?: false
+                            MpBadge(
+                                text = expiry,
+                                tone = if (expired) MpBadgeTone.Danger else MpBadgeTone.Warning,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (item.ocrText.isNotBlank()) {
+                Text(
+                    text = item.ocrText.lineSequence().first().take(120),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            MpDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onOpen) {
+                    Text(stringResource(R.string.open), style = MaterialTheme.typography.labelLarge)
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                if (hasContacts) {
+                    MpIconButton(Icons.Filled.Send, stringResource(R.string.send), onShare, tint = MpColors.Primary)
+                }
+                MpIconButton(Icons.Filled.DateRange, stringResource(R.string.expiry), onExpiry, tint = MpColors.Primary)
+                MpIconButton(Icons.Filled.Delete, stringResource(R.string.delete), onDelete, tint = MpColors.Error)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItemTypeIcon(type: String, size: Int = 46) {
+    val painter = when (type) {
+        "ticket" -> painterResource(R.drawable.ic_ticket)
+        "card" -> painterResource(R.drawable.ic_card)
+        else -> painterResource(R.drawable.ic_document)
+    }
+    MpIconTile(painter = painter, size = size)
+}
+
+@Composable
+private fun typeLabel(type: String): String = when (type) {
+    "ticket" -> stringResource(R.string.ticket)
+    "card" -> stringResource(R.string.card)
+    "other" -> stringResource(R.string.other)
+    else -> stringResource(R.string.document)
+}
+
+@Composable
+private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
+    var email by remember { mutableStateOf("") }
+    var requestContactId by remember { mutableStateOf("") }
+    var requestType by remember { mutableStateOf("") }
+    var requestPurpose by remember { mutableStateOf("") }
+    val acceptedContacts = state.contacts.filter { it.status == "accepted" }
+    val effectiveContactId = requestContactId.ifBlank { acceptedContacts.firstOrNull()?.id.orEmpty() }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        SubScreenHeader(
+            title = stringResource(R.string.family),
+            onBack = viewModel::backToHome,
+            action = {
+                MpIconButton(
+                    icon = Icons.Filled.Lock,
+                    contentDescription = stringResource(R.string.lock),
+                    onClick = viewModel::lock,
+                    container = MpColors.SurfaceLow,
+                )
+            },
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.family), style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        stringResource(R.string.family_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MpColors.OnSurfaceVariant,
+                    )
+                    MpStatusBanner(state.familyStatus, state.error, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            MpIconTile(icon = Icons.Filled.Person, size = 46)
+                            Column {
+                                Text(stringResource(R.string.add_contact), style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    stringResource(R.string.add_contact_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MpColors.OnSurfaceVariant,
+                                )
+                            }
+                        }
+                        MpTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = stringResource(R.string.family_email),
+                            keyboardType = KeyboardType.Email,
+                        )
+                        MpButton(
+                            text = stringResource(R.string.add_contact),
+                            onClick = { viewModel.addContact(email); email = "" },
+                            icon = Icons.Filled.Add,
+                            enabled = email.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.contacts), style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.weight(1f))
+                    MpBadge(
+                        text = if (acceptedContacts.size == 1) {
+                            stringResource(R.string.contacts_count_one, acceptedContacts.size)
+                        } else {
+                            stringResource(R.string.contacts_count, acceptedContacts.size)
+                        },
+                        tone = MpBadgeTone.Neutral,
+                    )
+                }
+            }
+
+            if (state.contacts.isEmpty()) {
+                item {
+                    MpEmptyState(
+                        icon = Icons.Filled.Person,
+                        title = stringResource(R.string.no_contacts),
+                    )
+                }
+            } else {
+                lazyItems(state.contacts, key = { it.id }) { contact ->
+                    ContactCard(contact = contact, onAccept = { viewModel.acceptContact(contact.id) })
+                }
+            }
+
+            item {
+                Text(stringResource(R.string.shared_with_me), style = MaterialTheme.typography.titleLarge)
+            }
+
+            if (state.incomingShares.isEmpty()) {
+                item {
+                    MpEmptyState(icon = Icons.Filled.Email, title = stringResource(R.string.no_shares))
+                }
+            } else {
+                lazyItems(state.incomingShares, key = { it.id }) { share ->
+                    ShareCard(
+                        share = share,
+                        onAccept = { viewModel.acceptShare(share.id) },
+                        onDecline = { viewModel.declineShare(share.id) },
+                    )
+                }
+            }
+
+            item {
+                Text(stringResource(R.string.document_requests), style = MaterialTheme.typography.titleLarge)
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (acceptedContacts.isEmpty()) {
+                            Text(
+                                stringResource(R.string.request_needs_contact),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                        } else {
+                            Text(stringResource(R.string.request_from), style = MaterialTheme.typography.titleSmall)
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                for (contact in acceptedContacts) {
+                                    MpFilterChip(
+                                        text = contact.name,
+                                        selected = effectiveContactId == contact.id,
+                                        onClick = { requestContactId = contact.id },
+                                    )
+                                }
+                            }
+                            MpTextField(
+                                value = requestType,
+                                onValueChange = { requestType = it },
+                                label = stringResource(R.string.request_document),
+                            )
+                            MpTextField(
+                                value = requestPurpose,
+                                onValueChange = { requestPurpose = it },
+                                label = stringResource(R.string.request_purpose),
+                            )
+                            MpButton(
+                                text = stringResource(R.string.request),
+                                onClick = {
+                                    viewModel.createShareRequest(
+                                        effectiveContactId,
+                                        requestType,
+                                        requestPurpose,
+                                    )
+                                    requestType = ""
+                                    requestPurpose = ""
+                                },
+                                enabled = effectiveContactId.isNotBlank() &&
+                                    requestType.isNotBlank() && requestPurpose.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (state.shareRequests.isEmpty()) {
+                item {
+                    MpEmptyState(icon = Icons.Filled.List, title = stringResource(R.string.no_requests))
+                }
+            } else {
+                lazyItems(state.shareRequests, key = { it.id }) { request ->
+                    ShareRequestCard(
+                        request = request,
+                        onDecline = { viewModel.declineShareRequest(request.id) },
+                        onCancel = { viewModel.cancelShareRequest(request.id) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContactCard(contact: UiContact, onAccept: () -> Unit) {
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MpAvatar(contact.name, size = 46)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = contact.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    MpBadge(
+                        text = when (contact.status) {
+                            "accepted" -> stringResource(R.string.accepted)
+                            "pending" -> stringResource(R.string.pending)
+                            else -> contact.status
+                        },
+                        tone = if (contact.status == "accepted") MpBadgeTone.Primary else MpBadgeTone.Warning,
+                    )
+                }
+                Text(
+                    text = contact.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (contact.status == "pending") {
+                MpButton(
+                    text = stringResource(R.string.accept_contact),
+                    onClick = onAccept,
+                    variant = MpButtonVariant.Secondary,
+                    modifier = Modifier.widthIn(max = 160.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareCard(share: UiShare, onAccept: () -> Unit, onDecline: () -> Unit) {
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ItemTypeIcon(type = share.itemType, size = 44)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(
+                            if (share.itemType == "ticket") R.string.share_received_ticket else R.string.share_received_document,
+                            share.sender,
+                        ),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    MpBadge(
+                        text = stringResource(if (share.mode == "transfer") R.string.transfer_label else R.string.copy_label),
+                        tone = if (share.mode == "transfer") MpBadgeTone.Warning else MpBadgeTone.Neutral,
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MpButton(
+                    text = stringResource(R.string.accept),
+                    onClick = onAccept,
+                    modifier = Modifier.weight(1f),
+                )
+                MpButton(
+                    text = stringResource(R.string.decline),
+                    onClick = onDecline,
+                    variant = MpButtonVariant.Danger,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareRequestCard(request: UiShareRequest, onDecline: () -> Unit, onCancel: () -> Unit) {
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MpBadge(
+                text = stringResource(if (request.incoming) R.string.request_incoming_badge else R.string.request_outgoing_badge),
+                tone = if (request.incoming) MpBadgeTone.Primary else MpBadgeTone.Neutral,
+            )
+            Text(
+                text = if (request.incoming) {
+                    stringResource(R.string.request_incoming, request.person, request.documentType)
+                } else {
+                    stringResource(R.string.request_outgoing, request.documentType, request.person)
+                },
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = request.purpose,
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+            )
+            if (request.incoming) {
+                Text(
+                    text = stringResource(R.string.request_send_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                )
+                MpButton(
+                    text = stringResource(R.string.decline),
+                    onClick = onDecline,
+                    variant = MpButtonVariant.Danger,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                MpButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = onCancel,
+                    variant = MpButtonVariant.Danger,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val currentLanguage = LocalConfiguration.current.locales[0]?.language.orEmpty()
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        MpTopBar(state = state, onLock = viewModel::lock)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.profile_title), style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        stringResource(R.string.profile_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MpColors.OnSurfaceVariant,
+                    )
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        MpIconTile(icon = Icons.Filled.Person, size = 46)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.family), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(R.string.family_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        MpButton(
+                            text = stringResource(R.string.open_family),
+                            onClick = viewModel::openFamily,
+                            variant = MpButtonVariant.Quiet,
+                        )
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    MpSwitchRow(
+                        title = stringResource(R.string.simple_mode),
+                        subtitle = stringResource(R.string.simple_mode_help),
+                        checked = state.simpleMode,
+                        onCheckedChange = viewModel::setSimpleMode,
+                        icon = Icons.Filled.Person,
+                    )
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.language), style = MaterialTheme.typography.titleMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MpFilterChip(
+                                text = stringResource(R.string.language_spanish),
+                                selected = currentLanguage.startsWith("es"),
+                                onClick = { setAppLocale(context, "es-MX") },
+                            )
+                            MpFilterChip(
+                                text = stringResource(R.string.language_english),
+                                selected = currentLanguage == "en",
+                                onClick = { setAppLocale(context, "en") },
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        MpIconTile(icon = Icons.Filled.Lock, size = 46)
+                        Column {
+                            Text(stringResource(R.string.security_title), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(R.string.security_web),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.account_title), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = state.email,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        MpButton(
+                            text = stringResource(R.string.sign_out),
+                            onClick = viewModel::logout,
+                            variant = MpButtonVariant.Danger,
+                            icon = Icons.Filled.ExitToApp,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = stringResource(R.string.version, "0.1.0"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MpTopBar(state: UiState, onLock: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MpLogo()
+        Spacer(modifier = Modifier.weight(1f))
+        MpIconButton(
+            icon = Icons.Filled.Lock,
+            contentDescription = stringResource(R.string.lock),
+            onClick = onLock,
+            container = MpColors.SurfaceLow,
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        MpAvatar(name = state.email.ifBlank { "M" }, size = 40)
+    }
+}
+
+@Composable
+fun SubScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        MpIconButton(Icons.Filled.ArrowBack, stringResource(R.string.back), onBack)
+        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        action?.invoke()
+    }
+}
+
+@Composable
+private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
+    NavigationBar(
+        containerColor = Color.White,
+        tonalElevation = 0.dp,
+    ) {
+        NavigationBarItem(
+            selected = screen == Screen.Home,
+            onClick = { if (screen != Screen.Home) viewModel.backToHome() },
+            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+            label = { Text(stringResource(R.string.home)) },
+            colors = bottomBarColors(),
+        )
+        NavigationBarItem(
+            selected = screen == Screen.Vault,
+            onClick = { if (screen != Screen.Vault) viewModel.backToVault() },
+            icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+            label = { Text(stringResource(R.string.vault)) },
+            colors = bottomBarColors(),
+        )
+        NavigationBarItem(
+            selected = screen == Screen.Passes,
+            onClick = { if (screen != Screen.Passes) viewModel.openPasses() },
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_ticket),
+                    contentDescription = null,
+                )
+            },
+            label = { Text(stringResource(R.string.passes)) },
+            colors = bottomBarColors(),
+        )
+        NavigationBarItem(
+            selected = screen == Screen.Settings,
+            onClick = { if (screen != Screen.Settings) viewModel.openSettings() },
+            icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+            label = { Text(stringResource(R.string.profile)) },
+            colors = bottomBarColors(),
+        )
+    }
+}
+
+@Composable
+private fun bottomBarColors() = NavigationBarItemDefaults.colors(
+    selectedIconColor = MpColors.Primary,
+    selectedTextColor = MpColors.Primary,
+    indicatorColor = MpColors.PrimaryFixed,
+    unselectedIconColor = MpColors.OnSurfaceVariant,
+    unselectedTextColor = MpColors.OnSurfaceVariant,
+)
+
+@Composable
+internal fun MpFilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        shape = CircleShape,
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MpColors.Primary,
+            selectedLabelColor = MpColors.OnPrimary,
+            containerColor = Color.White,
+            labelColor = MpColors.OnSurfaceVariant,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = MpColors.OutlineVariant,
+            selectedBorderColor = MpColors.Primary,
+            borderWidth = 1.dp,
+            selectedBorderWidth = 1.dp,
+        ),
+    )
+}
+
+@Composable
+internal fun ConfirmDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
+        containerColor = Color.White,
+        title = { Text(title, style = MaterialTheme.typography.headlineSmall) },
+        text = { Text(message, style = MaterialTheme.typography.bodyMedium, color = MpColors.OnSurfaceVariant) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmLabel, color = MpColors.Error, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel), color = MpColors.Primary)
+            }
+        },
+    )
+}
+
+@Composable
+internal fun ShareDialog(
     item: UiItem,
     contacts: List<UiContact>,
     onDismiss: () -> Unit,
@@ -555,28 +1592,66 @@ private fun ShareDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.send_item, item.title)) },
+        shape = MaterialTheme.shapes.large,
+        containerColor = Color.White,
+        title = {
+            Column {
+                Text(stringResource(R.string.send_item, item.title), style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    stringResource(R.string.share_dialog_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                )
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.contact))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.contact), style = MaterialTheme.typography.titleSmall)
                 for (contact in contacts) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
+                        androidx.compose.material3.RadioButton(
                             selected = contactId == contact.id,
                             onClick = { contactId = contact.id },
                         )
-                        Text(stringResource(R.string.contact_name_email, contact.name, contact.email))
+                        Text(
+                            text = stringResource(R.string.contact_name_email, contact.name, contact.email),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
 
-                Text(stringResource(R.string.share_mode))
+                Text(stringResource(R.string.share_mode), style = MaterialTheme.typography.titleSmall)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = mode == "copy", onClick = { mode = "copy" })
-                    Text(stringResource(R.string.send_copy))
+                    androidx.compose.material3.RadioButton(
+                        selected = mode == "copy",
+                        onClick = { mode = "copy" },
+                    )
+                    Text(stringResource(R.string.send_copy), style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = mode == "transfer", onClick = { mode = "transfer" })
-                    Text(stringResource(R.string.transfer))
+                    androidx.compose.material3.RadioButton(
+                        selected = mode == "transfer",
+                        onClick = { mode = "transfer" },
+                    )
+                    Text(stringResource(R.string.transfer), style = MaterialTheme.typography.bodyMedium)
+                }
+
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MpColors.SecondaryFixed,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Filled.Warning, contentDescription = null, tint = MpColors.OnSecondaryFixed, modifier = Modifier.size(18.dp))
+                        Text(
+                            stringResource(R.string.transfer_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSecondaryFixed,
+                        )
+                    }
                 }
             }
         },
@@ -585,12 +1660,12 @@ private fun ShareDialog(
                 onClick = { if (contactId.isNotBlank()) onSend(contactId, mode) },
                 enabled = contactId.isNotBlank(),
             ) {
-                Text(stringResource(R.string.send))
+                Text(stringResource(R.string.send), color = MpColors.Primary, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
             }
         },
     )
@@ -609,10 +1684,16 @@ private fun ExpiryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.expiry_title, item.title)) },
+        shape = MaterialTheme.shapes.large,
+        containerColor = Color.White,
+        title = { Text(stringResource(R.string.expiry_title, item.title), style = MaterialTheme.typography.headlineSmall) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.expiry_help))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    stringResource(R.string.expiry_help),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MpColors.OnSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = value,
                     onValueChange = { text ->
@@ -621,6 +1702,11 @@ private fun ExpiryDialog(
                     label = { Text(stringResource(R.string.expiry_date_hint)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MpColors.Primary,
+                        unfocusedBorderColor = MpColors.OutlineVariant,
+                    ),
                 )
             }
         },
@@ -629,12 +1715,12 @@ private fun ExpiryDialog(
                 onClick = { onSave(value.takeIf { it.isNotBlank() }) },
                 enabled = valid,
             ) {
-                Text(stringResource(R.string.save))
+                Text(stringResource(R.string.save), color = MpColors.Primary, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
             }
         },
     )
@@ -658,229 +1744,6 @@ private fun expiryLabel(value: String?): String? {
     }
 }
 
-@Composable
-private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
-    var email by remember { mutableStateOf("") }
-    var requestContactId by remember { mutableStateOf("") }
-    var requestType by remember { mutableStateOf("") }
-    var requestPurpose by remember { mutableStateOf("") }
-    val acceptedContacts = state.contacts.filter { it.status == "accepted" }
-    val effectiveContactId = requestContactId.ifBlank { acceptedContacts.firstOrNull()?.id.orEmpty() }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = viewModel::backToVault) {
-                Text(stringResource(R.string.back))
-            }
-            Text(stringResource(R.string.family), style = MaterialTheme.typography.headlineSmall)
-        }
-
-        if (state.familyStatus != null) {
-            Text(state.familyStatus)
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text(stringResource(R.string.family_email)) },
-                modifier = Modifier.weight(1f),
-            )
-            Button(onClick = { viewModel.addContact(email); email = "" }) {
-                Text(stringResource(R.string.add))
-            }
-        }
-
-        Text(stringResource(R.string.contacts), style = MaterialTheme.typography.titleMedium)
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(state.contacts, key = { it.id }) { contact ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(contact.name, style = MaterialTheme.typography.titleMedium)
-                        Text(contact.email)
-                        Text(contact.status)
-                        if (contact.status == "pending") {
-                            OutlinedButton(onClick = { viewModel.acceptContact(contact.id) }) {
-                                Text(stringResource(R.string.accept_contact))
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Text(stringResource(R.string.document_requests), style = MaterialTheme.typography.titleMedium)
-            }
-
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (acceptedContacts.isEmpty()) {
-                            Text(stringResource(R.string.request_needs_contact))
-                        } else {
-                            Text(stringResource(R.string.request_from))
-                            for (contact in acceptedContacts) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(
-                                        selected = effectiveContactId == contact.id,
-                                        onClick = { requestContactId = contact.id },
-                                    )
-                                    Text(stringResource(R.string.contact_name_email, contact.name, contact.email))
-                                }
-                            }
-                            OutlinedTextField(
-                                value = requestType,
-                                onValueChange = { requestType = it },
-                                label = { Text(stringResource(R.string.request_document)) },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            OutlinedTextField(
-                                value = requestPurpose,
-                                onValueChange = { requestPurpose = it },
-                                label = { Text(stringResource(R.string.request_purpose)) },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Button(
-                                onClick = {
-                                    viewModel.createShareRequest(
-                                        effectiveContactId,
-                                        requestType,
-                                        requestPurpose,
-                                    )
-                                    requestType = ""
-                                    requestPurpose = ""
-                                },
-                                enabled = effectiveContactId.isNotBlank() &&
-                                    requestType.isNotBlank() && requestPurpose.isNotBlank(),
-                            ) {
-                                Text(stringResource(R.string.request))
-                            }
-                        }
-                    }
-                }
-            }
-
-            items(state.shareRequests, key = { it.id }) { request ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        if (request.incoming) {
-                            Text(stringResource(R.string.request_incoming, request.person, request.documentType))
-                            Text(request.purpose)
-                            Text(
-                                stringResource(R.string.request_send_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            OutlinedButton(onClick = { viewModel.declineShareRequest(request.id) }) {
-                                Text(stringResource(R.string.decline))
-                            }
-                        } else {
-                            Text(stringResource(R.string.request_outgoing, request.documentType, request.person))
-                            Text(request.purpose)
-                            OutlinedButton(onClick = { viewModel.cancelShareRequest(request.id) }) {
-                                Text(stringResource(R.string.cancel))
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Text(stringResource(R.string.shared_with_me), style = MaterialTheme.typography.titleMedium)
-            }
-
-            items(state.incomingShares, key = { it.id }) { share ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            stringResource(
-                                if (share.itemType == "ticket") {
-                                    R.string.share_received_ticket
-                                } else {
-                                    R.string.share_received_document
-                                },
-                                share.sender,
-                            ),
-                        )
-                        Text(
-                            stringResource(
-                                if (share.mode == "transfer") R.string.transfer_label else R.string.copy_label,
-                            ),
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { viewModel.acceptShare(share.id) }) {
-                                Text(stringResource(R.string.accept))
-                            }
-                            OutlinedButton(onClick = { viewModel.declineShare(share.id) }) {
-                                Text(stringResource(R.string.decline))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
-    val context = LocalContext.current
-
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = viewModel::backToVault) {
-                Text(stringResource(R.string.back))
-            }
-            Text(
-                stringResource(R.string.settings_title),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-        }
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.simple_mode),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(stringResource(R.string.simple_mode_help))
-                }
-                Switch(
-                    checked = state.simpleMode,
-                    onCheckedChange = viewModel::setSimpleMode,
-                )
-            }
-        }
-
-        Text(
-            stringResource(R.string.language),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { setAppLocale(context, "es-MX") }) {
-                Text(stringResource(R.string.language_spanish))
-            }
-            OutlinedButton(onClick = { setAppLocale(context, "en") }) {
-                Text(stringResource(R.string.language_english))
-            }
-        }
-
-        Text(stringResource(R.string.security_web))
-        Text(stringResource(R.string.version, "0.1.0"))
-    }
-}
-
 private fun setAppLocale(context: android.content.Context, languageTag: String) {
     if (android.os.Build.VERSION.SDK_INT >= 33) {
         val manager = context.getSystemService(LocaleManager::class.java)
@@ -890,41 +1753,48 @@ private fun setAppLocale(context: android.content.Context, languageTag: String) 
 
 @Composable
 private fun ViewerScreen(state: UiState, viewModel: MainViewModel) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = viewModel::closeViewer) {
-                Text(stringResource(R.string.back))
-            }
-            Text(
-                text = state.viewerName ?: stringResource(R.string.document),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-        }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+    ) {
+        SubScreenHeader(
+            title = state.viewerName ?: stringResource(R.string.document),
+            onBack = viewModel::closeViewer,
+        )
+        MpStatusBanner(state.status, state.error)
+        Spacer(modifier = Modifier.height(8.dp))
 
         val path = state.viewerPath
         val mime = state.viewerMime.orEmpty()
 
-        if (path == null) {
-            Text(stringResource(R.string.open_failed))
-        } else if (mime.contains("pdf")) {
-            PdfViewer(path)
-        } else if (mime.startsWith("image/")) {
-            val bitmap = remember(path) {
-                BitmapFactory.decodeFile(path)
+        MpCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(8.dp),
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (path == null) {
+                    Text(stringResource(R.string.open_failed), color = MpColors.OnSurfaceVariant)
+                } else if (mime.contains("pdf")) {
+                    PdfViewer(path)
+                } else if (mime.startsWith("image/")) {
+                    val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = state.viewerName,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(stringResource(R.string.image_failed), color = MpColors.OnSurfaceVariant)
+                    }
+                } else {
+                    Text(stringResource(R.string.preview_unavailable), color = MpColors.OnSurfaceVariant)
+                }
             }
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = state.viewerName,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                Text(stringResource(R.string.image_failed))
-            }
-        } else {
-            Text(stringResource(R.string.preview_unavailable))
         }
     }
 }
@@ -950,12 +1820,13 @@ private fun PdfViewer(path: String) {
         descriptor.close()
         bitmap = rendered
 
-        onDispose {
-            bitmap = null
-        }
+        onDispose { bitmap = null }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         bitmap?.let {
             Image(
                 bitmap = it.asImageBitmap(),
@@ -964,20 +1835,26 @@ private fun PdfViewer(path: String) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MpButton(
+                text = stringResource(R.string.previous),
                 onClick = { if (pageIndex > 0) pageIndex -= 1 },
+                variant = MpButtonVariant.Secondary,
                 enabled = pageIndex > 0,
-            ) {
-                Text(stringResource(R.string.previous))
-            }
-            Text(stringResource(R.string.page_of, pageIndex + 1, pageCount), modifier = Modifier.align(Alignment.CenterVertically))
-            OutlinedButton(
+            )
+            Text(
+                text = stringResource(R.string.page_of, pageIndex + 1, pageCount),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            MpButton(
+                text = stringResource(R.string.next),
                 onClick = { if (pageIndex < pageCount - 1) pageIndex += 1 },
+                variant = MpButtonVariant.Secondary,
                 enabled = pageIndex < pageCount - 1,
-            ) {
-                Text(stringResource(R.string.next))
-            }
+            )
         }
     }
 }

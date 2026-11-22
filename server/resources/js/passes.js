@@ -1,0 +1,896 @@
+const t = (key) => (window.mypassT ? window.mypassT(key) : key);
+const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
+const locale = () => (window.mypassLocale === 'en' ? 'en-US' : 'es-MX');
+
+const CATEGORY_META = {
+    flight: { icon: 'flight_takeoff' },
+    event: { icon: 'confirmation_number' },
+    transit: { icon: 'directions_subway' },
+    id: { icon: 'badge' },
+    membership: { icon: 'loyalty' },
+};
+
+const THEME_COLORS = {
+    midnight: '#0c2340',
+    violet: '#4c1d95',
+    forest: '#064e3b',
+    obsidian: '#18181b',
+    burgundy: '#7f1d1d',
+    amber: '#9a3412',
+};
+
+function el(tag, className = '', text = null) {
+    const node = document.createElement(tag);
+    if (className) {
+        node.className = className;
+    }
+    if (text !== null && text !== undefined) {
+        node.textContent = text;
+    }
+    return node;
+}
+
+function icon(name, className = '') {
+    const node = el('span', ['material-symbols-outlined', className].filter(Boolean).join(' '), name);
+    node.setAttribute('aria-hidden', 'true');
+    return node;
+}
+
+function categoryLabel(category) {
+    return {
+        flight: t('Vuelo'),
+        event: t('Evento'),
+        transit: t('Transporte'),
+        id: t('Identificación'),
+        membership: t('Membresía'),
+    }[category] ?? t('Pase');
+}
+
+function categoryIcon(category) {
+    return CATEGORY_META[category]?.icon ?? 'confirmation_number';
+}
+
+function formatDate(value, options = {}) {
+    if (!value) {
+        return '';
+    }
+
+    const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
+    if (!year || !month || !day) {
+        return String(value);
+    }
+
+    return new Date(year, month - 1, day).toLocaleDateString(locale(), {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        ...options,
+    });
+}
+
+function formatTime(value) {
+    if (!value) {
+        return '';
+    }
+
+    const match = String(value).match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+    return match ? `${match[1].padStart(2, '0')}:${match[2]}` : String(value);
+}
+
+function isExpired(item) {
+    if (!item?.expires_at) {
+        return false;
+    }
+
+    const date = new Date(item.expires_at);
+    return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
+}
+
+function passFromItem(item) {
+    const raw = item.metadata?.pass && typeof item.metadata.pass === 'object' ? item.metadata.pass : null;
+    const title = item.metadata?.title || '';
+    const fallbackCategory = item.type === 'card'
+        ? 'membership'
+        : /vuelo|flight|boarding|iberia|aerom[eé]xico|vueling|latam/i.test(title)
+            ? 'flight'
+            : 'event';
+    const category = raw?.category ?? fallbackCategory;
+    const fields = raw?.fields && typeof raw.fields === 'object' ? raw.fields : {};
+
+    return {
+        ...raw,
+        category,
+        fields,
+        title: raw?.title || item.metadata?.title || t('Pase sin título'),
+        issuer: raw?.issuer || fields.carrier || '',
+        holder: raw?.holder || fields.passenger || fields.holder || '',
+        notes: Array.isArray(raw?.notes) ? raw.notes.filter(Boolean) : [],
+        code: raw?.code || null,
+        themeColor: raw?.themeColor || (raw?.theme ? THEME_COLORS[raw.theme] : null),
+        options: raw?.options || {},
+        item,
+    };
+}
+
+function isPassItem(item) {
+    return Boolean(item.metadata?.pass) || item.type === 'ticket' || item.type === 'card';
+}
+
+function passPayload(item, pass) {
+    if (pass?.code?.payload) {
+        return String(pass.code.payload);
+    }
+
+    const fields = {};
+    for (const [key, value] of Object.entries(pass?.fields || {})) {
+        if (value !== null && value !== undefined && value !== '') {
+            fields[key] = value;
+        }
+    }
+
+    return JSON.stringify({
+        v: 1,
+        app: 'mypass',
+        id: item.id,
+        c: pass.category,
+        title: pass.title,
+        issuer: pass.issuer,
+        holder: pass.holder,
+        fields,
+    });
+}
+
+function subtitleFor(pass) {
+    const fields = pass.fields || {};
+    if (pass.category === 'flight') {
+        const bits = [];
+        if (fields.passenger) {
+            bits.push(tf('Pasajero: :name', { name: fields.passenger }));
+        }
+        if (fields.seat) {
+            bits.push(tf('Asiento :seat', { seat: fields.seat }));
+        }
+        if (fields.gate) {
+            bits.push(tf('Puerta :gate', { gate: fields.gate }));
+        }
+        return bits.join(' · ');
+    }
+
+    if (pass.category === 'event') {
+        return [fields.location, fields.date ? formatDate(fields.date) : '', fields.time ? formatTime(fields.time) : ''].filter(Boolean).join(' · ');
+    }
+
+    if (pass.category === 'transit') {
+        return [fields.route, fields.date ? formatDate(fields.date) : '', fields.time ? formatTime(fields.time) : ''].filter(Boolean).join(' · ');
+    }
+
+    return [pass.holder, fields.number, fields.expires ? tf('Vigente hasta :date', { date: formatDate(fields.expires) }) : ''].filter(Boolean).join(' · ');
+}
+
+function badgeFor(pass) {
+    if (pass.badge) {
+        return pass.badge;
+    }
+    if (pass.category === 'flight' && pass.fields?.date) {
+        return formatDate(pass.fields.date, { year: undefined });
+    }
+    if (pass.category === 'event' && pass.fields?.date) {
+        return formatDate(pass.fields.date, { year: undefined });
+    }
+    if (pass.status) {
+        return pass.status;
+    }
+    return categoryLabel(pass.category);
+}
+
+function themeColor(pass) {
+    return pass.themeColor || THEME_COLORS[pass.theme] || '#0c2340';
+}
+
+function createPassCardElement(item, options = {}) {
+    const { interactive = true, selected = false, compact = false, preview = false } = options;
+    const pass = passFromItem(item);
+    const node = document.createElement(interactive ? 'button' : 'article');
+    if (interactive) {
+        node.type = 'button';
+    }
+    node.className = ['mp-pass-card', selected ? 'is-selected' : '', compact ? 'mp-pass-card--compact' : ''].filter(Boolean).join(' ');
+    node.dataset.category = pass.category;
+    node.dataset.passId = item.id;
+    node.style.setProperty('--pass-color', themeColor(pass));
+    if (interactive) {
+        node.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    }
+
+    const body = el('div', 'mp-pass-card__body');
+    const header = el('div', 'flex items-start justify-between gap-3');
+    const identity = el('div', 'flex min-w-0 items-center gap-2.5');
+    const tile = el('span', 'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/15');
+    if (pass.logo) {
+        const logo = document.createElement('img');
+        logo.src = pass.logo;
+        logo.alt = '';
+        logo.className = 'h-6 w-6 object-contain';
+        tile.appendChild(logo);
+    } else {
+        tile.appendChild(icon(categoryIcon(pass.category), 'text-[20px]'));
+    }
+    const names = el('div', 'min-w-0');
+    names.appendChild(el('p', 'mp-pass-card__eyebrow truncate', pass.issuer || categoryLabel(pass.category)));
+    names.appendChild(el('p', 'mp-pass-card__title truncate', pass.title));
+    identity.append(tile, names);
+    header.append(identity, el('span', 'mp-pass-card__chip shrink-0', badgeFor(pass)));
+    body.appendChild(header);
+
+    if (pass.category === 'flight') {
+        const route = el('div', 'mp-pass-card__route mt-3');
+        const left = el('div');
+        left.appendChild(el('p', 'text-[11px] font-semibold uppercase tracking-wider opacity-70', pass.fields?.origin || t('Origen')));
+        left.appendChild(el('p', 'mp-pass-card__airport', pass.fields?.origin || '—'));
+        const middle = el('div', 'flex flex-1 flex-col items-center px-2 text-center');
+        middle.appendChild(el('p', 'text-[10px] opacity-60', pass.fields?.flight || ''));
+        middle.appendChild(el('span', 'material-symbols-outlined text-[18px] opacity-80', 'flight'));
+        middle.appendChild(el('p', 'text-[10px] opacity-60', pass.fields?.date ? formatDate(pass.fields.date) : ''));
+        const right = el('div', 'text-right');
+        right.appendChild(el('p', 'text-[11px] font-semibold uppercase tracking-wider opacity-70', pass.fields?.destination || t('Destino')));
+        right.appendChild(el('p', 'mp-pass-card__airport', pass.fields?.destination || '—'));
+        route.append(left, middle, right);
+        body.appendChild(route);
+
+        const meta = el('div', 'mp-pass-card__meta mt-3');
+        for (const [label, value] of [
+            [t('Puerta'), pass.fields?.gate || '—'],
+            [t('Asiento'), pass.fields?.seat || '—'],
+            [t('Zona'), pass.fields?.zone || '—'],
+            [t('Embarque'), pass.fields?.boarding ? formatTime(pass.fields.boarding) : '—'],
+        ]) {
+            const cell = el('div');
+            cell.appendChild(el('span', null, label));
+            cell.appendChild(el('strong', null, value));
+            meta.appendChild(cell);
+        }
+        body.appendChild(meta);
+
+        const footer = el('div', 'mp-pass-card__footer');
+        footer.appendChild(el('span', null, pass.fields?.passenger || pass.holder || t('Titular')));
+        footer.appendChild(el('span', 'font-mono', preview ? t('Vista previa') : item.id.slice(0, 8).toUpperCase()));
+        body.appendChild(footer);
+    } else if (pass.category === 'event') {
+        const details = el('div', 'mt-3 flex items-end justify-between gap-3');
+        const left = el('div');
+        left.appendChild(el('p', 'text-[12px] opacity-70', pass.fields?.location || pass.issuer || ''));
+        left.appendChild(el('p', 'text-[17px] font-bold', [pass.fields?.date ? formatDate(pass.fields.date) : '', pass.fields?.time ? formatTime(pass.fields.time) : ''].filter(Boolean).join(' · ') || t('Fecha por confirmar')));
+        const right = el('div', 'text-right');
+        right.appendChild(el('p', 'text-[10px] uppercase tracking-wider opacity-60', t('Acceso')));
+        right.appendChild(el('p', 'text-[17px] font-bold', pass.fields?.gate || pass.fields?.section || '—'));
+        details.append(left, right);
+        body.appendChild(details);
+
+        const meta = el('div', 'mt-3 grid grid-cols-3 gap-1 rounded-xl bg-black/20 p-2 text-center');
+        for (const [label, value] of [
+            [t('Sección'), pass.fields?.section || '—'],
+            [t('Fila'), pass.fields?.row || '—'],
+            [t('Asiento'), pass.fields?.seat || '—'],
+        ]) {
+            const cell = el('div');
+            cell.appendChild(el('span', 'block text-[10px] uppercase opacity-60', label));
+            cell.appendChild(el('strong', 'block text-[12px]', value));
+            meta.appendChild(cell);
+        }
+        body.appendChild(meta);
+    } else if (pass.category === 'transit') {
+        const details = el('div', 'mt-3 flex items-end justify-between gap-3');
+        const left = el('div');
+        left.appendChild(el('p', 'text-[11px] uppercase tracking-wider opacity-60', t('Ruta')));
+        left.appendChild(el('p', 'text-[17px] font-bold', pass.fields?.route || pass.title));
+        const right = el('div', 'text-right');
+        right.appendChild(el('p', 'text-[10px] uppercase tracking-wider opacity-60', t('Vigencia')));
+        right.appendChild(el('p', 'text-[14px] font-bold', pass.fields?.date ? formatDate(pass.fields.date) : pass.fields?.expires ? formatDate(pass.fields.expires) : '—'));
+        details.append(left, right);
+        body.appendChild(details);
+        if (pass.fields?.platform || pass.fields?.carriage || pass.fields?.seat) {
+            const meta = el('div', 'mt-3 grid grid-cols-3 gap-1 rounded-xl bg-black/20 p-2 text-center');
+            for (const [label, value] of [
+                [t('Andén'), pass.fields?.platform || '—'],
+                [t('Coche'), pass.fields?.carriage || '—'],
+                [t('Asiento'), pass.fields?.seat || '—'],
+            ]) {
+                const cell = el('div');
+                cell.appendChild(el('span', 'block text-[10px] uppercase opacity-60', label));
+                cell.appendChild(el('strong', 'block text-[12px]', value));
+                meta.appendChild(cell);
+            }
+            body.appendChild(meta);
+        }
+    } else {
+        const holder = el('div', 'mt-3 flex items-center justify-between gap-3');
+        const left = el('div');
+        left.appendChild(el('p', 'text-[11px] uppercase tracking-wider opacity-60', t('Titular')));
+        left.appendChild(el('p', 'text-[16px] font-bold', pass.holder || pass.fields?.holder || '—'));
+        const right = el('div', 'flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-[17px] font-bold');
+        right.textContent = (pass.holder || pass.title || '?').slice(0, 2).toUpperCase();
+        holder.append(left, right);
+        body.appendChild(holder);
+        if (pass.fields?.number || pass.fields?.level || pass.fields?.expires) {
+            const footer = el('div', 'mp-pass-card__footer');
+            if (pass.fields?.number) {
+                footer.appendChild(el('span', 'font-mono', pass.fields.number));
+            }
+            if (pass.fields?.level) {
+                footer.appendChild(el('span', null, pass.fields.level));
+            }
+            if (pass.fields?.expires) {
+                footer.appendChild(el('span', null, tf('Vigente hasta :date', { date: formatDate(pass.fields.expires) })));
+            }
+            body.appendChild(footer);
+        }
+    }
+
+    node.appendChild(body);
+    return node;
+}
+
+async function renderCodeInto(container, payload, format = 'qr', options = {}) {
+    if (!container) {
+        return null;
+    }
+
+    container.replaceChildren();
+
+    if (!payload) {
+        container.appendChild(el('p', 'px-3 py-8 text-center text-sm text-on-surface-variant', t('Este pase no tiene un código guardado.')));
+        return null;
+    }
+
+    container.appendChild(el('p', 'animate-pulse px-3 py-8 text-center text-sm text-on-surface-variant', t('Generando código…')));
+
+    const bcid = {
+        qr: 'qrcode',
+        pdf417: 'pdf417',
+        aztec: 'azteccode',
+        code128: 'code128',
+    }[format] || 'qrcode';
+    const size = options.size || (options.scale ? Math.round(options.scale * 80) : 320);
+
+    try {
+        const canvas = document.createElement('canvas');
+
+        if (bcid === 'qrcode') {
+            const { default: QRCode } = await import('qrcode');
+            await QRCode.toCanvas(canvas, String(payload), {
+                width: size,
+                margin: 2,
+                errorCorrectionLevel: 'M',
+                color: { dark: '#000000', light: '#ffffff' },
+            });
+        } else {
+            const module = await import('bwip-js');
+            const bwip = module.default ?? module;
+            const settings = {
+                bcid,
+                text: String(payload),
+                scale: options.scale ?? 3,
+                backgroundcolor: 'FFFFFF',
+                paddingwidth: 2,
+                paddingheight: 2,
+            };
+
+            if (bcid === 'code128') {
+                settings.height = 14;
+                settings.includetext = options.includeText ?? true;
+                settings.textsize = 8;
+            }
+
+            bwip.toCanvas(canvas, settings);
+        }
+
+        canvas.className = 'mx-auto h-auto max-w-full';
+        canvas.setAttribute('role', 'img');
+        canvas.setAttribute('aria-label', t('Código del pase'));
+        container.replaceChildren(canvas);
+        return { format: bcid, canvas };
+    } catch (error) {
+        if (bcid !== 'qrcode' && options.fallback !== false) {
+            return renderCodeInto(container, payload, 'qr', { ...options, fallback: false });
+        }
+
+        container.replaceChildren();
+        container.appendChild(el('p', 'px-3 py-8 text-center text-sm text-on-surface-variant', t('No se pudo dibujar el código.')));
+        return null;
+    }
+}
+
+class WalletApp {
+    constructor(options) {
+        this.options = options;
+        this.items = [];
+        this.filter = 'all';
+        this.view = localStorage.getItem('mypass.passView') === 'grid' ? 'grid' : 'stack';
+        this.selectedId = null;
+        this.wakeLock = null;
+        this.passList = [];
+        this.bind();
+    }
+
+    bind() {
+        this.panel = document.getElementById('panel-passes');
+        this.stack = document.getElementById('pass-stack');
+        this.empty = document.getElementById('passes-empty');
+        this.workspace = document.getElementById('passes-workspace');
+        this.filters = document.getElementById('pass-filters');
+        this.activeCount = document.getElementById('pass-active-count');
+        this.archiveToggle = document.getElementById('pass-archive-toggle');
+        this.archive = document.getElementById('pass-archive');
+        this.archiveCount = document.getElementById('pass-archive-count');
+        this.archiveLabel = document.getElementById('pass-archive-label');
+        this.archiveChevron = document.getElementById('pass-archive-chevron');
+        this.inspector = document.getElementById('pass-inspector');
+        this.codeCanvas = document.getElementById('pass-code-canvas');
+        this.codeFormatBadge = document.getElementById('pass-code-format-badge');
+        this.detailTag = document.getElementById('pass-detail-tag');
+        this.detailTitle = document.getElementById('pass-detail-title');
+        this.detailSubtitle = document.getElementById('pass-detail-subtitle');
+        this.detailNotes = document.getElementById('pass-detail-notes');
+        this.codeCaption = document.getElementById('pass-code-caption');
+        this.codeHash = document.getElementById('pass-code-hash');
+        this.itemId = document.getElementById('pass-item-id');
+        this.presentButton = document.getElementById('pass-present');
+        this.shareButton = document.getElementById('pass-share');
+        this.copyButton = document.getElementById('pass-copy');
+        this.editButton = document.getElementById('pass-edit');
+        this.quickPresent = document.getElementById('pass-quick-present');
+        this.addToggle = document.getElementById('pass-add-toggle');
+        this.addMenu = document.getElementById('pass-add-menu');
+        this.viewStack = document.getElementById('pass-view-stack');
+        this.viewGrid = document.getElementById('pass-view-grid');
+        this.presentation = document.getElementById('pass-presentation');
+        this.presentationTitle = document.getElementById('pass-presentation-title');
+        this.presentationMeta = document.getElementById('pass-presentation-meta');
+        this.presentationCode = document.getElementById('pass-presentation-code');
+        this.presentationHint = document.getElementById('pass-presentation-hint');
+
+        if (!this.stack) {
+            return;
+        }
+
+        this.filters?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-pass-filter]');
+            if (!button) {
+                return;
+            }
+            this.filter = button.dataset.passFilter;
+            const filtered = this.filteredActive();
+            if (!filtered.some((pass) => pass.item.id === this.selectedId)) {
+                this.selectedId = filtered[0]?.item.id ?? null;
+            }
+            this.refresh();
+        });
+
+        this.viewStack?.addEventListener('click', () => this.setView('stack'));
+        this.viewGrid?.addEventListener('click', () => this.setView('grid'));
+
+        document.querySelectorAll('[data-pass-new]').forEach((button) => {
+            button.addEventListener('click', () => {
+                this.closeAddMenu();
+                this.options.openGenerator(button.dataset.passNew);
+            });
+        });
+
+        document.getElementById('pass-open-generator')?.addEventListener('click', () => {
+            this.closeAddMenu();
+            this.options.openGenerator('flight');
+        });
+        document.getElementById('passes-empty-create')?.addEventListener('click', () => this.options.openGenerator('flight'));
+
+        this.addToggle?.addEventListener('click', () => {
+            const open = this.addMenu?.hidden;
+            if (open) {
+                this.openAddMenu();
+            } else {
+                this.closeAddMenu();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!this.addMenu || this.addMenu.hidden) {
+                return;
+            }
+            if (!event.target.closest('#pass-add-menu') && !event.target.closest('#pass-add-toggle')) {
+                this.closeAddMenu();
+            }
+        });
+
+        this.quickPresent?.addEventListener('click', () => this.presentSelected());
+        this.presentButton?.addEventListener('click', () => this.presentSelected());
+        this.copyButton?.addEventListener('click', () => this.copySelected());
+        this.shareButton?.addEventListener('click', () => this.shareSelected());
+        this.editButton?.addEventListener('click', () => this.editSelected());
+        this.archiveToggle?.addEventListener('click', () => this.toggleArchive());
+
+        document.getElementById('pass-presentation-close')?.addEventListener('click', () => this.closePresentation());
+        document.getElementById('pass-presentation-done')?.addEventListener('click', () => this.closePresentation());
+        this.presentation?.addEventListener('close', () => this.releasePresentation());
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code !== 'Space' || this.panel?.hidden || this.presentation?.open) {
+                return;
+            }
+            const target = event.target;
+            if (target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(target.tagName)) {
+                return;
+            }
+            event.preventDefault();
+            this.presentSelected();
+        });
+
+        this.setView(this.view, false);
+    }
+
+    openAddMenu() {
+        if (!this.addMenu) {
+            return;
+        }
+        this.addMenu.hidden = false;
+        this.addToggle?.setAttribute('aria-expanded', 'true');
+    }
+
+    closeAddMenu() {
+        if (!this.addMenu) {
+            return;
+        }
+        this.addMenu.hidden = true;
+        this.addToggle?.setAttribute('aria-expanded', 'false');
+    }
+
+    setItems(items) {
+        this.items = Array.isArray(items) ? items : [];
+        if (!this.selectedId || !this.allPasses().some((pass) => pass.item.id === this.selectedId)) {
+            this.selectedId = this.filteredActive()[0]?.item.id ?? this.allPasses()[0]?.item.id ?? null;
+        }
+        this.refresh();
+    }
+
+    allPasses() {
+        return this.items.filter(isPassItem).map((item) => ({
+            item,
+            pass: passFromItem(item),
+            archived: isExpired(item),
+        }));
+    }
+
+    activePasses() {
+        return this.allPasses().filter((entry) => !entry.archived && entry.item.state !== 'transferred');
+    }
+
+    archivedPasses() {
+        return this.allPasses().filter((entry) => entry.archived || entry.item.state === 'transferred');
+    }
+
+    filteredActive() {
+        const active = this.activePasses();
+        if (this.filter === 'all') {
+            return active;
+        }
+        return active.filter((entry) => entry.pass.category === this.filter);
+    }
+
+    entries() {
+        return this.allPasses();
+    }
+
+    selectedEntry() {
+        return this.allPasses().find((entry) => entry.item.id === this.selectedId) || null;
+    }
+
+    refresh() {
+        if (!this.stack) {
+            return;
+        }
+
+        const active = this.activePasses();
+        const filtered = this.filteredActive();
+        const archive = this.archivedPasses();
+
+        this.empty.hidden = active.length > 0;
+        this.workspace.hidden = active.length === 0;
+        this.archiveToggle?.classList.toggle('hidden', archive.length === 0);
+
+        this.activeCount.textContent = active.length === 1
+            ? t('1 pase activo')
+            : tf(':count pases activos', { count: active.length });
+
+        const counts = {
+            all: active.length,
+            flight: active.filter((entry) => entry.pass.category === 'flight').length,
+            event: active.filter((entry) => entry.pass.category === 'event').length,
+            transit: active.filter((entry) => entry.pass.category === 'transit').length,
+            id: active.filter((entry) => entry.pass.category === 'id').length,
+            membership: active.filter((entry) => entry.pass.category === 'membership').length,
+        };
+
+        document.querySelectorAll('[data-pass-filter]').forEach((button) => {
+            button.setAttribute('aria-pressed', button.dataset.passFilter === this.filter ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-pass-count]').forEach((span) => {
+            span.textContent = counts[span.dataset.passCount] ?? 0;
+        });
+
+        this.renderStack(filtered);
+        this.renderInspector();
+        this.renderArchive(archive);
+    }
+
+    renderStack(entries) {
+        this.stack.replaceChildren();
+        this.stack.dataset.view = this.view;
+
+        if (entries.length === 0) {
+            const emptyFilter = el('div', 'mp-empty');
+            emptyFilter.appendChild(icon('filter_alt_off', 'text-[30px] text-outline'));
+            emptyFilter.appendChild(el('p', 'mt-2 font-semibold', t('No hay pases en esta categoría.')));
+            emptyFilter.appendChild(el('p', 'mp-hint mt-1', t('Prueba con otro filtro o crea un pase nuevo.')));
+            this.stack.appendChild(emptyFilter);
+            return;
+        }
+
+        entries.forEach((entry, index) => {
+            const selected = entry.item.id === this.selectedId;
+            const card = createPassCardElement(entry.item, { selected });
+            card.style.zIndex = selected ? String(40) : String(30 - index);
+            card.addEventListener('click', () => this.select(entry.item.id));
+            card.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    this.select(entry.item.id);
+                }
+            });
+
+            if (selected) {
+                const codeBox = el('div', 'mp-pass-card__mobile-code');
+                const canvasWrap = el('div', 'flex min-h-[170px] items-center justify-center');
+                canvasWrap.dataset.cardCode = 'true';
+                codeBox.appendChild(canvasWrap);
+                codeBox.appendChild(el('p', 'mt-2 text-center text-[11px] text-on-surface-variant', t('Toca «Presentar código» para pantalla completa.')));
+                card.appendChild(codeBox);
+                renderCodeInto(canvasWrap, passPayload(entry.item, entry.pass), entry.pass.code?.format || 'qr', {
+                    scale: 3,
+                    includeText: false,
+                });
+            }
+
+            this.stack.appendChild(card);
+        });
+    }
+
+    renderInspector() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            this.detailTag.textContent = t('Selecciona un pase');
+            this.detailTitle.textContent = t('Tus pases aparecerán aquí');
+            this.detailSubtitle.textContent = t('Elige una tarjeta de la pila para ver su código.');
+            this.detailNotes.replaceChildren();
+            this.codeCanvas.replaceChildren();
+            this.codeCaption.textContent = '';
+            this.codeHash.textContent = '';
+            this.itemId.textContent = '';
+            this.codeFormatBadge.textContent = t('QR');
+            this.presentButton.disabled = true;
+            this.copyButton.disabled = true;
+            this.shareButton.disabled = true;
+            this.editButton.disabled = true;
+            return;
+        }
+
+        const { item, pass } = entry;
+        this.detailTag.textContent = categoryLabel(pass.category);
+        this.detailTitle.textContent = pass.title;
+        this.detailSubtitle.textContent = subtitleFor(pass) || t('Pase guardado en tu bóveda.');
+        this.detailNotes.replaceChildren();
+        for (const note of pass.notes.slice(0, 6)) {
+            this.detailNotes.appendChild(el('span', 'mp-badge mp-badge-neutral', note));
+        }
+
+        const payload = passPayload(item, pass);
+        const format = pass.code?.format || 'qr';
+        this.codeFormatBadge.textContent = {
+            qr: 'QR',
+            pdf417: 'PDF417',
+            aztec: 'Aztec',
+            code128: 'Code 128',
+        }[format] || 'QR';
+        this.codeCaption.textContent = payload.length > 74 ? `${payload.slice(0, 74)}…` : payload;
+        this.codeHash.textContent = pass.code?.source === 'decoded'
+            ? t('Código leído del boleto original')
+            : t('Código generado por mypass');
+        this.itemId.textContent = item.id.slice(0, 8).toUpperCase();
+
+        const shareAllowed = pass.options?.share !== false && this.options.canShare();
+        this.presentButton.disabled = false;
+        this.copyButton.disabled = false;
+        this.editButton.disabled = false;
+        this.shareButton.disabled = !shareAllowed;
+        this.shareButton.title = shareAllowed ? '' : t('Agrega un contacto de confianza para compartir.');
+
+        renderCodeInto(this.codeCanvas, payload, format, { scale: 4 });
+    }
+
+    renderArchive(entries) {
+        if (!this.archive) {
+            return;
+        }
+
+        this.archiveCount.textContent = entries.length === 1
+            ? t('1 pase vencido')
+            : tf(':count pases vencidos', { count: entries.length });
+        this.archive.replaceChildren();
+
+        for (const entry of entries) {
+            const card = el('article', 'mp-card flex flex-col justify-between p-4 opacity-80 transition-opacity hover:opacity-100');
+            const header = el('div', 'flex items-center justify-between gap-2 text-[12px] text-on-surface-variant');
+            header.appendChild(el('span', 'font-semibold', categoryLabel(entry.pass.category)));
+            header.appendChild(el('span', 'rounded-full bg-surface-container px-2 py-0.5', entry.item.state === 'transferred' ? t('Transferido') : t('Vencido')));
+            card.appendChild(header);
+            card.appendChild(el('h4', 'mt-2 font-semibold text-on-surface', entry.pass.title));
+            card.appendChild(el('p', 'text-sm text-on-surface-variant', [entry.pass.issuer, entry.item.expires_at ? formatDate(entry.item.expires_at) : ''].filter(Boolean).join(' · ')));
+            const button = el('button', 'mt-3 inline-flex min-h-10 items-center gap-1 self-start text-sm font-semibold text-primary hover:underline');
+            button.type = 'button';
+            button.appendChild(icon('open_in_new', 'text-[18px]'));
+            button.appendChild(document.createTextNode(t('Ver detalles')));
+            button.addEventListener('click', () => {
+                this.selectedId = entry.item.id;
+                this.refresh();
+                if (window.innerWidth < 1024) {
+                    this.inspector?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+            card.appendChild(button);
+            this.archive.appendChild(card);
+        }
+    }
+
+    select(id) {
+        this.selectedId = id;
+        this.refresh();
+    }
+
+    setView(view, persist = true) {
+        this.view = view;
+        if (persist) {
+            localStorage.setItem('mypass.passView', view);
+        }
+        if (this.stack) {
+            this.stack.dataset.view = view;
+        }
+        this.viewStack?.setAttribute('aria-pressed', view === 'stack' ? 'true' : 'false');
+        this.viewGrid?.setAttribute('aria-pressed', view === 'grid' ? 'true' : 'false');
+        this.viewStack?.classList.toggle('bg-white', view === 'stack');
+        this.viewStack?.classList.toggle('shadow-sm', view === 'stack');
+        this.viewGrid?.classList.toggle('bg-white', view === 'grid');
+        this.viewGrid?.classList.toggle('shadow-sm', view === 'grid');
+        if (this.activePasses().length > 0) {
+            this.refresh();
+        }
+    }
+
+    toggleArchive() {
+        const open = this.archive?.hidden ?? true;
+        if (!this.archive) {
+            return;
+        }
+        this.archive.hidden = !open;
+        this.archiveToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (this.archiveLabel) {
+            this.archiveLabel.textContent = open ? t('Ocultar') : t('Mostrar');
+        }
+        this.archiveChevron?.classList.toggle('rotate-180', open);
+    }
+
+    async presentSelected() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            this.options.toast(t('Primero elige un pase.'));
+            return;
+        }
+
+        const { item, pass } = entry;
+        this.presentationTitle.textContent = pass.title;
+        this.presentationMeta.textContent = subtitleFor(pass);
+        this.presentationCode.replaceChildren();
+
+        try {
+            const result = await renderCodeInto(this.presentationCode, passPayload(item, pass), pass.code?.format || 'qr', {
+                scale: 6,
+                includeText: false,
+            });
+            if (result?.canvas) {
+                result.canvas.style.maxHeight = 'min(48dvh, 380px)';
+                result.canvas.style.width = 'auto';
+            }
+        } finally {
+            if (this.presentation && !this.presentation.open) {
+                this.presentation.showModal();
+                this.requestPresentationSupport();
+                this.presentation.requestFullscreen?.().catch(() => {});
+            }
+        }
+    }
+
+    async requestPresentationSupport() {
+        this.presentationHint.textContent = t('Sube el brillo de la pantalla para facilitar la lectura.');
+        try {
+            if ('wakeLock' in navigator) {
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                this.presentationHint.textContent = t('Pantalla activa mientras presentas el código.');
+            }
+        } catch {
+            this.wakeLock = null;
+        }
+    }
+
+    releasePresentation() {
+        this.wakeLock?.release?.().catch(() => {});
+        this.wakeLock = null;
+        if (document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => {});
+        }
+    }
+
+    closePresentation() {
+        this.presentation?.close();
+        this.releasePresentation();
+    }
+
+    async copySelected() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            return;
+        }
+        const payload = passPayload(entry.item, entry.pass);
+        try {
+            await navigator.clipboard.writeText(payload);
+            this.options.toast(t('Código copiado.'));
+        } catch {
+            this.options.toast(t('No se pudo copiar el código.'));
+        }
+    }
+
+    shareSelected() {
+        const entry = this.selectedEntry();
+        if (!entry || !this.options.canShare()) {
+            return;
+        }
+        this.options.openShare(entry.item);
+    }
+
+    editSelected() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            return;
+        }
+        this.options.openGenerator(entry.pass.category, entry.item, entry.pass);
+    }
+
+    reset() {
+        this.items = [];
+        this.selectedId = null;
+        this.filter = 'all';
+        this.stack?.replaceChildren();
+        this.archive?.replaceChildren();
+        this.closeAddMenu();
+        this.closePresentation();
+    }
+}
+
+export {
+    WalletApp,
+    categoryIcon,
+    categoryLabel,
+    createPassCardElement,
+    formatDate,
+    formatTime,
+    isPassItem,
+    passFromItem,
+    passPayload,
+    renderCodeInto,
+    THEME_COLORS,
+};

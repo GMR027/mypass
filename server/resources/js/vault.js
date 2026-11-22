@@ -1,4 +1,6 @@
 import sodium from 'libsodium-wrappers-sumo';
+import { WalletApp } from './passes';
+import { PassGenerator } from './pass-generator';
 
 const t = (key) => window.mypassT ? window.mypassT(key) : key;
 const tf = (key, values) => window.mypassTF ? window.mypassTF(key, values) : key;
@@ -101,6 +103,8 @@ const CHUNK_SIZE = 1024 * 1024;
 const HEADER_SIZE = 4 + 1 + 4 + 8 + 16;
 
 let masterKey = null;
+let wallet = null;
+let passGenerator = null;
 let items = [];
 let keysCache = null;
 let pairingTimer = null;
@@ -432,12 +436,17 @@ async function finishUnlock(keys, candidateKey) {
     recoveryFileStatus.textContent = '';
     locked.hidden = true;
     unlocked.hidden = false;
-    switchTab('docs');
+    setVaultStatus(true);
+    const startingTab = initialTab();
+    switchTab(startingTab);
     await loadItems();
     await loadContacts();
     await loadShares();
     await loadRequests();
     await loadDevices();
+    if (startingTab === 'generador') {
+        passGenerator?.open('flight');
+    }
 }
 
 async function unlock(event) {
@@ -815,6 +824,7 @@ async function loadContacts() {
 
         contacts = (await response.json()).data ?? [];
         acceptedContacts = contacts.filter((contact) => contact.status === 'accepted');
+        wallet?.refresh();
         contactStatus.textContent = contacts.length === 0
             ? ''
             : tf(':count contacto(s) de confianza.', { count: acceptedContacts.length });
@@ -1611,6 +1621,7 @@ async function loadItems() {
     }
 
     renderItems();
+    wallet?.setItems(items);
 }
 
 function expiryDate(value) {
@@ -1633,7 +1644,7 @@ function renderExpiryBanner() {
 
     const now = new Date();
     const upcoming = items
-        .filter((item) => item.expires_at && item.state !== 'transferred')
+        .filter((item) => !item.metadata?.pass && item.expires_at && item.state !== 'transferred')
         .map((item) => ({ item, date: expiryDate(item.expires_at) }))
         .filter(({ date }) => !Number.isNaN(date.getTime()))
         .filter(({ date }) => date.getTime() - now.getTime() <= 30 * 24 * 60 * 60 * 1000)
@@ -1671,12 +1682,13 @@ function typeIcon(type) {
 }
 
 function renderItems() {
+    const documentItems = items.filter((item) => !item.metadata?.pass);
     const filteredItems = currentFilter === 'all'
-        ? items
-        : items.filter((item) => item.type === currentFilter);
+        ? documentItems
+        : documentItems.filter((item) => item.type === currentFilter);
 
     itemsEmpty.hidden = filteredItems.length > 0;
-    if (items.length === 0) {
+    if (documentItems.length === 0) {
         itemsEmptyTitle.textContent = t('No tienes documentos todavía.');
         itemsEmptyCopy.textContent = t('Agrega tu primer documento y quedará cifrado antes de salir de tu equipo.');
     } else if (filteredItems.length === 0) {
@@ -1685,11 +1697,11 @@ function renderItems() {
     }
 
     const counts = {
-        all: items.length,
-        document: items.filter((item) => item.type === 'document').length,
-        ticket: items.filter((item) => item.type === 'ticket').length,
-        card: items.filter((item) => item.type === 'card').length,
-        other: items.filter((item) => item.type === 'other').length,
+        all: documentItems.length,
+        document: documentItems.filter((item) => item.type === 'document').length,
+        ticket: documentItems.filter((item) => item.type === 'ticket').length,
+        card: documentItems.filter((item) => item.type === 'card').length,
+        other: documentItems.filter((item) => item.type === 'other').length,
     };
 
     document.querySelectorAll('[data-filter]').forEach((button) => {
@@ -1955,6 +1967,9 @@ function lock() {
         toast.hidden = true;
     }
     itemList.replaceChildren();
+    wallet?.reset();
+    passGenerator?.reset();
+    setVaultStatus(false);
     unlocked.hidden = true;
     locked.hidden = false;
     passphraseInput.value = '';
@@ -1989,17 +2004,104 @@ function lock() {
     hideError(vaultError);
 }
 
+function initialTab() {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    return ['docs', 'pases', 'generador', 'family', 'devices'].includes(tab) ? tab : 'docs';
+}
+
+function setVaultStatus(open) {
+    const label = document.getElementById('vault-status-label');
+    if (label) {
+        label.textContent = open ? t('Bóveda abierta') : t('Bóveda protegida');
+    }
+}
+
+function updateNavState(tab) {
+    const desktopTab = tab === 'generador' ? 'pases' : tab;
+    const bottomTab = tab === 'generador'
+        ? 'pases'
+        : (['docs', 'family', 'devices'].includes(tab) ? 'docs' : tab);
+
+    document.querySelectorAll('[data-vault-tab]').forEach((link) => {
+        const isBottom = link.classList.contains('mp-bottom-link');
+        const active = link.dataset.vaultTab === (isBottom ? bottomTab : desktopTab);
+        if (active) {
+            link.setAttribute('aria-current', 'page');
+        } else {
+            link.removeAttribute('aria-current');
+        }
+
+        if (isBottom) {
+            link.querySelector('.material-symbols-outlined')?.classList.toggle('mp-icon-filled', active);
+        }
+    });
+}
+
 function switchTab(tab) {
+    const selectedTab = tab === 'generador' ? 'pases' : tab;
     document.querySelectorAll('[data-tab]').forEach((button) => {
-        button.setAttribute('aria-selected', button.dataset.tab === tab ? 'true' : 'false');
+        button.setAttribute('aria-selected', button.dataset.tab === selectedTab ? 'true' : 'false');
     });
 
-    for (const panel of ['docs', 'family', 'devices']) {
+    for (const panel of ['docs', 'passes', 'generador', 'family', 'devices']) {
         const element = document.getElementById(`panel-${panel}`);
         if (element) {
-            element.hidden = panel !== tab;
+            const panelKey = panel === 'passes' ? 'pases' : panel;
+            element.hidden = panelKey !== tab;
         }
     }
+
+    if (tab === 'pases') {
+        wallet?.refresh();
+    }
+
+    updateNavState(tab);
+
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState({}, '', url);
+    } catch {
+        // La navegación sigue funcionando aunque el navegador bloquee history.
+    }
+}
+
+async function savePass({ itemId, newId, version, type, metadata, file, blobId }) {
+    let finalBlobId = blobId ?? null;
+
+    if (file) {
+        const blob = await uploadFile(file);
+        finalBlobId = blob.id;
+    }
+
+    const response = await fetch(itemId ? `${itemsUrl}/${itemId}` : itemsUrl, {
+        method: itemId ? 'PATCH' : 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            ...(itemId ? {} : { id: newId || undefined }),
+            type,
+            encrypted_metadata: encryptJson(metadata),
+            blob_id: finalBlobId,
+            expires_at: metadata.expires_at || null,
+            ...(itemId ? { version } : {}),
+        }),
+    });
+
+    if (!response.ok) {
+        if (response.status === 409) {
+            throw new Error(t('El pase cambió en otro dispositivo. Vuelve a cargarlo.'));
+        }
+        throw new Error(t('No se pudo guardar el pase.'));
+    }
+
+    const data = (await response.json()).data;
+    await loadItems();
+    return data;
 }
 
 async function init() {
@@ -2023,6 +2125,31 @@ async function init() {
 }
 
 if (app) {
+    wallet = new WalletApp({
+        canShare: () => acceptedContacts.length > 0,
+        openShare: (item) => openShareModal(item),
+        openGenerator: (category, item, pass) => passGenerator?.open(category, item, pass),
+        toast: (message) => showToast(message),
+    });
+
+    passGenerator = new PassGenerator({
+        switchTab: (tab) => switchTab(tab),
+        savePass,
+        canShare: () => acceptedContacts.length > 0,
+        getItems: () => items,
+        openShare: (item) => openShareModal(item),
+        toast: (message) => showToast(message),
+    });
+
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest('[data-vault-tab]');
+        if (!link || unlocked.hidden || !masterKey) {
+            return;
+        }
+        event.preventDefault();
+        switchTab(link.dataset.vaultTab);
+    });
+
     unlockForm?.addEventListener('submit', unlock);
     addForm?.addEventListener('submit', addItem);
     lockButton?.addEventListener('click', lock);

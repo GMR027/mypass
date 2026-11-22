@@ -3,10 +3,13 @@ package app.mypass
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
@@ -43,12 +46,52 @@ enum class Screen {
     PinSetup,
     TwoFactor,
     Locked,
+    Home,
     Vault,
+    Passes,
+    PassEditor,
     Family,
     Scan,
     Settings,
     Viewer,
 }
+
+data class UiPass(
+    val category: String,
+    val title: String,
+    val issuer: String,
+    val holder: String,
+    val fields: Map<String, String>,
+    val notes: List<String>,
+    val codePayload: String?,
+    val codeFormat: String,
+    val codeSource: String,
+    val themeColor: String,
+    val options: Map<String, Boolean>,
+    val logo: String? = null,
+)
+
+data class PassDraft(
+    val itemId: String? = null,
+    val version: Int? = null,
+    val category: String = "flight",
+    val title: String = "",
+    val issuer: String = "",
+    val holder: String = "",
+    val fields: Map<String, String> = emptyMap(),
+    val notes: List<String> = emptyList(),
+    val codePayload: String = "",
+    val codeFormat: String = "qr",
+    val codeSource: String = "generated",
+    val themeColor: String = "#0c2340",
+    val logo: String? = null,
+    val ocrText: String = "",
+    val sourcePath: String? = null,
+    val sourceMime: String? = null,
+    val sourceName: String? = null,
+    val attachSource: Boolean = false,
+    val isNew: Boolean = true,
+)
 
 data class UiContact(
     val id: String,
@@ -84,6 +127,8 @@ data class UiItem(
     val localPath: String?,
     val expiresAt: String?,
     val ocrText: String = "",
+    val pass: UiPass? = null,
+    val metadataJson: JSONObject? = null,
 )
 
 data class UiState(
@@ -103,6 +148,9 @@ data class UiState(
     val viewerPath: String? = null,
     val viewerMime: String? = null,
     val viewerName: String? = null,
+    val passDraft: PassDraft? = null,
+    val scanForPass: Boolean = false,
+    val scanSourcePath: String? = null,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -127,6 +175,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> Screen.Login
             },
             simpleMode = store.simpleMode(),
+            email = store.email(),
         )
     }
 
@@ -135,6 +184,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() {
         _state.value = _state.value.copy(error = null)
+    }
+
+    fun clearStatus() {
+        _state.value = _state.value.copy(status = null)
     }
 
     fun showError(message: String) {
@@ -179,7 +232,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         error(text(R.string.error_no_session))
                     }
 
+                    if (store.hasVault() && store.email().isNotBlank() && store.email() != email.trim()) {
+                        store.clearAll()
+                    }
                     store.saveToken(token)
+                    store.saveEmail(email.trim())
                     withContext(Dispatchers.Main) {
                         _state.value = _state.value.copy(
                             screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
@@ -225,10 +282,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         error(text(R.string.error_no_session))
                     }
 
+                    val accountEmail = body.optJSONObject("user")?.optString("email")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: _state.value.email
+                    if (accountEmail.isNotBlank()) {
+                        store.saveEmail(accountEmail)
+                    }
                     store.saveToken(accessToken)
                     withContext(Dispatchers.Main) {
                         _state.value = _state.value.copy(
                             screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
+                            email = accountEmail,
                             busy = false,
                             status = null,
                             error = null,
@@ -448,7 +512,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.onSuccess {
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(
-                        screen = Screen.Vault,
+                        screen = Screen.Home,
                         busy = false,
                         status = text(R.string.status_vault_ready),
                     )
@@ -486,7 +550,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 masterKey = key
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(
-                        screen = Screen.Vault,
+                        screen = Screen.Home,
                         busy = false,
                         status = null,
                     )
@@ -521,6 +585,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         masterKey = null
         identityPrivateKey = null
         identityPublicKey = null
+        _state.value.passDraft?.let { cleanupDraftSource(it) }
         closeViewer()
         _state.value = _state.value.copy(
             screen = if (store.hasVault()) Screen.Locked else Screen.Login,
@@ -529,6 +594,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             incomingShares = emptyList(),
             shareRequests = emptyList(),
             familyStatus = null,
+            passDraft = null,
+            scanForPass = false,
+            scanSourcePath = null,
             status = null,
             error = null,
         )
@@ -671,7 +739,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 contacts = contactList,
                 incomingShares = incoming,
                 shareRequests = requestList,
-                familyStatus = text(R.string.family_status_contacts, contactList.count { it.status == "accepted" }),
+                familyStatus = null,
             )
         }
     }
@@ -681,6 +749,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             screen = Screen.Vault,
             error = null,
             familyStatus = null,
+            passDraft = null,
+        )
+    }
+
+    fun backToHome() {
+        _state.value = _state.value.copy(
+            screen = Screen.Home,
+            error = null,
+            familyStatus = null,
+            passDraft = null,
+        )
+    }
+
+    fun openPasses() {
+        _state.value = _state.value.copy(
+            screen = Screen.Passes,
+            error = null,
+            status = null,
+            passDraft = null,
         )
     }
 
@@ -692,12 +779,472 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun openScanner() {
-        _state.value = _state.value.copy(screen = Screen.Scan, error = null, status = null)
+    fun openScanner(forPass: Boolean = false) {
+        _state.value = _state.value.copy(
+            screen = Screen.Scan,
+            error = null,
+            status = null,
+            scanForPass = forPass,
+        )
+    }
+
+    fun backFromScan() {
+        val target = if (_state.value.scanForPass) Screen.Passes else Screen.Vault
+        _state.value = _state.value.copy(screen = target, error = null, status = null)
     }
 
     fun openSettings() {
         _state.value = _state.value.copy(screen = Screen.Settings, error = null, status = null)
+    }
+
+    fun createPassFromScan(photo: File) {
+        if (masterKey == null) {
+            return
+        }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_reading_pass),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val bitmap = decodeSampledBitmap(photo, 2400)
+                analyzeBitmap(
+                    bitmap = bitmap,
+                    sourcePath = photo.absolutePath,
+                    sourceMime = "image/jpeg",
+                    sourceName = "escaneo-${System.currentTimeMillis()}.jpg",
+                )
+            }.onSuccess { draft ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.PassEditor,
+                        passDraft = draft,
+                        busy = false,
+                        status = null,
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_read_pass),
+                    )
+                }
+            }
+        }
+    }
+
+    fun createPassFromUri(uri: Uri) {
+        if (masterKey == null) {
+            return
+        }
+
+        val resolver = getApplication<Application>().contentResolver
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_reading_pass),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var cacheFile: File? = null
+            runCatching {
+                val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                } ?: "pase"
+                val mime = resolver.getType(uri) ?: "application/octet-stream"
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error(text(R.string.error_read_file))
+
+                if (bytes.size > 100 * 1024 * 1024) {
+                    error(text(R.string.error_file_too_large))
+                }
+
+                val extension = when {
+                    mime.contains("pdf") -> "pdf"
+                    mime.contains("png") -> "png"
+                    mime.contains("webp") -> "webp"
+                    else -> "jpg"
+                }
+                cacheFile = File(
+                    getApplication<Application>().cacheDir,
+                    "pass-source-${System.currentTimeMillis()}.$extension",
+                ).apply { writeBytes(bytes) }
+
+                val bitmap = if (mime.contains("pdf")) {
+                    resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                        renderPdfFirstPage(descriptor)
+                    } ?: error(text(R.string.error_read_file))
+                } else {
+                    decodeSampledByteArray(bytes, 2400)
+                        ?: error(text(R.string.error_read_file))
+                }
+
+                analyzeBitmap(
+                    bitmap = bitmap,
+                    sourcePath = cacheFile?.absolutePath,
+                    sourceMime = mime,
+                    sourceName = name,
+                )
+            }.onSuccess { draft ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.PassEditor,
+                        passDraft = draft,
+                        busy = false,
+                        status = null,
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                cacheFile?.delete()
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_read_pass),
+                    )
+                }
+            }
+        }
+    }
+
+    fun editPass(item: UiItem) {
+        val pass = item.pass ?: return
+        val local = store.findItem(item.id)
+        _state.value = _state.value.copy(
+            screen = Screen.PassEditor,
+            passDraft = PassDraft(
+                itemId = item.id,
+                version = local?.version ?: 1,
+                category = pass.category,
+                title = pass.title,
+                issuer = pass.issuer,
+                holder = pass.holder,
+                fields = pass.fields,
+                notes = pass.notes,
+                codePayload = pass.codePayload.orEmpty(),
+                codeFormat = pass.codeFormat,
+                codeSource = pass.codeSource,
+                themeColor = pass.themeColor,
+                logo = pass.logo,
+                ocrText = item.ocrText,
+                isNew = false,
+            ),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun discardPassDraft() {
+        _state.value.passDraft?.let { cleanupDraftSource(it) }
+        _state.value = _state.value.copy(
+            screen = Screen.Passes,
+            passDraft = null,
+            busy = false,
+            status = null,
+            error = null,
+        )
+    }
+
+    fun savePass(draft: PassDraft) {
+        val key = masterKey ?: return
+        val token = store.token()
+        val id = draft.itemId ?: store.newItemId()
+        val type = if (draft.category == "id" || draft.category == "membership") "card" else "ticket"
+        val expiresAt = draft.fields["expires"] ?: draft.fields["date"]
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_saving_pass),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val title = draft.title.ifBlank { fallbackPassTitle(draft) }
+                val metadata = JSONObject()
+                    .put("title", title)
+                    .put("type", type)
+                    .put("expires_at", expiresAt ?: JSONObject.NULL)
+                    .put("pass", buildPassJson(id, draft.copy(title = title)))
+                if (draft.ocrText.isNotBlank()) {
+                    metadata.put("ocr_text", draft.ocrText)
+                }
+
+                val existing = store.findItem(id)
+                if (!draft.isNew && existing != null) {
+                    runCatching {
+                        JSONObject(String(Crypto.open(key, Base64.decode(existing.encryptedMetadata, Base64.NO_WRAP))))
+                    }.getOrNull()?.let { previous ->
+                        for (field in listOf("original_name", "mime", "size", "ocr_text")) {
+                            if (!metadata.has(field) && previous.has(field)) {
+                                metadata.put(field, previous.get(field))
+                            }
+                        }
+                    }
+                }
+
+                var localPath = existing?.localPath
+                if (draft.isNew && draft.attachSource) {
+                    draft.sourcePath?.let { path ->
+                        val source = File(path)
+                        if (source.exists()) {
+                            val bytes = source.readBytes()
+                            val encryptedFile = Crypto.encryptFile(key, bytes)
+                            localPath = store.writeVaultFile(id, encryptedFile).absolutePath
+                            metadata
+                                .put("original_name", draft.sourceName ?: source.name)
+                                .put("mime", draft.sourceMime ?: "application/octet-stream")
+                                .put("size", bytes.size)
+                        }
+                    }
+                }
+
+                val encryptedMetadata = Base64.encodeToString(
+                    Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                    Base64.NO_WRAP,
+                )
+
+                if (draft.isNew) {
+                    store.upsert(
+                        LocalItem(
+                            id = id,
+                            type = type,
+                            state = "active",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = null,
+                            version = 1,
+                            expiresAt = expiresAt,
+                            localPath = localPath,
+                            pendingUpload = true,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                } else {
+                    val local = existing ?: error(text(R.string.error_document_not_found))
+                    var version = local.version
+                    if (!local.pendingUpload) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        ApiClient.updateItem(activeToken, id, encryptedMetadata, expiresAt, local.version)
+                        version += 1
+                    }
+                    store.upsert(
+                        local.copy(
+                            type = type,
+                            encryptedMetadata = encryptedMetadata,
+                            expiresAt = expiresAt,
+                            version = version,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                }
+
+                cleanupDraftSource(draft)
+                refreshItems(key)
+                Reminders.checkNow(getApplication())
+                if (draft.isNew) {
+                    sync()
+                }
+
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.Passes,
+                        passDraft = null,
+                        busy = false,
+                        status = text(R.string.status_pass_saved),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_save_pass),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun analyzeBitmap(
+        bitmap: Bitmap,
+        sourcePath: String?,
+        sourceMime: String?,
+        sourceName: String?,
+    ): PassDraft {
+        val ocrText = runCatching { Ocr.extract(getApplication(), bitmap) }.getOrDefault("")
+        val barcode = Barcode.decode(bitmap)
+        val bcbp = barcode?.text?.let { PassParser.parseBcbp(it) }
+        val parsed = PassParser.parse(ocrText.ifBlank { barcode?.text.orEmpty() })
+        val category = bcbp?.category ?: parsed.category
+        val fields = linkedMapOf<String, String>().apply {
+            putAll(parsed.fields)
+            bcbp?.fields?.forEach { (key, value) ->
+                if (value.isNotBlank()) {
+                    put(key, value)
+                }
+            }
+        }
+        val title = bcbp?.title ?: parsed.title
+        val issuer = bcbp?.issuer ?: parsed.issuer
+        val holder = bcbp?.holder ?: parsed.holder
+
+        return PassDraft(
+            category = category,
+            title = title,
+            issuer = issuer,
+            holder = holder,
+            fields = fields,
+            notes = parsed.notes,
+            codePayload = barcode?.text ?: bcbp?.codePayload.orEmpty(),
+            codeFormat = barcode?.format ?: "qr",
+            codeSource = if (barcode != null) "decoded" else "generated",
+            themeColor = passThemeColor(category, null),
+            ocrText = ocrText,
+            sourcePath = sourcePath,
+            sourceMime = sourceMime,
+            sourceName = sourceName,
+            attachSource = false,
+            isNew = true,
+        )
+    }
+
+    private fun buildPassJson(id: String, draft: PassDraft): JSONObject {
+        val allowedFields = when (draft.category) {
+            "flight" -> setOf(
+                "origin", "destination", "flight", "carrier", "flight_number", "passenger",
+                "passenger_name", "seat", "gate", "zone", "cabin", "date", "departure",
+                "boarding", "pnr", "sequence",
+            )
+            "event" -> setOf("location", "date", "time", "gate", "section", "row", "seat")
+            "transit" -> setOf("route", "date", "time", "platform", "carriage", "seat")
+            "id" -> setOf("number", "birth", "expires")
+            else -> setOf("number", "level", "expires")
+        }
+        val fields = JSONObject()
+        draft.fields
+            .filterKeys { it in allowedFields }
+            .filterValues { it.isNotBlank() }
+            .forEach { (key, value) -> fields.put(key, value) }
+        if (draft.holder.isNotBlank()) {
+            fields.put(if (draft.category == "flight") "passenger" else "holder", draft.holder)
+        }
+
+        val notes = JSONArray()
+        draft.notes.filter { it.isNotBlank() }.forEach(notes::put)
+
+        val title = draft.title.ifBlank { fallbackPassTitle(draft) }
+        val payload = draft.codePayload.ifBlank {
+            JSONObject()
+                .put("v", 1)
+                .put("app", "mypass")
+                .put("id", id)
+                .put("c", draft.category)
+                .put("title", title)
+                .put("issuer", draft.issuer)
+                .put("holder", draft.holder)
+                .put("fields", fields)
+                .toString()
+        }
+
+        return JSONObject()
+            .put("category", draft.category)
+            .put("title", title)
+            .put("issuer", draft.issuer)
+            .put("holder", draft.holder)
+            .put("fields", fields)
+            .put("notes", notes)
+            .put(
+                "code",
+                JSONObject()
+                    .put("payload", payload)
+                    .put("format", draft.codeFormat)
+                    .put("source", draft.codeSource),
+            )
+            .put("themeColor", draft.themeColor)
+            .put("logo", draft.logo ?: JSONObject.NULL)
+            .put(
+                "options",
+                JSONObject()
+                    .put("presentation", true)
+                    .put("share", true)
+                    .put("reminder", true),
+            )
+    }
+
+    private fun fallbackPassTitle(draft: PassDraft): String {
+        return when (draft.category) {
+            "flight" -> {
+                val route = listOf(draft.fields["origin"], draft.fields["destination"])
+                    .filterNot { it.isNullOrBlank() }
+                    .joinToString(" → ")
+                listOf(route, draft.fields["flight"].orEmpty())
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
+                    .ifBlank { text(R.string.new_flight_pass) }
+            }
+            "event" -> draft.fields["location"] ?: text(R.string.new_event_pass)
+            "transit" -> draft.fields["route"] ?: text(R.string.new_transit_pass)
+            "membership" -> draft.issuer.ifBlank { text(R.string.new_membership) }
+            else -> draft.issuer.ifBlank { text(R.string.new_identity_pass) }
+        }
+    }
+
+    private fun decodeSampledByteArray(bytes: ByteArray, maxEdge: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return null
+        }
+
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > maxEdge || bounds.outHeight / sampleSize > maxEdge) {
+            sampleSize *= 2
+        }
+
+        return BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply { inSampleSize = sampleSize },
+        )
+    }
+
+    private fun renderPdfFirstPage(descriptor: ParcelFileDescriptor): Bitmap {
+        val renderer = PdfRenderer(descriptor)
+        try {
+            if (renderer.pageCount == 0) {
+                error(text(R.string.error_read_file))
+            }
+            renderer.openPage(0).use { page ->
+                val maxEdge = 2400f
+                val scale = (maxEdge / maxOf(page.width, page.height).toFloat()).coerceIn(1f, 2.5f)
+                val bitmap = Bitmap.createBitmap(
+                    (page.width * scale).toInt().coerceAtLeast(1),
+                    (page.height * scale).toInt().coerceAtLeast(1),
+                    Bitmap.Config.ARGB_8888,
+                )
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                return bitmap
+            }
+        } finally {
+            renderer.close()
+        }
+    }
+
+    private fun cleanupDraftSource(draft: PassDraft) {
+        val path = draft.sourcePath ?: return
+        if (path.contains(getApplication<Application>().cacheDir.absolutePath)) {
+            runCatching { File(path).delete() }
+        }
     }
 
     fun setSimpleMode(enabled: Boolean) {
@@ -885,7 +1432,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val publicKey = Base64.decode(ApiClient.contactPublicKey(token, contactId), Base64.NO_WRAP)
-                val metadata = JSONObject()
+                val metadata = item.metadataJson?.let { JSONObject(it.toString()) } ?: JSONObject()
+                metadata
                     .put("title", item.title)
                     .put("type", item.type)
                     .put("original_name", item.originalName)
@@ -993,10 +1541,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 JSONObject(String(Crypto.open(key, Base64.decode(item.encryptedMetadata, Base64.NO_WRAP))))
             }.getOrNull()
 
+            val title = metadata?.optString("title")?.takeIf { it.isNotBlank() }
+                ?: text(R.string.document_unreadable)
+            val passJson = metadata?.optJSONObject("pass")
+            val pass = when {
+                passJson != null -> parseUiPass(passJson, title, item.type)
+                item.type == "ticket" || item.type == "card" -> fallbackUiPass(title, item.type)
+                else -> null
+            }
+
             UiItem(
                 id = item.id,
                 type = item.type,
-                title = metadata?.optString("title")?.takeIf { it.isNotBlank() } ?: text(R.string.document_unreadable),
+                title = title,
                 mime = metadata?.optString("mime") ?: "",
                 originalName = metadata?.optString("original_name") ?: "documento",
                 pendingUpload = item.pendingUpload,
@@ -1004,11 +1561,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 localPath = item.localPath,
                 expiresAt = item.expiresAt,
                 ocrText = metadata?.optString("ocr_text")?.takeIf { it.isNotBlank() && it != "null" } ?: "",
+                pass = pass,
+                metadataJson = metadata,
             )
         }
 
         viewModelScope.launch(Dispatchers.Main) {
             _state.value = _state.value.copy(items = items, status = null, error = null)
+        }
+    }
+
+    private fun parseUiPass(json: JSONObject, fallbackTitle: String, type: String): UiPass {
+        val fields = mutableMapOf<String, String>()
+        json.optJSONObject("fields")?.let { objectFields ->
+            for (key in objectFields.keys()) {
+                val value = objectFields.optString(key)
+                if (value.isNotBlank() && value != "null") {
+                    fields[key] = value
+                }
+            }
+        }
+
+        val notes = mutableListOf<String>()
+        json.optJSONArray("notes")?.let { array ->
+            for (index in 0 until array.length()) {
+                array.optString(index).takeIf { it.isNotBlank() }?.let(notes::add)
+            }
+        }
+
+        val options = mutableMapOf<String, Boolean>()
+        json.optJSONObject("options")?.let { objectOptions ->
+            for (key in objectOptions.keys()) {
+                options[key] = objectOptions.optBoolean(key, true)
+            }
+        }
+
+        val code = json.optJSONObject("code")
+        val category = json.optString("category").takeIf { it.isNotBlank() }
+            ?: if (type == "card") "membership" else "flight"
+
+        return UiPass(
+            category = category,
+            title = json.optString("title").takeIf { it.isNotBlank() } ?: fallbackTitle,
+            issuer = json.optString("issuer").takeIf { it.isNotBlank() && it != "null" } ?: "",
+            holder = json.optString("holder").takeIf { it.isNotBlank() && it != "null" }
+                ?: fields["passenger"].orEmpty(),
+            fields = fields,
+            notes = notes,
+            codePayload = code?.optString("payload")?.takeIf { it.isNotBlank() && it != "null" },
+            codeFormat = code?.optString("format")?.takeIf { it.isNotBlank() && it != "null" } ?: "qr",
+            codeSource = code?.optString("source")?.takeIf { it.isNotBlank() && it != "null" } ?: "generated",
+            themeColor = json.optString("themeColor").takeIf { it.isNotBlank() && it != "null" }
+                ?: passThemeColor(category, json.optString("theme")),
+            options = options,
+            logo = json.optString("logo").takeIf { it.isNotBlank() && it != "null" },
+        )
+    }
+
+    private fun fallbackUiPass(title: String, type: String): UiPass {
+        val normalized = title.lowercase(Locale.getDefault())
+        val category = when {
+            type == "card" -> "membership"
+            normalized.contains("vuelo") || normalized.contains("flight") ||
+                normalized.contains("boarding") || normalized.contains("iberia") -> "flight"
+            else -> "event"
+        }
+
+        return UiPass(
+            category = category,
+            title = title,
+            issuer = "",
+            holder = "",
+            fields = emptyMap(),
+            notes = emptyList(),
+            codePayload = null,
+            codeFormat = "qr",
+            codeSource = "generated",
+            themeColor = passThemeColor(category, null),
+            options = emptyMap(),
+            logo = null,
+        )
+    }
+
+    private fun passThemeColor(category: String, theme: String?): String = when (theme) {
+        "midnight" -> "#0c2340"
+        "violet" -> "#4c1d95"
+        "forest" -> "#064e3b"
+        "obsidian" -> "#18181b"
+        "burgundy" -> "#7f1d1d"
+        "amber" -> "#9a3412"
+        else -> when (category) {
+            "flight" -> "#0c2340"
+            "event" -> "#4c1d95"
+            "transit" -> "#064e3b"
+            "id" -> "#18181b"
+            else -> "#9a3412"
         }
     }
 
@@ -1081,6 +1728,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addScan(photo: File) {
         val key = masterKey ?: return
+        if (_state.value.scanForPass) {
+            createPassFromScan(photo)
+            return
+        }
+
         _state.value = _state.value.copy(
             screen = Screen.Vault,
             busy = true,

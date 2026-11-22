@@ -39,6 +39,9 @@ Route::middleware(['auth', 'email-2fa'])->group(function () {
     Route::view('/onboarding', 'onboarding')->name('onboarding');
     Route::view('/vault', 'vault')->name('vault');
 
+    Route::redirect('/passes', '/vault?tab=pases')->name('passes');
+    Route::redirect('/passes/generator', '/vault?tab=generador')->name('passes.generator');
+
     Route::get('/settings/security', [SecurityController::class, 'show'])->name('settings.security');
     Route::get('/api/web/security', [SecurityController::class, 'status'])->name('web.security.status');
     Route::post('/api/web/security/email-two-factor', [SecurityController::class, 'updateEmailTwoFactor'])

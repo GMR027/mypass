@@ -84,6 +84,12 @@ class VaultStore(context: Context) {
         prefs.edit().putBoolean(KEY_SIMPLE_MODE, enabled).apply()
     }
 
+    fun saveEmail(email: String) {
+        prefs.edit().putString(KEY_EMAIL, email).apply()
+    }
+
+    fun email(): String = prefs.getString(KEY_EMAIL, "").orEmpty()
+
     fun newItemId(): String = UUID.randomUUID().toString()
 
     fun vaultFile(id: String): File = File(vaultDir, "$id.mypd")
@@ -220,6 +226,7 @@ class VaultStore(context: Context) {
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_SERVER_DEVICE_ID = "server_device_id"
         const val KEY_SIMPLE_MODE = "simple_mode"
+        const val KEY_EMAIL = "email"
 
         fun now(): String = java.time.Instant.now().toString()
     }

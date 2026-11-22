@@ -422,6 +422,332 @@
     }
 }
 
+@layer components {
+    .mp-nav-link {
+        color: var(--color-on-surface-variant);
+    }
+
+    .mp-nav-link:hover {
+        background: var(--color-surface-container);
+        color: var(--color-on-surface);
+    }
+
+    .mp-nav-link[aria-current='page'] {
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+        box-shadow: 0 1px 2px rgb(18 28 38 / 0.12);
+    }
+
+    .mp-bottom-link {
+        color: var(--color-on-surface-variant);
+    }
+
+    .mp-bottom-link[aria-current='page'] {
+        color: var(--color-primary);
+    }
+
+    .mp-bottom-link[aria-current='page'] .mp-bottom-label {
+        font-weight: 700;
+    }
+
+    .mp-wallet-stack {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        padding-bottom: 1.5rem;
+    }
+
+    .mp-wallet-stack .mp-pass-card {
+        position: relative;
+        cursor: pointer;
+        transition:
+            transform 220ms ease,
+            box-shadow 220ms ease,
+            margin 220ms ease;
+    }
+
+    .mp-wallet-stack:not([data-view='grid']) .mp-pass-card + .mp-pass-card {
+        margin-top: -4.5rem;
+    }
+
+    .mp-wallet-stack:not([data-view='grid']) .mp-pass-card:hover,
+    .mp-wallet-stack:not([data-view='grid']) .mp-pass-card:focus-visible {
+        transform: translateY(-6px);
+    }
+
+    @media (max-width: 1023px) {
+        .mp-wallet-stack:not([data-view='grid']) .mp-pass-card.is-selected + .mp-pass-card {
+            margin-top: 0.75rem;
+        }
+    }
+
+    .mp-wallet-stack[data-view='grid'] {
+        display: grid;
+        gap: 1rem;
+        padding-bottom: 0;
+    }
+
+    @media (min-width: 1280px) {
+        .mp-wallet-stack[data-view='grid'] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    .mp-pass-card {
+        --pass-color: #0c2340;
+        position: relative;
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        text-align: left;
+        font: inherit;
+        overflow: hidden;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, var(--pass-color), color-mix(in srgb, var(--pass-color) 55%, #000));
+        color: #fff;
+        box-shadow:
+            0 2px 6px -1px rgb(18 28 38 / 0.12),
+            0 10px 28px -8px rgb(18 28 38 / 0.28);
+    }
+
+    .mp-wallet-stack:not([data-view='grid']) .mp-pass-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 1px solid rgb(255 255 255 / 0.16);
+        border-radius: inherit;
+        pointer-events: none;
+    }
+
+    .mp-pass-card[data-category='flight'] {
+        --pass-color: #0c2340;
+    }
+
+    .mp-pass-card[data-category='event'] {
+        --pass-color: #4c1d95;
+    }
+
+    .mp-pass-card[data-category='transit'] {
+        --pass-color: #064e3b;
+    }
+
+    .mp-pass-card[data-category='id'] {
+        --pass-color: #27272a;
+    }
+
+    .mp-pass-card[data-category='membership'] {
+        --pass-color: #7c2d12;
+    }
+
+    .mp-pass-card.is-selected {
+        z-index: 60 !important;
+        box-shadow:
+            0 4px 10px -1px rgb(18 28 38 / 0.18),
+            0 18px 40px -10px rgb(18 28 38 / 0.34);
+    }
+
+    .mp-pass-card__body {
+        padding: 1.15rem 1.25rem 1.25rem;
+    }
+
+    .mp-pass-card__eyebrow {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.72;
+    }
+
+    .mp-pass-card__title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .mp-pass-card__chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 999px;
+        background: rgb(255 255 255 / 0.16);
+        padding: 0.3rem 0.65rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .mp-pass-card__route {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        border-block: 1px solid rgb(255 255 255 / 0.14);
+        padding-block: 0.8rem;
+    }
+
+    .mp-pass-card__airport {
+        font-size: clamp(1.9rem, 4vw, 2.5rem);
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        line-height: 1;
+    }
+
+    .mp-pass-card__meta {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.35rem;
+        border-radius: 0.75rem;
+        background: rgb(0 0 0 / 0.18);
+        padding: 0.55rem;
+        text-align: center;
+    }
+
+    .mp-pass-card__meta span {
+        display: block;
+        font-size: 0.63rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.62;
+    }
+
+    .mp-pass-card__meta strong {
+        display: block;
+        margin-top: 0.1rem;
+        font-size: 0.95rem;
+        line-height: 1.2;
+    }
+
+    .mp-pass-card__footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        font-size: 0.74rem;
+        opacity: 0.78;
+    }
+
+    .mp-pass-card__mobile-code,
+    .mp-pass-card__preview-code {
+        border-top: 1px solid rgb(255 255 255 / 0.16);
+        background: #fff;
+        padding: 1rem;
+        color: var(--color-on-surface);
+    }
+
+    @media (min-width: 1024px) {
+        .mp-pass-card__mobile-code {
+            display: none;
+        }
+    }
+
+    .mp-pass-inspector {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid rgb(193 200 194 / 0.55);
+        border-radius: 1rem;
+        background: #fff;
+        padding: 1.25rem;
+        box-shadow: var(--shadow-card);
+    }
+
+    .mp-code-sheet {
+        min-width: 0;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid rgb(193 200 194 / 0.55);
+        border-radius: 0.9rem;
+        box-shadow: inset 0 1px 8px rgb(18 28 38 / 0.07);
+    }
+
+    .mp-code-sheet canvas,
+    .mp-code-sheet svg,
+    .mp-code-sheet img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+
+    .mp-presentation-dialog {
+        width: min(720px, calc(100% - 2rem));
+        max-width: none;
+        max-height: calc(100dvh - 2rem);
+        border: 0;
+        background: transparent;
+        padding: 0;
+    }
+
+    .mp-presentation-dialog::backdrop {
+        background: rgb(18 28 38 / 0.72);
+    }
+
+    .mp-presentation-panel {
+        display: flex;
+        max-height: calc(100dvh - 2rem);
+        flex-direction: column;
+        overflow-y: auto;
+        border-radius: 1.5rem;
+        background: #fff;
+        padding: 1.25rem;
+        box-shadow: 0 24px 64px -12px rgb(18 28 38 / 0.4);
+    }
+
+    @media (max-width: 640px) {
+        .mp-presentation-dialog {
+            width: 100%;
+            max-height: 100dvh;
+            height: 100dvh;
+        }
+
+        .mp-presentation-panel {
+            min-height: 100dvh;
+            max-height: 100dvh;
+            border-radius: 0;
+            padding: 1rem;
+        }
+    }
+
+    .mp-generator-field label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--color-on-surface-variant);
+    }
+
+    .mp-note-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 999px;
+        background: var(--color-surface-container);
+        padding: 0.35rem 0.55rem 0.35rem 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+
+    .mp-note-chip button {
+        display: inline-flex;
+        height: 1.35rem;
+        width: 1.35rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        color: var(--color-on-surface-variant);
+    }
+
+    .mp-note-chip button:hover {
+        background: rgb(18 28 38 / 0.08);
+        color: var(--color-on-surface);
+    }
+}
+
 @layer utilities {
     .mp-grid-docs {
         @apply grid gap-4 md:grid-cols-2;

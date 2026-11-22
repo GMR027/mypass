@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation("com.goterl:lazysodium-android:5.2.0@aar")
     implementation("net.java.dev.jna:jna:5.17.0@aar")
@@ -77,5 +78,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.6.2")
     implementation("androidx.camera:camera-view:1.6.2")
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+    implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    testImplementation("junit:junit:4.13.2")
 }
