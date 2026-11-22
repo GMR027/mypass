@@ -1,0 +1,562 @@
+<x-layout :title="__('Mi bóveda')">
+    @php($email = auth()->user()->email)
+
+    <div id="vault-app"
+         data-keys-url="{{ route('web.keys.show') }}"
+         data-items-url="{{ route('web.items.index') }}"
+         data-blobs-url="{{ route('web.blobs.store') }}"
+         data-blob-base="/api/web/blobs"
+         data-pairing-url="{{ route('web.pairing.create') }}"
+         data-pairing-base="/api/web/pairing"
+         data-devices-url="{{ route('web.devices.index') }}"
+         data-device-base="/api/web/devices"
+         data-contacts-url="{{ route('web.contacts.index') }}"
+         data-shares-url="{{ route('web.shares.index') }}"
+         data-share-base="/api/web/shares"
+         data-requests-url="{{ route('web.share-requests.index') }}"
+         data-request-base="/api/web/share-requests"
+         data-email="{{ $email }}">
+
+        <p id="vault-error" class="mp-alert mp-alert-error mb-5" role="alert" hidden></p>
+
+        <p id="vault-loading" class="mp-card mp-card-pad flex items-center gap-4 text-on-surface" role="status">
+            <span class="mp-spinner" aria-hidden="true"></span>
+            <span>
+                <span class="block font-semibold">{{ __('Cargando…') }}</span>
+                <span class="mp-hint">{{ __('Verificando llaves seguras en este dispositivo.') }}</span>
+            </span>
+        </p>
+
+        <section id="vault-no-keys" hidden>
+            <div class="mp-card mx-auto max-w-2xl p-6 text-center md:p-10">
+                <span class="mp-icon-tile-lg mx-auto">
+                    <x-icon name="shield_lock" class="text-[32px]" />
+                </span>
+                <h1 class="mp-title-lg mt-4">{{ __('Tu bóveda aún no está configurada') }}</h1>
+                <p class="mp-body mx-auto mt-2 max-w-lg">{{ __('Primero crea la llave de la bóveda y guarda tu llave de emergencia en esta computadora.') }}</p>
+                <a href="{{ route('onboarding') }}" class="mp-btn mp-btn-primary mt-6">
+                    <x-icon name="vpn_key" class="text-[21px]" />
+                    {{ __('Configurar mi bóveda') }}
+                </a>
+            </div>
+        </section>
+
+        <section id="vault-locked" hidden>
+            <div class="mb-6 flex items-center gap-3">
+                <span class="mp-icon-tile">
+                    <x-icon name="lock" class="text-[24px]" />
+                </span>
+                <div>
+                    <p class="mp-eyebrow">{{ __('Mi bóveda') }}</p>
+                    <p class="mp-hint mp-break">{{ $email }}</p>
+                </div>
+            </div>
+
+            <div class="grid gap-5 lg:grid-cols-2">
+                <div class="mp-card mp-card-pad">
+                    <span class="mp-badge mp-badge-warning">
+                        <x-icon name="lock" class="text-[17px]" />
+                        {{ __('Bóveda bloqueada') }}
+                    </span>
+                    <h1 class="mp-title-lg mt-3">{{ __('Abrir mi bóveda') }}</h1>
+                    <p class="mp-body mt-2">{{ __('Escribe la llave de la bóveda que creaste en esta computadora.') }}</p>
+
+                    <form id="unlock-form" class="mt-6 space-y-4">
+                        <div>
+                            <label for="vault-passphrase" class="mp-label">{{ __('Llave de la bóveda') }}</label>
+                            <div class="relative">
+                                <input id="vault-passphrase" type="password" required autocomplete="current-password"
+                                       class="mp-input pr-14">
+                                <button type="button" data-toggle-password="vault-passphrase" aria-pressed="false"
+                                        aria-label="{{ __('Mostrar contraseña') }}"
+                                        class="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container">
+                                    <x-icon name="visibility" class="text-[22px]" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <p id="unlock-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
+
+                        <button type="submit" class="mp-btn mp-btn-primary w-full">
+                            <x-icon name="lock_open" class="text-[21px]" />
+                            {{ __('Desbloquear') }}
+                        </button>
+                    </form>
+
+                    <p class="mt-4 flex items-start gap-2 text-sm text-on-surface-variant">
+                        <x-icon name="security" class="mt-0.5 text-[19px] text-primary" />
+                        {{ __('Llave descifrada localmente en este navegador.') }}
+                    </p>
+                </div>
+
+                <div class="mp-card mp-card-pad">
+                    <div class="flex items-start gap-3">
+                        <span class="mp-icon-tile">
+                            <x-icon name="vpn_key_alert" class="text-[23px]" />
+                        </span>
+                        <div>
+                            <h2 class="mp-title-sm">{{ __('Abrir con archivo de emergencia') }}</h2>
+                            <p class="mp-hint mt-1">
+                                {!! __("También puedes abrir la bóveda cargando el archivo :file que descargaste.", ['file' => '<strong>.mypss</strong>']) !!}
+                            </p>
+                        </div>
+                    </div>
+
+                    <label id="recovery-drop-zone"
+                           class="mt-5 block cursor-pointer rounded-2xl border-2 border-dashed border-outline/40 bg-surface-container-low px-5 py-8 text-center transition-colors hover:border-primary hover:bg-surface-container">
+                        <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary shadow-sm">
+                            <x-icon name="upload_file" class="text-[28px]" />
+                        </span>
+                        <span class="mt-3 block font-semibold text-on-surface">{{ __('Arrastra el archivo .mypss aquí') }}</span>
+                        <span class="mt-1 block text-sm text-on-surface-variant">{{ __('o haz clic para elegirlo') }}</span>
+                        <span class="mt-2 block text-sm text-outline">{{ __('Archivo de recuperación personal') }}</span>
+                        <input id="recovery-file" type="file" accept=".mypss,application/json" class="sr-only">
+                    </label>
+
+                    <p id="recovery-file-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                    <p id="recovery-file-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+
+                    <div class="mt-5 flex items-start gap-3 rounded-xl bg-surface-container-low p-4">
+                        <x-icon name="cloud_off" class="mt-0.5 text-[21px] text-primary" />
+                        <p class="mp-hint">{{ __('Cero servidores involucrados: el archivo se verifica y descifra en tu navegador.') }}</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="vault-unlocked" hidden>
+            <div class="mp-card mp-card-pad flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div class="flex items-center gap-4">
+                    <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-fixed text-primary">
+                        <x-icon name="lock_open" class="text-[30px]" />
+                    </span>
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h1 class="mp-title-md">{{ __('Mi bóveda') }}</h1>
+                            <span class="mp-badge mp-badge-primary">
+                                <x-icon name="verified_user" class="text-[16px]" filled />
+                                {{ __('Bóveda abierta') }}
+                            </span>
+                        </div>
+                        <p class="mp-hint mt-1 mp-break">{{ $email }} · {{ __('Cifrado de punto a punto activo en este navegador.') }}</p>
+                    </div>
+                </div>
+                <button id="vault-lock" type="button" class="mp-btn mp-btn-secondary shrink-0">
+                    <x-icon name="lock" class="text-[20px]" />
+                    {{ __('Bloquear') }}
+                </button>
+            </div>
+
+            <div class="mp-tabs mt-5" role="tablist" aria-label="{{ __('Secciones de la bóveda') }}">
+                <button id="tab-btn-docs" type="button" role="tab" aria-selected="true" aria-controls="panel-docs" data-tab="docs" class="mp-tab">
+                    <x-icon name="folder" class="text-[22px]" />
+                    {{ __('Documentos') }}
+                </button>
+                <button id="tab-btn-family" type="button" role="tab" aria-selected="false" aria-controls="panel-family" data-tab="family" class="mp-tab">
+                    <x-icon name="groups" class="text-[22px]" />
+                    {{ __('Familia') }}
+                </button>
+                <button id="tab-btn-devices" type="button" role="tab" aria-selected="false" aria-controls="panel-devices" data-tab="devices" class="mp-tab">
+                    <x-icon name="devices" class="text-[22px]" />
+                    {{ __('Dispositivos') }}
+                </button>
+            </div>
+
+            <div class="mt-5">
+                <section id="panel-docs" role="tabpanel" aria-labelledby="tab-btn-docs">
+                    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                        <div>
+                            <h2 class="mp-title-lg">{{ __('Tus documentos seguros') }}</h2>
+                            <p class="mp-body-sm mt-1">{{ __('Cifrados en tu dispositivo localmente. Solo legibles por ti y tus autorizados.') }}</p>
+                        </div>
+                        <button id="add-document-open" type="button" class="mp-btn mp-btn-primary shrink-0">
+                            <x-icon name="add" class="text-[22px]" />
+                            {{ __('Agregar documento') }}
+                        </button>
+                    </div>
+
+                    <div id="expiry-banner" class="mp-alert mp-alert-warning mt-5" role="status" hidden>
+                        <x-icon name="alarm" class="mt-0.5 text-[22px]" />
+                        <div class="flex-1">
+                            <p class="font-semibold">{{ __('Documentos por vencer') }}</p>
+                            <ul id="expiry-list" class="mt-1 list-inside list-disc space-y-1 text-[15px]"></ul>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 flex flex-wrap gap-2" aria-label="{{ __('Filtrar documentos') }}">
+                        @php($filters = [
+                            'all' => __('Todos'),
+                            'document' => __('Documentos'),
+                            'ticket' => __('Boletos y pases'),
+                            'card' => __('Tarjetas'),
+                            'other' => __('Otros'),
+                        ])
+                        @foreach ($filters as $filter => $label)
+                            <button type="button" data-filter="{{ $filter }}" aria-pressed="{{ $filter === 'all' ? 'true' : 'false' }}"
+                                    class="mp-filter">
+                                {{ $label }}
+                                <span data-filter-count="{{ $filter }}" class="text-sm font-bold opacity-80">0</span>
+                            </button>
+                        @endforeach
+                    </div>
+
+                    <div id="items-empty" class="mp-empty mt-5" hidden>
+                        <span class="flex h-14 w-14 items-center justify-center rounded-full bg-surface-container-high text-outline">
+                            <x-icon name="folder_open" class="text-[28px]" />
+                        </span>
+                        <p id="items-empty-title" class="mt-3 font-semibold text-on-surface">{{ __('No tienes documentos todavía.') }}</p>
+                        <p id="items-empty-copy" class="mp-hint mt-1">{{ __('Agrega tu primer documento y quedará cifrado antes de salir de tu equipo.') }}</p>
+                    </div>
+
+                    <ul id="item-list" class="mp-grid-docs mt-5"></ul>
+                </section>
+
+                <section id="panel-family" role="tabpanel" aria-labelledby="tab-btn-family" hidden>
+                    <div class="space-y-5">
+                        <section class="mp-card mp-card-pad">
+                            <div class="flex items-start gap-4">
+                                <span class="mp-icon-tile">
+                                    <x-icon name="person_add" class="text-[24px]" />
+                                </span>
+                                <div>
+                                    <h2 class="mp-title-md">{{ __('Familia') }}</h2>
+                                    <p class="mp-body-sm mt-1">{{ __('Agrega a una persona por su correo. Cada envío requiere aceptación.') }}</p>
+                                </div>
+                            </div>
+
+                            <form id="contact-form" class="mt-5 flex flex-col gap-2 sm:flex-row">
+                                <div class="relative flex-1">
+                                    <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+                                        <x-icon name="mail" class="text-[21px]" />
+                                    </span>
+                                    <input id="contact-email" type="email" required placeholder="{{ __('correo@ejemplo.com') }}"
+                                           class="mp-input pl-12">
+                                </div>
+                                <button type="submit" class="mp-btn mp-btn-primary shrink-0">
+                                    <x-icon name="person_add" class="text-[20px]" />
+                                    {{ __('Agregar contacto') }}
+                                </button>
+                            </form>
+
+                            <p id="contact-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                            <p id="contact-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+                        </section>
+
+                        <section>
+                            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="mp-title-md flex items-center gap-2">
+                                    <x-icon name="contacts" class="text-[24px] text-primary" />
+                                    {{ __('Contactos') }}
+                                </h3>
+                            </div>
+                            <div id="contacts-empty" class="mp-empty" hidden>
+                                <x-icon name="group_off" class="text-[34px] text-outline" />
+                                <p class="mt-2 font-semibold">{{ __('Todavía no tienes contactos aceptados.') }}</p>
+                            </div>
+                            <ul id="contact-list" class="space-y-3"></ul>
+                        </section>
+
+                        <section class="mp-card mp-card-pad">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="mp-title-md flex items-center gap-2">
+                                    <x-icon name="inbox" class="text-[24px] text-primary" />
+                                    {{ __('Compartido conmigo') }}
+                                </h3>
+                                <p id="share-status" class="text-[15px] font-medium text-primary" role="status"></p>
+                            </div>
+                            <p id="share-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+                            <div id="shares-empty" class="mp-empty mt-3" hidden>
+                                <x-icon name="drafts" class="text-[34px] text-outline" />
+                                <p class="mt-2 font-semibold">{{ __('No tienes envíos pendientes.') }}</p>
+                            </div>
+                            <ul id="share-inbox" class="mt-3 space-y-3"></ul>
+                        </section>
+
+                        <section class="mp-card mp-card-pad">
+                            <h3 class="mp-title-md flex items-center gap-2">
+                                <x-icon name="contact_support" class="text-[24px] text-primary" />
+                                {{ __('Solicitudes de documentos') }}
+                            </h3>
+
+                            <form id="request-form" class="mt-4 grid gap-3 md:grid-cols-3">
+                                <div>
+                                    <label for="request-contact" class="mp-label">{{ __('Contacto') }}</label>
+                                    <select id="request-contact" class="mp-select"></select>
+                                </div>
+                                <div>
+                                    <label for="request-type" class="mp-label">{{ __('Tipo de documento') }}</label>
+                                    <input id="request-type" type="text" required placeholder="{{ __('Documento') }}" class="mp-input">
+                                </div>
+                                <div>
+                                    <label for="request-purpose" class="mp-label">{{ __('Para qué lo necesitas') }}</label>
+                                    <input id="request-purpose" type="text" required placeholder="{{ __('Ej. Trámite bancario') }}" class="mp-input">
+                                </div>
+                                <div class="md:col-span-3 flex justify-end">
+                                    <button type="submit" class="mp-btn mp-btn-primary">
+                                        <x-icon name="send" class="text-[20px]" />
+                                        {{ __('Solicitar') }}
+                                    </button>
+                                </div>
+                            </form>
+
+                            <p id="request-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                            <p id="request-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+                            <div id="requests-empty" class="mp-empty mt-3" hidden>
+                                <x-icon name="notifications_off" class="text-[34px] text-outline" />
+                                <p class="mt-2 font-semibold">{{ __('No hay solicitudes pendientes.') }}</p>
+                            </div>
+                            <ul id="request-list" class="mt-3 space-y-3"></ul>
+                        </section>
+                    </div>
+                </section>
+
+                <section id="panel-devices" role="tabpanel" aria-labelledby="tab-btn-devices" hidden>
+                    <div class="space-y-5">
+                        <section class="mp-card mp-card-pad">
+                            <div class="flex items-start gap-4">
+                                <span class="mp-icon-tile">
+                                    <x-icon name="phone_android" class="text-[24px]" />
+                                </span>
+                                <div>
+                                    <h2 class="mp-title-md">{{ __('Conectar un celular') }}</h2>
+                                    <p class="mp-body-sm mt-1">{{ __('Genera un código y escríbelo en la app de Android. La bóveda se transferirá cifrada.') }}</p>
+                                </div>
+                            </div>
+
+                            <button id="pairing-create" type="button" class="mp-btn mp-btn-primary mt-4">
+                                <x-icon name="qr_code_2" class="text-[21px]" />
+                                {{ __('Generar código') }}
+                            </button>
+
+                            <div id="pairing-code-box" class="mt-5 rounded-2xl border border-outline-variant/60 bg-surface-container-low p-5" hidden>
+                                <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                                    <div>
+                                        <p class="text-sm font-bold uppercase tracking-[0.12em] text-primary">{{ __('Código de conexión') }}</p>
+                                        <p id="pairing-code" class="mt-2 font-mono text-[34px] font-bold tracking-[0.18em] text-on-surface"></p>
+                                    </div>
+                                    <button id="pairing-copy" type="button" class="mp-btn mp-btn-secondary mp-btn-sm shrink-0">
+                                        <x-icon name="content_copy" class="text-[19px]" />
+                                        {{ __('Copiar') }}
+                                    </button>
+                                </div>
+                                <p class="mp-hint mt-3">{{ __('Válido por 10 minutos. No compartas este código con nadie ajeno a tu red de confianza.') }}</p>
+                                <p id="pairing-status" class="mt-3 text-[15px] font-semibold text-primary" role="status"></p>
+                                <p id="pairing-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+                            </div>
+
+                            <div class="mt-4 flex items-start gap-3 rounded-xl bg-surface-container-low p-4">
+                                <x-icon name="verified_user" class="mt-0.5 text-[21px] text-primary" />
+                                <p class="mp-hint">{{ __('La llave maestra viaja cifrada con la llave pública del celular. El servidor no puede leerla.') }}</p>
+                            </div>
+                        </section>
+
+                        <section class="mp-card mp-card-pad">
+                            <div class="flex items-start gap-4">
+                                <span class="mp-icon-tile">
+                                    <x-icon name="devices" class="text-[24px]" />
+                                </span>
+                                <div>
+                                    <h2 class="mp-title-md">{{ __('Dispositivos conectados') }}</h2>
+                                    <p class="mp-body-sm mt-1">{{ __('Equipos autorizados para descifrar y sincronizar tu bóveda con un código seguro de un solo uso.') }}</p>
+                                </div>
+                            </div>
+
+                            <p id="device-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                            <p id="device-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+
+                            <div class="mt-4 flex flex-col justify-between gap-3 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 sm:flex-row sm:items-center">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-primary">
+                                        <x-icon name="laptop_mac" class="text-[24px]" />
+                                    </span>
+                                    <div>
+                                        <p class="font-semibold text-on-surface">{{ __('Esta computadora') }}</p>
+                                        <p class="text-sm text-on-surface-variant">{{ __('Sesión actual · Llave maestra en memoria temporal') }}</p>
+                                    </div>
+                                </div>
+                                <span class="mp-badge mp-badge-primary self-start sm:self-center">{{ __('En línea') }}</span>
+                            </div>
+
+                            <ul id="device-list" class="mt-3 space-y-3"></ul>
+                        </section>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </div>
+
+    <dialog id="add-document-modal" class="mp-dialog" aria-labelledby="add-document-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="note_add" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="add-document-title" class="mp-title-md">{{ __('Nuevo documento') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('El archivo se cifra en tu navegador antes de subirse.') }}</p>
+                    </div>
+                </div>
+                <button id="add-document-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <form id="add-form" class="space-y-4">
+                <div>
+                    <label for="item-title" class="mp-label">{{ __('Título') }} <span class="text-error">*</span></label>
+                    <input id="item-title" type="text" required maxlength="200" class="mp-input" placeholder="{{ __('Escribe un título.') }}">
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="item-type" class="mp-label">{{ __('Tipo') }}</label>
+                        <select id="item-type" class="mp-select">
+                            <option value="document">{{ __('Documento') }}</option>
+                            <option value="ticket">{{ __('Boleto o pase') }}</option>
+                            <option value="card">{{ __('Tarjeta') }}</option>
+                            <option value="other">{{ __('Otro') }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="item-expires" class="mp-label">{{ __('Caducidad (opcional)') }}</label>
+                        <input id="item-expires" type="date" class="mp-input">
+                    </div>
+                </div>
+
+                <div>
+                    <span class="mp-label">{{ __('Archivo') }}</span>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <label for="item-file" class="mp-btn mp-btn-secondary mp-btn-sm w-fit cursor-pointer">
+                            <x-icon name="upload_file" class="text-[20px]" />
+                            {{ __('Elegir archivo') }}
+                        </label>
+                        <span id="item-file-name" class="mp-hint">{{ __('PDF o imagen · máximo 100 MB') }}</span>
+                    </div>
+                    <input id="item-file" type="file" accept="application/pdf,image/*" class="sr-only">
+                </div>
+
+                <p id="add-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
+                <p id="add-status" class="text-[15px] font-medium text-primary" role="status"></p>
+
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button id="add-document-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
+                    <button id="add-submit" type="submit" class="mp-btn mp-btn-primary">
+                        <x-icon name="save" class="text-[20px]" />
+                        {{ __('Guardar en mi bóveda') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <dialog id="share-modal" class="mp-dialog" aria-labelledby="share-modal-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="forward_to_inbox" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="share-modal-title" class="mp-title-md">{{ __('Enviar a un contacto') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Transfiere este documento cifrado de extremo a extremo.') }}</p>
+                    </div>
+                </div>
+                <button id="share-modal-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <div class="mb-4 flex items-center gap-3 rounded-xl bg-surface-container-low p-4">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
+                    <x-icon name="description" class="text-[22px]" />
+                </span>
+                <div class="min-w-0">
+                    <p class="text-sm text-on-surface-variant">{{ __('Documento a transferir') }}</p>
+                    <p id="share-modal-item" class="truncate font-semibold text-on-surface"></p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="share-contact" class="mp-label">{{ __('Contacto') }}</label>
+                    <select id="share-contact" class="mp-select"></select>
+                </div>
+
+                <div>
+                    <label for="share-mode" class="mp-label">{{ __('Forma de envío') }}</label>
+                    <select id="share-mode" class="mp-select">
+                        <option value="copy">{{ __('Enviar copia') }} — {{ __('el documento se queda en tu bóveda') }}</option>
+                        <option value="transfer">{{ __('Transferir') }} — {{ __('cede la titularidad') }}</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="share-expires" class="mp-label">{{ __('Caducidad (opcional)') }}</label>
+                    <input id="share-expires" type="date" class="mp-input">
+                    <p class="mp-hint mt-1.5">{{ __('Si es una copia, caduca automáticamente en el dispositivo receptor.') }}</p>
+                </div>
+
+                <p class="mp-alert mp-alert-warning" role="note">
+                    <x-icon name="warning" class="mt-0.5 text-[21px]" />
+                    <span>{{ __('Al transferir, el documento saldrá de tu bóveda.') }}</span>
+                </p>
+
+                <p id="share-send-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
+            </div>
+
+            <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button id="share-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
+                <button id="share-send" type="button" class="mp-btn mp-btn-primary">
+                    <x-icon name="send" class="text-[20px]" />
+                    {{ __('Enviar') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="manage-access-modal" class="mp-dialog" aria-labelledby="manage-access-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="manage_accounts" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="manage-access-title" class="mp-title-md">{{ __('Gestionar acceso') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Revisa los envíos activos y cancela los que ya no necesites.') }}</p>
+                    </div>
+                </div>
+                <button id="manage-access-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+            <div id="manage-access-list" class="space-y-3"></div>
+            <div class="mt-5 flex justify-end">
+                <button id="manage-access-done" type="button" class="mp-btn mp-btn-secondary">{{ __('Cerrar') }}</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="confirm-modal" class="mp-dialog" aria-labelledby="confirm-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-error-container text-on-error-container">
+                        <x-icon name="warning" class="text-[23px]" />
+                    </span>
+                    <div>
+                        <h2 id="confirm-title" class="mp-title-sm">{{ __('Confirmar acción') }}</h2>
+                        <p id="confirm-message" class="mp-hint mt-1"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button id="confirm-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
+                <button id="confirm-accept" type="button" class="mp-btn mp-btn-danger">{{ __('Continuar') }}</button>
+            </div>
+        </div>
+    </dialog>
+
+    <div id="vault-toast" class="mp-toast" role="status" hidden></div>
+</x-layout>

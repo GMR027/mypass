@@ -1,0 +1,24 @@
+# Android
+android/.gradle/
+android/local.properties
+android/keystore.properties
+android/keystore/
+android/**/build/
+android/captures/
+*.apk
+*.aab
+
+# PHP / Laravel
+server/vendor/
+server/node_modules/
+server/public/build/
+server/public/hot
+server/storage/*.key
+server/.env
+server/.env.testing
+
+# Editores
+.idea/
+.vscode/
+*.iml
+.DS_Store

@@ -1,0 +1,2098 @@
+import sodium from 'libsodium-wrappers-sumo';
+
+const t = (key) => window.mypassT ? window.mypassT(key) : key;
+const tf = (key, values) => window.mypassTF ? window.mypassTF(key, values) : key;
+const dateLocale = () => (window.mypassLocale === 'en' ? 'en-US' : 'es-MX');
+
+const app = document.getElementById('vault-app');
+const loading = document.getElementById('vault-loading');
+const vaultError = document.getElementById('vault-error');
+const noKeys = document.getElementById('vault-no-keys');
+const locked = document.getElementById('vault-locked');
+const unlocked = document.getElementById('vault-unlocked');
+const unlockForm = document.getElementById('unlock-form');
+const unlockError = document.getElementById('unlock-error');
+const passphraseInput = document.getElementById('vault-passphrase');
+const recoveryFile = document.getElementById('recovery-file');
+const recoveryDropZone = document.getElementById('recovery-drop-zone');
+const recoveryFileStatus = document.getElementById('recovery-file-status');
+const recoveryFileError = document.getElementById('recovery-file-error');
+const lockButton = document.getElementById('vault-lock');
+const addForm = document.getElementById('add-form');
+const addError = document.getElementById('add-error');
+const addStatus = document.getElementById('add-status');
+const addSubmit = document.getElementById('add-submit');
+const itemList = document.getElementById('item-list');
+const itemFileName = document.getElementById('item-file-name');
+const expiryBanner = document.getElementById('expiry-banner');
+const expiryList = document.getElementById('expiry-list');
+const itemsEmpty = document.getElementById('items-empty');
+const pairingCreate = document.getElementById('pairing-create');
+const pairingCodeBox = document.getElementById('pairing-code-box');
+const pairingCode = document.getElementById('pairing-code');
+const pairingStatus = document.getElementById('pairing-status');
+const pairingError = document.getElementById('pairing-error');
+const deviceList = document.getElementById('device-list');
+const deviceStatus = document.getElementById('device-status');
+const deviceError = document.getElementById('device-error');
+const contactForm = document.getElementById('contact-form');
+const contactEmail = document.getElementById('contact-email');
+const contactList = document.getElementById('contact-list');
+const contactStatus = document.getElementById('contact-status');
+const contactError = document.getElementById('contact-error');
+const shareInbox = document.getElementById('share-inbox');
+const shareStatus = document.getElementById('share-status');
+const shareError = document.getElementById('share-error');
+const shareModal = document.getElementById('share-modal');
+const shareModalItem = document.getElementById('share-modal-item');
+const shareContact = document.getElementById('share-contact');
+const shareMode = document.getElementById('share-mode');
+const shareExpires = document.getElementById('share-expires');
+const shareSend = document.getElementById('share-send');
+const shareCancel = document.getElementById('share-cancel');
+const shareSendError = document.getElementById('share-send-error');
+const shareModalClose = document.getElementById('share-modal-close');
+const requestForm = document.getElementById('request-form');
+const requestContact = document.getElementById('request-contact');
+const requestType = document.getElementById('request-type');
+const requestPurpose = document.getElementById('request-purpose');
+const requestList = document.getElementById('request-list');
+const requestStatus = document.getElementById('request-status');
+const requestError = document.getElementById('request-error');
+const contactsEmpty = document.getElementById('contacts-empty');
+const sharesEmpty = document.getElementById('shares-empty');
+const requestsEmpty = document.getElementById('requests-empty');
+const itemsEmptyTitle = document.getElementById('items-empty-title');
+const itemsEmptyCopy = document.getElementById('items-empty-copy');
+const addDocumentModal = document.getElementById('add-document-modal');const addDocumentOpen = document.getElementById('add-document-open');
+const addDocumentClose = document.getElementById('add-document-close');
+const addDocumentCancel = document.getElementById('add-document-cancel');
+const manageAccessModal = document.getElementById('manage-access-modal');
+const manageAccessTitle = document.getElementById('manage-access-title');
+const manageAccessList = document.getElementById('manage-access-list');
+const manageAccessClose = document.getElementById('manage-access-close');
+const manageAccessDone = document.getElementById('manage-access-done');
+const confirmModal = document.getElementById('confirm-modal');
+const confirmTitle = document.getElementById('confirm-title');
+const confirmMessage = document.getElementById('confirm-message');
+const confirmAccept = document.getElementById('confirm-accept');
+const confirmCancel = document.getElementById('confirm-cancel');
+const toast = document.getElementById('vault-toast');
+const pairingCopy = document.getElementById('pairing-copy');
+
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+const keysUrl = app?.dataset.keysUrl;
+const itemsUrl = app?.dataset.itemsUrl;
+const blobsUrl = app?.dataset.blobsUrl;
+const blobBase = app?.dataset.blobBase;
+const pairingUrl = app?.dataset.pairingUrl;
+const pairingBase = app?.dataset.pairingBase;
+const devicesUrl = app?.dataset.devicesUrl;
+const deviceBase = app?.dataset.deviceBase;
+const contactsUrl = app?.dataset.contactsUrl;
+const sharesUrl = app?.dataset.sharesUrl;
+const shareBase = app?.dataset.shareBase;
+const requestsUrl = app?.dataset.requestsUrl;
+const requestBase = app?.dataset.requestBase;
+
+const MAGIC = new Uint8Array([0x4d, 0x59, 0x50, 0x44]); // MYPD
+const VERSION = 1;
+const CHUNK_SIZE = 1024 * 1024;
+const HEADER_SIZE = 4 + 1 + 4 + 8 + 16;
+
+let masterKey = null;
+let items = [];
+let keysCache = null;
+let pairingTimer = null;
+let pairingSessionId = null;
+let pairingBusy = false;
+let identityPublicKey = null;
+let identityPrivateKey = null;
+let acceptedContacts = [];
+let sharingItem = null;
+let outgoingShares = [];
+let currentFilter = 'all';
+let toastTimer = null;
+
+const toB64 = (bytes) => sodium.to_base64(bytes, sodium.base64_variants.ORIGINAL);
+const fromB64 = (value) => sodium.from_base64(value, sodium.base64_variants.ORIGINAL);
+const toJson = (value) => sodium.from_string(JSON.stringify(value));
+
+function showError(element, message) {
+    element.textContent = message;
+    element.hidden = false;
+}
+
+function hideError(element) {
+    element.hidden = true;
+}
+
+function el(tag, className = '', text = null) {
+    const node = document.createElement(tag);
+    if (className) {
+        node.className = className;
+    }
+    if (text !== null) {
+        node.textContent = text;
+    }
+
+    return node;
+}
+
+function icon(name, className = '') {
+    const node = el('span', ['material-symbols-outlined', className].filter(Boolean).join(' '), name);
+    node.setAttribute('aria-hidden', 'true');
+
+    return node;
+}
+
+function showToast(message) {
+    if (!toast) {
+        return;
+    }
+
+    toast.textContent = message;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toast.hidden = true;
+    }, 3500);
+}
+
+function setButtonText(button, text) {
+    if (!button) {
+        return;
+    }
+
+    const iconNode = button.querySelector('.material-symbols-outlined');
+    button.replaceChildren();
+    if (iconNode) {
+        button.appendChild(iconNode);
+    }
+    button.appendChild(document.createTextNode(text));
+}
+
+function openDialog(dialog) {
+    if (!dialog || dialog.open) {
+        return;
+    }
+
+    dialog.showModal();
+}
+
+function closeDialog(dialog) {
+    if (dialog?.open) {
+        dialog.close();
+    }
+}
+
+let confirmResolver = null;
+
+function resolveConfirm(value) {
+    closeDialog(confirmModal);
+    confirmResolver?.(value);
+    confirmResolver = null;
+}
+
+function confirmAction({ title = t('Confirmar acción'), message, acceptLabel = t('Continuar') }) {
+    if (!confirmModal) {
+        return Promise.resolve(window.confirm(message));
+    }
+
+    confirmTitle.textContent = title;
+    confirmMessage.textContent = message;
+    confirmAccept.textContent = acceptLabel;
+    openDialog(confirmModal);
+
+    return new Promise((resolve) => {
+        confirmResolver = resolve;
+    });
+}
+
+function setupConfirmDialog() {
+    confirmAccept?.addEventListener('click', () => resolveConfirm(true));
+    confirmCancel?.addEventListener('click', () => resolveConfirm(false));
+    confirmModal?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        resolveConfirm(false);
+    });
+}
+
+function seal(message, key) {
+    const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+    const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+        message,
+        new Uint8Array(0),
+        null,
+        nonce,
+        key,
+    );
+
+    const combined = new Uint8Array(nonce.length + ciphertext.length);
+    combined.set(nonce, 0);
+    combined.set(ciphertext, nonce.length);
+
+    return combined;
+}
+
+function open(combined, key) {
+    const bytes = typeof combined === 'string' ? fromB64(combined) : combined;
+    const nonceLength = sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
+    const nonce = bytes.slice(0, nonceLength);
+    const ciphertext = bytes.slice(nonceLength);
+
+    return sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+        null,
+        ciphertext,
+        new Uint8Array(0),
+        nonce,
+        key,
+    );
+}
+
+function encryptJson(value) {
+    return toB64(seal(toJson(value), masterKey));
+}
+
+function decryptJson(value) {
+    return JSON.parse(sodium.to_string(open(value, masterKey)));
+}
+
+function writeUint32(view, offset, value) {
+    view.setUint32(offset, value, true);
+}
+
+function readUint32(view, offset) {
+    return view.getUint32(offset, true);
+}
+
+function makeNonce(prefix, counter) {
+    const nonce = new Uint8Array(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+    nonce.set(prefix, 0);
+    nonce[16] = counter & 0xff;
+    nonce[17] = (counter >>> 8) & 0xff;
+    nonce[18] = (counter >>> 16) & 0xff;
+    nonce[19] = (counter >>> 24) & 0xff;
+
+    return nonce;
+}
+
+function encryptFile(bytes) {
+    const prefix = sodium.randombytes_buf(16);
+    const header = new Uint8Array(HEADER_SIZE);
+    const view = new DataView(header.buffer);
+    header.set(MAGIC, 0);
+    header[4] = VERSION;
+    writeUint32(view, 5, CHUNK_SIZE);
+    view.setBigUint64(9, BigInt(bytes.length), true);
+    header.set(prefix, 17);
+
+    const parts = [header];
+    let counter = 0;
+
+    for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
+        const chunk = bytes.slice(offset, Math.min(offset + CHUNK_SIZE, bytes.length));
+        const nonce = makeNonce(prefix, counter);
+        const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+            chunk,
+            header,
+            null,
+            nonce,
+            masterKey,
+        );
+        const length = new Uint8Array(4);
+        writeUint32(new DataView(length.buffer), 0, ciphertext.length);
+        parts.push(length, ciphertext);
+        counter += 1;
+    }
+
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+        output.set(part, offset);
+        offset += part.length;
+    }
+
+    return output;
+}
+
+function decryptFile(bytes) {
+    if (bytes.length < HEADER_SIZE) {
+        throw new Error(t('El archivo está incompleto.'));
+    }
+
+    const header = bytes.slice(0, HEADER_SIZE);
+    const magic = header.slice(0, 4);
+    if (!magic.every((value, index) => value === MAGIC[index])) {
+        throw new Error(t('El archivo no tiene el formato de mypass.'));
+    }
+    if (header[4] !== VERSION) {
+        throw new Error(t('La versión del archivo no es compatible.'));
+    }
+
+    const view = new DataView(header.buffer);
+    const chunkSize = readUint32(view, 5);
+    const totalSize = Number(view.getBigUint64(9, true));
+    const prefix = header.slice(17, 33);
+
+    if (chunkSize < 1 || chunkSize > 16 * 1024 * 1024) {
+        throw new Error(t('El tamaño de bloque no es válido.'));
+    }
+
+    const parts = [];
+    let offset = HEADER_SIZE;
+    let counter = 0;
+    let written = 0;
+
+    while (offset < bytes.length) {
+        if (offset + 4 > bytes.length) {
+            throw new Error(t('El archivo está truncado.'));
+        }
+
+        const lengthView = new DataView(bytes.buffer, bytes.byteOffset + offset, 4);
+        const length = lengthView.getUint32(0, true);
+        offset += 4;
+
+        if (length < 16 || offset + length > bytes.length) {
+            throw new Error(t('El archivo está dañado.'));
+        }
+
+        const ciphertext = bytes.slice(offset, offset + length);
+        offset += length;
+        const nonce = makeNonce(prefix, counter);
+        const chunk = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+            null,
+            ciphertext,
+            header,
+            nonce,
+            masterKey,
+        );
+        parts.push(chunk);
+        written += chunk.length;
+        counter += 1;
+
+        if (written > totalSize) {
+            throw new Error(t('El archivo excede el tamaño esperado.'));
+        }
+    }
+
+    if (written !== totalSize) {
+        throw new Error(t('El archivo está incompleto.'));
+    }
+
+    const output = new Uint8Array(written);
+    let cursor = 0;
+    for (const part of parts) {
+        output.set(part, cursor);
+        cursor += part.length;
+    }
+
+    return output;
+}
+
+async function fetchKeys() {
+    if (keysCache) {
+        return keysCache;
+    }
+
+    const response = await fetch(keysUrl, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    });
+
+    if (!response.ok) {
+        throw new Error(t('No se pudo consultar la bóveda.'));
+    }
+
+    keysCache = (await response.json()).data;
+
+    return keysCache;
+}
+
+async function finishUnlock(keys, candidateKey) {
+    if (keys.identity_private_keys_encrypted) {
+        const raw = open(keys.identity_private_keys_encrypted, candidateKey);
+        const privateKeys = JSON.parse(sodium.to_string(raw));
+        identityPrivateKey = fromB64(privateKeys.encryption);
+    }
+
+    if (keys.identity_public_encryption_key) {
+        identityPublicKey = fromB64(keys.identity_public_encryption_key);
+    }
+
+    if (masterKey) {
+        sodium.memzero(masterKey);
+    }
+
+    masterKey = candidateKey;
+    passphraseInput.value = '';
+    hideError(unlockError);
+    hideError(recoveryFileError);
+    recoveryFileStatus.textContent = '';
+    locked.hidden = true;
+    unlocked.hidden = false;
+    switchTab('docs');
+    await loadItems();
+    await loadContacts();
+    await loadShares();
+    await loadRequests();
+    await loadDevices();
+}
+
+async function unlock(event) {
+    event.preventDefault();
+    hideError(unlockError);
+
+    const passphrase = passphraseInput.value;
+    const button = unlockForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    setButtonText(button, t('Abriendo…'));
+    let kek = null;
+
+    try {
+        await sodium.ready;
+        const keys = await fetchKeys();
+
+        if (!keys?.pc_wrapped_master_key || !keys.pc_kdf_salt || !keys.pc_kdf_params) {
+            throw new Error(t('La bóveda no tiene una llave de PC configurada.'));
+        }
+
+        const params = keys.pc_kdf_params;
+        kek = sodium.crypto_pwhash(
+            32,
+            sodium.from_string(passphrase),
+            fromB64(keys.pc_kdf_salt),
+            params.ops_limit,
+            params.mem_limit,
+            sodium.crypto_pwhash_ALG_ARGON2ID13,
+        );
+
+        let candidate;
+        try {
+            candidate = open(keys.pc_wrapped_master_key, kek);
+        } catch {
+            throw new Error(t('La llave de la bóveda no es correcta.'));
+        }
+
+        await finishUnlock(keys, candidate);
+    } catch (error) {
+        showError(unlockError, error.message || t('No se pudo abrir la bóveda.'));
+    } finally {
+        if (kek) {
+            sodium.memzero(kek);
+        }
+        button.disabled = false;
+        setButtonText(button, t('Desbloquear'));
+    }
+}
+
+async function unlockFromFile(file) {
+    hideError(recoveryFileError);
+    recoveryFileStatus.textContent = t('Leyendo archivo…');
+
+    let recoveryKek = null;
+
+    try {
+        if (!file.name.toLowerCase().endsWith('.mypss')) {
+            throw new Error(t('El archivo debe tener extensión .mypss.'));
+        }
+
+        if (file.size > 1024 * 1024) {
+            throw new Error(t('El archivo de recuperación es demasiado grande.'));
+        }
+
+        const kit = JSON.parse(await file.text());
+
+        if (kit.format !== 'mypss' || kit.type !== 'recovery-key') {
+            throw new Error(t('El archivo no es un kit de recuperación de mypass.'));
+        }
+
+        const digits = String(kit.key ?? '').replace(/\D/g, '');
+        if (![16, 32].includes(digits.length)) {
+            throw new Error(t('La clave del archivo debe tener 16 o 32 dígitos.'));
+        }
+
+        const keys = await fetchKeys();
+        if (!keys?.recovery_wrapped_master_key || !keys.recovery_nonce) {
+            throw new Error(t('Esta bóveda no tiene una llave de emergencia configurada.'));
+        }
+
+        const kdf = kit.kdf ?? {
+            salt: keys.recovery_kdf_salt,
+            ops_limit: keys.recovery_kdf_params?.ops_limit,
+            mem_limit: keys.recovery_kdf_params?.mem_limit,
+        };
+
+        if (!kdf.salt || !kdf.ops_limit || !kdf.mem_limit) {
+            throw new Error(t('El archivo no contiene los parámetros de la llave.'));
+        }
+
+        recoveryKek = sodium.crypto_pwhash(
+            32,
+            sodium.from_string(digits),
+            fromB64(kdf.salt),
+            kdf.ops_limit,
+            kdf.mem_limit,
+            sodium.crypto_pwhash_ALG_ARGON2ID13,
+        );
+
+        let candidate;
+        try {
+            candidate = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null,
+                fromB64(keys.recovery_wrapped_master_key),
+                new Uint8Array(0),
+                fromB64(keys.recovery_nonce),
+                recoveryKek,
+            );
+        } catch {
+            throw new Error(t('La clave del archivo no corresponde a esta bóveda.'));
+        }
+
+        await finishUnlock(keys, candidate);
+        recoveryFileStatus.textContent = t('Bóveda abierta con la llave de emergencia.');
+        recoveryFile.value = '';
+    } catch (error) {
+        recoveryFileStatus.textContent = '';
+        showError(recoveryFileError, error.message || t('No se pudo abrir el archivo de recuperación.'));
+    } finally {
+        if (recoveryKek) {
+            sodium.memzero(recoveryKek);
+        }
+    }
+}
+
+async function handleRecoveryFile(file) {
+    if (!file) {
+        return;
+    }
+
+    await sodium.ready;
+    await unlockFromFile(file);
+}
+
+function setupRecoveryDropZone() {
+    if (!recoveryDropZone || !recoveryFile) {
+        return;
+    }
+
+    recoveryFile.addEventListener('change', () => {
+        handleRecoveryFile(recoveryFile.files?.[0]);
+    });
+
+    recoveryDropZone.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        recoveryDropZone.classList.add('border-primary', 'bg-surface-container-high');
+    });
+
+    recoveryDropZone.addEventListener('dragleave', () => {
+        recoveryDropZone.classList.remove('border-primary', 'bg-surface-container-high');
+    });
+
+    recoveryDropZone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        recoveryDropZone.classList.remove('border-primary', 'bg-surface-container-high');
+        handleRecoveryFile(event.dataTransfer?.files?.[0]);
+    });
+}
+
+function base64ToBytes(value) {
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+
+function bytesToBase64(bytes) {
+    let binary = '';
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+    }
+
+    return btoa(binary);
+}
+
+function stopPairing() {
+    if (pairingTimer) {
+        clearInterval(pairingTimer);
+        pairingTimer = null;
+    }
+    pairingSessionId = null;
+    pairingBusy = false;
+}
+
+async function approvePairing(sessionId, publicKey) {
+    if (!masterKey) {
+        throw new Error(t('La bóveda está bloqueada.'));
+    }
+
+    const key = await crypto.subtle.importKey(
+        'spki',
+        base64ToBytes(publicKey),
+        { name: 'RSA-OAEP', hash: 'SHA-256' },
+        false,
+        ['encrypt'],
+    );
+    const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, masterKey);
+
+    const response = await fetch(`${pairingBase}/${sessionId}/approve`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            encrypted_master_key: bytesToBase64(new Uint8Array(encrypted)),
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(t('No se pudo autorizar el celular.'));
+    }
+
+    pairingStatus.textContent = t('Celular conectado. Ya puede abrir la bóveda con su PIN.');
+    stopPairing();
+    setTimeout(loadDevices, 5000);
+}
+
+async function pollPairing() {
+    if (!pairingSessionId || pairingBusy) {
+        return;
+    }
+
+    pairingBusy = true;
+
+    try {
+        const response = await fetch(`${pairingBase}/${pairingSessionId}`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            throw new Error(t('No se pudo consultar el estado del celular.'));
+        }
+
+        const data = (await response.json()).data;
+
+        if (data.status === 'joined' && data.public_key) {
+            pairingStatus.textContent = t('Celular detectado. Autorizando…');
+            await approvePairing(pairingSessionId, data.public_key);
+            return;
+        }
+
+        if (data.status === 'approved') {
+            pairingStatus.textContent = t('Celular conectado.');
+            stopPairing();
+            return;
+        }
+
+        if (data.status === 'expired') {
+            throw new Error(t('El código venció. Genera uno nuevo.'));
+        }
+
+        pairingStatus.textContent = t('Esperando a que escribas el código en el celular…');
+    } catch (error) {
+        stopPairing();
+        showError(pairingError, error.message || t('No se pudo conectar el celular.'));
+        pairingStatus.textContent = '';
+    } finally {
+        pairingBusy = false;
+    }
+}
+
+async function loadDevices() {
+    if (!deviceList) {
+        return;
+    }
+
+    deviceList.replaceChildren();
+    hideError(deviceError);
+
+    try {
+        const response = await fetch(devicesUrl, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudieron cargar los celulares.'));
+        }
+
+        const devices = (await response.json()).data ?? [];
+        deviceStatus.textContent = devices.length === 0 ? t('No hay celulares conectados.') : '';
+
+        for (const device of devices) {
+            const item = el('li', 'mp-list-card flex flex-col justify-between gap-3 sm:flex-row sm:items-center');
+
+            const info = el('div', 'flex items-start gap-3');
+            const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-surface-container-high text-primary');
+            tile.appendChild(icon(device.platform === 'android' ? 'smartphone' : 'devices', 'text-[24px]'));
+
+            const text = el('div');
+            const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+            titleRow.appendChild(el('p', 'font-semibold text-on-surface', device.name));
+            titleRow.appendChild(el(
+                'span',
+                device.revoked_at ? 'mp-badge mp-badge-danger' : 'mp-badge mp-badge-primary',
+                device.revoked_at ? t('Bloqueado') : t('Activo'),
+            ));
+            text.appendChild(titleRow);
+
+            const details = [
+                device.platform,
+                device.last_seen_at
+                    ? tf('Última conexión: :date', { date: new Date(device.last_seen_at).toLocaleString(dateLocale()) })
+                    : null,
+            ].filter(Boolean).join(' · ');
+            text.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', details));
+
+            info.append(tile, text);
+            item.appendChild(info);
+
+            if (!device.revoked_at) {
+                const revoke = el('button', 'mp-btn mp-btn-danger mp-btn-sm self-start sm:self-center', t('Bloquear y borrar datos'));
+                revoke.type = 'button';
+                revoke.addEventListener('click', () => revokeDevice(device.id, revoke));
+                item.appendChild(revoke);
+            }
+
+            deviceList.appendChild(item);
+        }
+    } catch (error) {
+        showError(deviceError, error.message || t('No se pudieron cargar los celulares.'));
+    }
+}
+
+async function revokeDevice(id, button) {
+    const confirmed = await confirmAction({
+        title: t('¿Bloquear este celular?'),
+        message: t('En su siguiente conexión borrará la copia local.'),
+        acceptLabel: t('Bloquear y borrar datos'),
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${deviceBase}/${id}/revoke`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo bloquear el celular.'));
+        }
+        await loadDevices();
+        showToast(t('Celular bloqueado.'));
+    } catch (error) {
+        showError(deviceError, error.message || t('No se pudo bloquear el celular.'));
+        button.disabled = false;
+    }
+}
+
+let contacts = [];
+
+async function loadContacts() {
+    if (!contactList) {
+        return;
+    }
+
+    hideError(contactError);
+    contactList.replaceChildren();
+
+    try {
+        const response = await fetch(contactsUrl, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudieron cargar los contactos.'));
+        }
+
+        contacts = (await response.json()).data ?? [];
+        acceptedContacts = contacts.filter((contact) => contact.status === 'accepted');
+        contactStatus.textContent = contacts.length === 0
+            ? ''
+            : tf(':count contacto(s) de confianza.', { count: acceptedContacts.length });
+        contactsEmpty.hidden = contacts.length > 0;
+
+        for (const contact of contacts) {
+            renderContactCard(contact);
+        }
+
+        shareContact.replaceChildren();
+        requestContact.replaceChildren();
+        for (const contact of acceptedContacts) {
+            const option = document.createElement('option');
+            option.value = contact.id;
+            option.textContent = tf(':name (:email)', { name: contact.name, email: contact.email });
+            shareContact.appendChild(option);
+            requestContact.appendChild(option.cloneNode(true));
+        }
+        if (acceptedContacts.length === 0) {
+            for (const select of [shareContact, requestContact]) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = t('No hay contactos aceptados');
+                select.appendChild(option);
+            }
+        }
+
+        renderItems();
+    } catch (error) {
+        showError(contactError, error.message || t('No se pudieron cargar los contactos.'));
+    }
+}
+
+function renderContactCard(contact) {
+    const item = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
+    const info = el('div', 'flex items-start gap-3');
+
+    const avatar = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-lg font-bold uppercase text-primary', (contact.name || contact.email).slice(0, 1));
+    const body = el('div');
+    const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+    titleRow.appendChild(el('p', 'font-semibold text-on-surface', contact.name));
+    titleRow.appendChild(el('span', 'text-outline', '·'));
+    titleRow.appendChild(el('span', 'text-sm text-on-surface-variant mp-break', contact.email));
+    titleRow.appendChild(el(
+        'span',
+        contact.status === 'accepted' ? 'mp-badge mp-badge-primary' : contact.status === 'pending' ? 'mp-badge mp-badge-warning' : 'mp-badge mp-badge-danger',
+        {
+            pending: t('Pendiente de aceptación'),
+            accepted: t('Contacto de confianza'),
+            blocked: t('Bloqueado'),
+        }[contact.status] ?? contact.status,
+    ));
+    body.appendChild(titleRow);
+    body.appendChild(el(
+        'p',
+        'mt-1 text-sm text-on-surface-variant',
+        contact.status === 'accepted'
+            ? t('Llave de intercambio verificada · Envíos cifrados habilitados')
+            : contact.status === 'pending'
+                ? t('Recibió invitación. Esperando confirmación de su llave de intercambio.')
+                : t('Este contacto ya no puede recibir envíos.'),
+    ));
+
+    info.append(avatar, body);
+    item.appendChild(info);
+
+    const actions = el('div', 'flex flex-wrap items-center gap-2 self-start md:self-center');
+
+    if (contact.status === 'pending') {
+        const accept = el('button', 'mp-btn mp-btn-primary mp-btn-sm', t('Aceptar contacto'));
+        accept.type = 'button';
+        accept.addEventListener('click', () => acceptContact(contact.id));
+        actions.appendChild(accept);
+    }
+
+    if (contact.status === 'accepted') {
+        const manage = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Gestionar acceso'));
+        manage.type = 'button';
+        manage.addEventListener('click', () => openManageAccess(contact));
+        actions.appendChild(manage);
+    }
+
+    if (contact.status !== 'blocked') {
+        const block = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Bloquear y borrar datos'));
+        block.type = 'button';
+        block.addEventListener('click', () => blockContact(contact, block));
+        actions.appendChild(block);
+    }
+
+    if (actions.childElementCount > 0) {
+        item.appendChild(actions);
+    }
+
+    contactList.appendChild(item);
+}
+
+async function blockContact(contact, button) {
+    const confirmed = await confirmAction({
+        title: t('¿Bloquear este contacto?'),
+        message: t('Se bloquearán los envíos con :name. Esta acción no se puede deshacer.', { name: contact.name }),
+        acceptLabel: t('Bloquear y borrar datos'),
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${contactsUrl}/${contact.id}/block`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo bloquear el contacto.'));
+        }
+        await loadContacts();
+        await loadShares();
+        showToast(t('Contacto bloqueado.'));
+    } catch (error) {
+        showError(contactError, error.message || t('No se pudo bloquear el contacto.'));
+        button.disabled = false;
+    }
+}
+
+function shareStatusLabel(status) {
+    return {
+        pending: t('Pendiente'),
+        accepted: t('Aceptado'),
+        declined: t('Rechazado'),
+        revoked: t('Cancelado'),
+        expired: t('Vencido'),
+    }[status] ?? status;
+}
+
+function openManageAccess(contact) {
+    if (!manageAccessModal) {
+        return;
+    }
+
+    manageAccessTitle.textContent = tf('Acceso de :name', { name: contact.name });
+    manageAccessList.replaceChildren();
+
+    const shares = outgoingShares.filter((share) => share.recipient === contact.name && ['pending', 'accepted'].includes(share.status));
+
+    if (shares.length === 0) {
+        const empty = el('div', 'mp-empty');
+        empty.appendChild(icon('folder_shared', 'text-[32px] text-outline'));
+        empty.appendChild(el('p', 'mt-2 font-semibold text-on-surface', t('No hay envíos activos con este contacto.')));
+        manageAccessList.appendChild(empty);
+    }
+
+    for (const share of shares) {
+        const row = el('div', 'mp-list-card flex flex-col justify-between gap-3 sm:flex-row sm:items-center');
+        const info = el('div');
+        const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+        titleRow.appendChild(el('p', 'font-semibold text-on-surface', typeLabel(share.item_type)));
+        titleRow.appendChild(el(
+            'span',
+            share.status === 'pending' ? 'mp-badge mp-badge-warning' : share.status === 'accepted' ? 'mp-badge mp-badge-primary' : 'mp-badge mp-badge-neutral',
+            shareStatusLabel(share.status),
+        ));
+        titleRow.appendChild(el('span', 'mp-badge mp-badge-neutral', share.mode === 'transfer' ? t('Transferencia') : t('Copia')));
+        info.appendChild(titleRow);
+        info.appendChild(el(
+            'p',
+            'mt-1 text-sm text-on-surface-variant',
+            share.expires_at
+                ? tf('Caduca: :date', { date: new Date(share.expires_at).toLocaleDateString(dateLocale()) })
+                : t('Sin caducidad'),
+        ));
+        row.appendChild(info);
+
+        if (share.status === 'pending') {
+            const revoke = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Cancelar envío'));
+            revoke.type = 'button';
+            revoke.addEventListener('click', () => revokeShare(share.id, revoke));
+            row.appendChild(revoke);
+        }
+
+        manageAccessList.appendChild(row);
+    }
+
+    openDialog(manageAccessModal);
+}
+
+async function revokeShare(id, button) {
+    const confirmed = await confirmAction({
+        title: t('¿Cancelar este envío?'),
+        message: t('La otra persona ya no podrá aceptar este documento.'),
+        acceptLabel: t('Cancelar envío'),
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${shareBase}/${id}/revoke`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || t('No se pudo cancelar el envío.'));
+        }
+        closeDialog(manageAccessModal);
+        await loadShares();
+        await loadItems();
+        showToast(t('Envío cancelado.'));
+    } catch (error) {
+        showError(shareError, error.message || t('No se pudo cancelar el envío.'));
+        button.disabled = false;
+    }
+}
+
+async function addContact(event) {
+    event.preventDefault();
+    hideError(contactError);
+
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    button.textContent = t('Agregando…');
+
+    try {
+        const response = await fetch(contactsUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ email: contactEmail.value.trim() }),
+        });
+
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || t('No se pudo agregar el contacto.'));
+        }
+
+        contactEmail.value = '';
+        contactStatus.textContent = t('Solicitud enviada. La otra persona debe aceptarla.');
+        await loadContacts();
+    } catch (error) {
+        showError(contactError, error.message || t('No se pudo agregar el contacto.'));
+    } finally {
+        button.disabled = false;
+        button.textContent = t('Agregar contacto');
+    }
+}
+
+async function acceptContact(id) {
+    hideError(contactError);
+
+    try {
+        const response = await fetch(`${contactsUrl}/${id}/accept`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo aceptar el contacto.'));
+        }
+        await loadContacts();
+    } catch (error) {
+        showError(contactError, error.message || t('No se pudo aceptar el contacto.'));
+    }
+}
+
+async function loadShares() {
+    if (!shareInbox) {
+        return;
+    }
+
+    hideError(shareError);
+    shareInbox.replaceChildren();
+
+    try {
+        const response = await fetch(sharesUrl, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo consultar lo compartido.'));
+        }
+
+        const body = await response.json();
+        const incoming = (body.incoming ?? []).filter((share) => share.status === 'pending');
+        outgoingShares = body.outgoing ?? [];
+        shareStatus.textContent = incoming.length === 0 ? '' : tf(':count envío(s) pendiente(s).', { count: incoming.length });
+        sharesEmpty.hidden = incoming.length > 0;
+
+        for (const share of incoming) {
+            const item = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
+            const info = el('div', 'flex items-start gap-3');
+
+            const tile = el('span', share.mode === 'transfer' ? 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary-fixed text-on-secondary-fixed' : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
+            tile.appendChild(icon(share.item_type === 'ticket' ? 'confirmation_number' : 'description', 'text-[24px]'));
+
+            const text = el('div');
+            const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+            titleRow.appendChild(el(
+                'p',
+                'font-semibold text-on-surface',
+                tf(share.item_type === 'ticket' ? ':sender te envió un boleto' : ':sender te envió un documento', { sender: share.sender }),
+            ));
+            titleRow.appendChild(el('span', share.mode === 'transfer' ? 'mp-badge mp-badge-warning' : 'mp-badge mp-badge-neutral', share.mode === 'transfer' ? t('Transferencia') : t('Copia')));
+            if (share.expires_at) {
+                titleRow.appendChild(el('span', 'mp-badge mp-badge-danger', tf('Caduca: :date', { date: new Date(share.expires_at).toLocaleDateString(dateLocale()) })));
+            }
+            text.appendChild(titleRow);
+            text.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', t('Cifrado de punto a punto para tu dispositivo.')));
+
+            info.append(tile, text);
+            item.appendChild(info);
+
+            const actions = el('div', 'flex flex-wrap items-center gap-2 self-start md:self-center');
+
+            const accept = el('button', 'mp-btn mp-btn-primary mp-btn-sm', t('Aceptar'));
+            accept.type = 'button';
+            accept.addEventListener('click', () => acceptShare(share.id, accept));
+            actions.appendChild(accept);
+
+            const decline = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Rechazar'));
+            decline.type = 'button';
+            decline.addEventListener('click', () => declineShare(share.id));
+            actions.appendChild(decline);
+
+            item.appendChild(actions);
+            shareInbox.appendChild(item);
+        }
+    } catch (error) {
+        showError(shareError, error.message || t('No se pudo consultar lo compartido.'));
+    }
+}
+
+async function acceptShare(id, button) {
+    hideError(shareError);
+
+    if (!identityPrivateKey || !identityPublicKey) {
+        showError(shareError, t('Esta bóveda no tiene llaves de identidad para recibir envíos.'));
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = t('Aceptando…');
+
+    try {
+        const response = await fetch(`${shareBase}/${id}`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo descargar el envío.'));
+        }
+
+        const share = (await response.json()).data;
+        if (!share.encrypted_package) {
+            throw new Error(t('El envío no contiene datos.'));
+        }
+
+        const opened = sodium.crypto_box_seal_open(
+            fromB64(share.encrypted_package),
+            identityPublicKey,
+            identityPrivateKey,
+        );
+        const packageData = JSON.parse(sodium.to_string(opened));
+        const metadata = packageData.metadata;
+        if (!metadata?.title) {
+            throw new Error(t('El envío no tiene metadatos válidos.'));
+        }
+
+        const encryptedMetadata = encryptJson(metadata);
+        let blobId = null;
+
+        if (packageData.file) {
+            const fileBytes = fromB64(packageData.file);
+            if (fileBytes.length > 25 * 1024 * 1024) {
+                throw new Error(t('El archivo compartido supera los 25 MB.'));
+            }
+            const encrypted = encryptFile(fileBytes);
+            const blob = await uploadEncryptedBytes(encrypted);
+            blobId = blob.id;
+        }
+
+        const itemId = crypto.randomUUID();
+        const create = await fetch(itemsUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                id: itemId,
+                type: metadata.type || 'document',
+                encrypted_metadata: encryptedMetadata,
+                blob_id: blobId,
+                expires_at: metadata.expires_at || null,
+            }),
+        });
+
+        if (!create.ok) {
+            throw new Error(t('No se pudo guardar el documento recibido.'));
+        }
+
+        const accept = await fetch(`${shareBase}/${id}/accept`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ recipient_item_id: itemId }),
+        });
+
+        if (!accept.ok) {
+            throw new Error(t('No se pudo confirmar el envío.'));
+        }
+
+        await loadItems();
+        await loadShares();
+    } catch (error) {
+        showError(shareError, error.message || t('No se pudo aceptar el envío.'));
+    } finally {
+        button.disabled = false;
+        button.textContent = t('Aceptar');
+    }
+}
+
+async function declineShare(id) {
+    try {
+        const response = await fetch(`${shareBase}/${id}/decline`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo rechazar el envío.'));
+        }
+        await loadShares();
+    } catch (error) {
+        showError(shareError, error.message || t('No se pudo rechazar el envío.'));
+    }
+}
+
+function openShareModal(item) {
+    sharingItem = item;
+    hideError(shareSendError);
+    shareModalItem.textContent = item.metadata?.title || t('Documento');
+    shareExpires.value = '';
+    shareMode.value = 'copy';
+    openDialog(shareModal);
+
+    if (acceptedContacts.length === 0) {
+        showError(shareSendError, t('Primero agrega y acepta un contacto de confianza.'));
+    }
+}
+
+function closeShareModal() {
+    sharingItem = null;
+    closeDialog(shareModal);
+    hideError(shareSendError);
+}
+
+async function sendShare() {
+    if (!sharingItem) {
+        return;
+    }
+
+    const contactId = shareContact.value;
+    if (!contactId) {
+        showError(shareSendError, t('Elige un contacto.'));
+        return;
+    }
+
+    hideError(shareSendError);
+    shareSend.disabled = true;
+    setButtonText(shareSend, t('Enviando…'));
+
+    try {
+        const keyResponse = await fetch(`${contactsUrl}/${contactId}/public-key`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!keyResponse.ok) {
+            throw new Error(t('No se pudo obtener la llave del contacto.'));
+        }
+
+        const publicKey = fromB64((await keyResponse.json()).data.public_key);
+        let fileBase64 = null;
+
+        if (sharingItem.blob_id) {
+            const blobResponse = await fetch(`${blobBase}/${sharingItem.blob_id}`, {
+                credentials: 'same-origin',
+            });
+            if (!blobResponse.ok) {
+                throw new Error(t('No se pudo leer el archivo para compartir.'));
+            }
+            const fileBytes = decryptFile(new Uint8Array(await blobResponse.arrayBuffer()));
+            if (fileBytes.length > 25 * 1024 * 1024) {
+                throw new Error(t('El archivo supera los 25 MB para compartir.'));
+            }
+            fileBase64 = toB64(fileBytes);
+        }
+
+        const packageData = {
+            metadata: sharingItem.metadata,
+            file: fileBase64,
+        };
+        const sealed = sodium.crypto_box_seal(
+            sodium.from_string(JSON.stringify(packageData)),
+            publicKey,
+        );
+
+        const response = await fetch(sharesUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                contact_id: contactId,
+                item_id: sharingItem.id,
+                mode: shareMode.value,
+                encrypted_package: toB64(sealed),
+                expires_at: shareExpires.value || null,
+            }),
+        });
+
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || t('No se pudo enviar el documento.'));
+        }
+
+        closeShareModal();
+        await loadItems();
+        await loadShares();
+        await loadRequests();
+        showToast(t('Solicitud enviada. La otra persona debe aceptarla.'));
+    } catch (error) {
+        showError(shareSendError, error.message || t('No se pudo enviar el documento.'));
+    } finally {
+        shareSend.disabled = false;
+        setButtonText(shareSend, t('Enviar'));
+    }
+}
+
+async function loadRequests() {
+    if (!requestList) {
+        return;
+    }
+
+    hideError(requestError);
+    requestList.replaceChildren();
+
+    try {
+        const response = await fetch(requestsUrl, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudieron cargar las solicitudes.'));
+        }
+
+        const body = await response.json();
+        const incoming = (body.incoming ?? []).filter((item) => item.status === 'pending');
+        const outgoing = (body.outgoing ?? []).filter((item) => item.status === 'pending');
+        requestStatus.textContent = (incoming.length + outgoing.length) === 0
+            ? ''
+            : tf(':count solicitud(es) pendiente(s).', { count: incoming.length + outgoing.length });
+        requestsEmpty.hidden = (incoming.length + outgoing.length) > 0;
+
+        for (const item of incoming) {
+            const li = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
+            const info = el('div', 'flex items-start gap-3');
+            const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
+            tile.appendChild(icon('download', 'text-[24px]'));
+            const text = el('div');
+            const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+            titleRow.appendChild(el('span', 'mp-badge mp-badge-primary', t('Entrante')));
+            titleRow.appendChild(el('h4', 'font-semibold text-on-surface', tf(':requester necesita tu :type', { requester: item.requester, type: item.document_type })));
+            text.appendChild(titleRow);
+            text.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', item.purpose));
+            text.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', t('Usa “Enviar” en el documento para responder. Se vinculará a esta solicitud.')));
+            info.append(tile, text);
+            li.appendChild(info);
+
+            const decline = el('button', 'mp-btn mp-btn-danger mp-btn-sm self-start md:self-center', t('Rechazar'));
+            decline.type = 'button';
+            decline.addEventListener('click', () => declineRequest(item.id));
+            li.appendChild(decline);
+            requestList.appendChild(li);
+        }
+
+        for (const item of outgoing) {
+            const li = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
+            const info = el('div', 'flex items-start gap-3');
+            const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-surface-container-high text-on-surface');
+            tile.appendChild(icon('upload', 'text-[24px]'));
+            const text = el('div');
+            const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+            titleRow.appendChild(el('span', 'mp-badge mp-badge-neutral', t('Saliente')));
+            titleRow.appendChild(el('h4', 'font-semibold text-on-surface', tf('Solicitaste :type a :target', { type: item.document_type, target: item.target })));
+            text.appendChild(titleRow);
+            text.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', item.purpose));
+            text.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', t('Esperando que la otra persona seleccione el documento y apruebe el envío.')));
+            info.append(tile, text);
+            li.appendChild(info);
+
+            const cancel = el('button', 'mp-btn mp-btn-danger mp-btn-sm self-start md:self-center', t('Cancelar'));
+            cancel.type = 'button';
+            cancel.addEventListener('click', () => cancelRequest(item.id));
+            li.appendChild(cancel);
+            requestList.appendChild(li);
+        }
+    } catch (error) {
+        showError(requestError, error.message || t('No se pudieron cargar las solicitudes.'));
+    }
+}
+
+async function createRequest(event) {
+    event.preventDefault();
+    hideError(requestError);
+
+    if (!requestContact.value) {
+        showError(requestError, t('Agrega y acepta un contacto primero.'));
+        return;
+    }
+
+    const button = event.currentTarget.querySelector('button[type="submit"]');
+    button.disabled = true;
+
+    try {
+        const response = await fetch(requestsUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                contact_id: requestContact.value,
+                document_type: requestType.value.trim(),
+                purpose: requestPurpose.value.trim(),
+            }),
+        });
+
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || t('No se pudo crear la solicitud.'));
+        }
+
+        requestForm.reset();
+        await loadRequests();
+    } catch (error) {
+        showError(requestError, error.message || t('No se pudo crear la solicitud.'));
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function declineRequest(id) {
+    try {
+        const response = await fetch(`${requestBase}/${id}/decline`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo rechazar la solicitud.'));
+        }
+        await loadRequests();
+    } catch (error) {
+        showError(requestError, error.message || t('No se pudo rechazar la solicitud.'));
+    }
+}
+
+async function cancelRequest(id) {
+    try {
+        const response = await fetch(`${requestBase}/${id}/cancel`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo cancelar la solicitud.'));
+        }
+        await loadRequests();
+    } catch (error) {
+        showError(requestError, error.message || t('No se pudo cancelar la solicitud.'));
+    }
+}
+
+async function createPairing() {
+    if (!masterKey) {
+        showError(pairingError, t('Primero desbloquea la bóveda.'));
+        return;
+    }
+
+    hideError(pairingError);
+    stopPairing();
+    pairingCreate.disabled = true;
+    setButtonText(pairingCreate, t('Generando…'));
+
+    try {
+        const response = await fetch(pairingUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({}),
+        });
+
+        if (!response.ok) {
+            throw new Error(t('No se pudo generar el código.'));
+        }
+
+        const data = (await response.json()).data;
+        pairingSessionId = data.id;
+        pairingCode.textContent = `${data.code.slice(0, 3)} ${data.code.slice(3)}`;
+        pairingStatus.textContent = t('Esperando a que escribas el código en el celular…');
+        pairingCodeBox.hidden = false;
+        setButtonText(pairingCreate, t('Generar otro código'));
+
+        pairingTimer = setInterval(pollPairing, 2000);
+        pollPairing();
+    } catch (error) {
+        showError(pairingError, error.message || t('No se pudo generar el código.'));
+        setButtonText(pairingCreate, t('Generar código'));
+    } finally {
+        pairingCreate.disabled = false;
+    }
+}
+
+async function loadItems() {
+    hideError(vaultError);
+    itemList.replaceChildren();
+    const response = await fetch(itemsUrl, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    });
+
+    if (!response.ok) {
+        showError(vaultError, t('No se pudieron cargar los documentos.'));
+        return;
+    }
+
+    const body = await response.json();
+    items = [];
+
+    for (const item of body.data ?? []) {
+        try {
+            const metadata = decryptJson(item.encrypted_metadata);
+            items.push({ ...item, metadata });
+        } catch {
+            items.push({
+                ...item,
+                metadata: { title: t('Documento ilegible'), type: item.type },
+                unreadable: true,
+            });
+        }
+    }
+
+    renderItems();
+}
+
+function expiryDate(value) {
+    if (!value) {
+        return null;
+    }
+
+    const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
+    if (year && month && day) {
+        return new Date(year, month - 1, day);
+    }
+
+    return new Date(value);
+}
+
+function renderExpiryBanner() {
+    if (!expiryBanner || !expiryList) {
+        return;
+    }
+
+    const now = new Date();
+    const upcoming = items
+        .filter((item) => item.expires_at && item.state !== 'transferred')
+        .map((item) => ({ item, date: expiryDate(item.expires_at) }))
+        .filter(({ date }) => !Number.isNaN(date.getTime()))
+        .filter(({ date }) => date.getTime() - now.getTime() <= 30 * 24 * 60 * 60 * 1000)
+        .sort((a, b) => a.date - b.date);
+
+    expiryBanner.hidden = upcoming.length === 0;
+    expiryList.replaceChildren();
+
+    for (const { item, date } of upcoming) {
+        const li = document.createElement('li');
+        const expired = date.getTime() < now.getTime();
+        const title = item.metadata?.title || t('Sin título');
+        li.textContent = expired
+            ? tf(':title — venció el :date', { title, date: date.toLocaleDateString(dateLocale()) })
+            : tf(':title — vence el :date', { title, date: date.toLocaleDateString(dateLocale()) });
+        expiryList.appendChild(li);
+    }
+}
+
+function typeLabel(type) {    return {
+        document: t('Documento'),
+        ticket: t('Boleto o pase'),
+        card: t('Tarjeta'),
+        other: t('Otro'),
+    }[type] ?? type;
+}
+
+function typeIcon(type) {
+    return {
+        document: 'badge',
+        ticket: 'confirmation_number',
+        card: 'credit_card',
+        other: 'description',
+    }[type] ?? 'description';
+}
+
+function renderItems() {
+    const filteredItems = currentFilter === 'all'
+        ? items
+        : items.filter((item) => item.type === currentFilter);
+
+    itemsEmpty.hidden = filteredItems.length > 0;
+    if (items.length === 0) {
+        itemsEmptyTitle.textContent = t('No tienes documentos todavía.');
+        itemsEmptyCopy.textContent = t('Agrega tu primer documento y quedará cifrado antes de salir de tu equipo.');
+    } else if (filteredItems.length === 0) {
+        itemsEmptyTitle.textContent = t('No hay documentos en esta categoría.');
+        itemsEmptyCopy.textContent = t('Prueba con otro filtro o agrega un documento nuevo.');
+    }
+
+    const counts = {
+        all: items.length,
+        document: items.filter((item) => item.type === 'document').length,
+        ticket: items.filter((item) => item.type === 'ticket').length,
+        card: items.filter((item) => item.type === 'card').length,
+        other: items.filter((item) => item.type === 'other').length,
+    };
+
+    document.querySelectorAll('[data-filter]').forEach((button) => {
+        button.setAttribute('aria-pressed', button.dataset.filter === currentFilter ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-filter-count]').forEach((span) => {
+        span.textContent = counts[span.dataset.filterCount] ?? 0;
+    });
+
+    itemList.replaceChildren();
+    renderExpiryBanner();
+
+    for (const item of filteredItems) {
+        const li = el('li', 'mp-card flex flex-col p-5');
+
+        const header = el('div', 'flex items-start gap-3');
+        const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
+        tile.appendChild(icon(typeIcon(item.type), 'text-[24px]'));
+
+        const text = el('div', 'min-w-0 flex-1');
+        text.appendChild(el('p', 'text-sm font-semibold text-primary', typeLabel(item.type)));
+        text.appendChild(el('h3', 'mt-0.5 truncate text-[19px] font-semibold text-on-surface', item.metadata.title || t('Sin título')));
+
+        const badges = el('div', 'mt-2 flex flex-wrap items-center gap-1.5');
+        if (item.state === 'transferred') {
+            badges.appendChild(el('span', 'mp-badge mp-badge-neutral', t('Transferido')));
+        }
+
+        if (item.expires_at) {
+            const date = expiryDate(item.expires_at);
+            if (!Number.isNaN(date.getTime())) {
+                const days = Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+                if (days < 0) {
+                    badges.appendChild(el('span', 'mp-badge mp-badge-danger', tf('Venció el :date', { date: date.toLocaleDateString(dateLocale()) })));
+                } else if (days <= 30) {
+                    badges.appendChild(el('span', 'mp-badge mp-badge-warning', tf('Vence en :days días', { days })));
+                } else {
+                    badges.appendChild(el('span', 'mp-badge mp-badge-neutral', tf('Vigente hasta :date', { date: date.toLocaleDateString(dateLocale()) })));
+                }
+            }
+        }
+
+        text.appendChild(badges);
+        header.append(tile, text);
+        li.appendChild(header);
+
+        const actions = el('div', 'mt-5 flex flex-wrap gap-2 border-t border-outline-variant/50 pt-4');
+
+        if (acceptedContacts.length > 0 && item.state !== 'transferred') {
+            const share = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Enviar'));
+            share.type = 'button';
+            share.addEventListener('click', () => openShareModal(item));
+            actions.appendChild(share);
+        }
+
+        if (item.blob_id) {
+            const download = el('button', 'mp-btn mp-btn-quiet mp-btn-sm', t('Descargar'));
+            download.type = 'button';
+            download.addEventListener('click', () => downloadItem(item, download));
+            actions.appendChild(download);
+        }
+
+        const remove = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Eliminar'));
+        remove.type = 'button';
+        remove.addEventListener('click', () => deleteItem(item, remove));
+        actions.appendChild(remove);
+
+        li.appendChild(actions);
+        itemList.appendChild(li);
+    }
+}
+
+async function downloadItem(item, button) {
+    if (!item.blob_id || !item.metadata) {
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = t('Descargando…');
+
+    try {
+        const response = await fetch(`${blobBase}/${item.blob_id}`, {
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo descargar el archivo.'));
+        }
+
+        const decrypted = decryptFile(new Uint8Array(await response.arrayBuffer()));
+        const blob = new Blob([decrypted], {
+            type: item.metadata.mime || 'application/octet-stream',
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = item.metadata.original_name || 'documento';
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+        showError(vaultError, error.message || t('No se pudo descargar el archivo.'));
+    } finally {
+        button.disabled = false;
+        button.textContent = t('Descargar');
+    }
+}
+
+async function deleteItem(item, button) {
+    const confirmed = await confirmAction({
+        title: t('¿Eliminar este documento?'),
+        message: t('El documento se moverá a la papelera y dejará de estar disponible en tu bóveda.'),
+        acceptLabel: t('Eliminar'),
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${itemsUrl}/${item.id}`, {
+            method: 'DELETE',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo eliminar el documento.'));
+        }
+        await loadItems();
+        showToast(t('Documento eliminado.'));
+    } catch (error) {
+        showError(vaultError, error.message || t('No se pudo eliminar el documento.'));
+        button.disabled = false;
+    }
+}
+
+async function uploadEncryptedBytes(encrypted) {
+    const formData = new FormData();
+    formData.append('file', new Blob([encrypted], { type: 'application/octet-stream' }), 'blob.bin');
+
+    const response = await fetch(blobsUrl, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+        },
+        credentials: 'same-origin',
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error(t('No se pudo subir el archivo cifrado.'));
+    }
+
+    return (await response.json()).data;
+}
+
+async function uploadFile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return uploadEncryptedBytes(encryptFile(bytes));
+}
+
+async function addItem(event) {
+    event.preventDefault();
+    hideError(addError);
+    addStatus.textContent = '';
+
+    const title = document.getElementById('item-title').value.trim();
+    const type = document.getElementById('item-type').value;
+    const fileInput = document.getElementById('item-file');
+    const expires = document.getElementById('item-expires').value;
+    const file = fileInput.files?.[0];
+
+    if (!title) {
+        showError(addError, t('Escribe un título.'));
+        return;
+    }
+
+    addSubmit.disabled = true;
+    setButtonText(addSubmit, t('Guardando…'));
+
+    try {
+        let blobId = null;
+        let fileMetadata = {};
+
+        if (file) {
+            if (file.size > 100 * 1024 * 1024) {
+                throw new Error(t('El archivo supera los 100 MB.'));
+            }
+            const blob = await uploadFile(file);
+            blobId = blob.id;
+            fileMetadata = {
+                original_name: file.name,
+                mime: file.type || 'application/octet-stream',
+                size: file.size,
+            };
+        }
+
+        const metadata = {
+            title,
+            type,
+            expires_at: expires || null,
+            ...fileMetadata,
+        };
+
+        const response = await fetch(itemsUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                type,
+                encrypted_metadata: encryptJson(metadata),
+                blob_id: blobId,
+                expires_at: expires || null,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(t('No se pudo guardar el documento.'));
+        }
+
+        addForm.reset();
+        if (itemFileName) {
+            itemFileName.textContent = t('PDF o imagen · máximo 100 MB');
+        }
+        addStatus.textContent = t('Documento guardado.');
+        closeDialog(addDocumentModal);
+        await loadItems();
+        showToast(t('Documento guardado.'));
+    } catch (error) {
+        showError(addError, error.message || t('No se pudo guardar el documento.'));
+    } finally {
+        addSubmit.disabled = false;
+        setButtonText(addSubmit, t('Guardar en mi bóveda'));
+    }
+}
+
+function lock() {
+    if (masterKey) {
+        sodium.memzero(masterKey);
+    }
+    if (identityPrivateKey) {
+        sodium.memzero(identityPrivateKey);
+    }
+    masterKey = null;
+    identityPrivateKey = null;
+    identityPublicKey = null;
+    acceptedContacts = [];
+    items = [];
+    outgoingShares = [];
+    currentFilter = 'all';
+    closeShareModal();
+    closeDialog(addDocumentModal);
+    closeDialog(manageAccessModal);
+    closeDialog(confirmModal);
+    if (toast) {
+        toast.hidden = true;
+    }
+    itemList.replaceChildren();
+    unlocked.hidden = true;
+    locked.hidden = false;
+    passphraseInput.value = '';
+    if (recoveryFile) {
+        recoveryFile.value = '';
+    }
+    if (recoveryFileStatus) {
+        recoveryFileStatus.textContent = '';
+    }
+    stopPairing();
+    if (pairingCodeBox) {
+        pairingCodeBox.hidden = true;
+    }
+    if (pairingCreate) {
+        setButtonText(pairingCreate, t('Generar código'));
+    }
+    if (deviceList) {
+        deviceList.replaceChildren();
+    }
+    if (deviceStatus) {
+        deviceStatus.textContent = '';
+    }
+    if (requestList) {
+        requestList.replaceChildren();
+    }
+    if (requestStatus) {
+        requestStatus.textContent = '';
+    }
+    hideError(unlockError);
+    hideError(recoveryFileError);
+    hideError(pairingError);
+    hideError(vaultError);
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('[data-tab]').forEach((button) => {
+        button.setAttribute('aria-selected', button.dataset.tab === tab ? 'true' : 'false');
+    });
+
+    for (const panel of ['docs', 'family', 'devices']) {
+        const element = document.getElementById(`panel-${panel}`);
+        if (element) {
+            element.hidden = panel !== tab;
+        }
+    }
+}
+
+async function init() {
+    await sodium.ready;
+
+    try {
+        const keys = await fetchKeys();
+        loading.hidden = true;
+
+        if (!keys) {
+            noKeys.hidden = false;
+            return;
+        }
+
+        locked.hidden = false;
+    } catch (error) {
+        loading.hidden = true;
+        showError(vaultError, error.message || t('No se pudo cargar la bóveda.'));
+        noKeys.hidden = false;
+    }
+}
+
+if (app) {
+    unlockForm?.addEventListener('submit', unlock);
+    addForm?.addEventListener('submit', addItem);
+    lockButton?.addEventListener('click', lock);
+    pairingCreate?.addEventListener('click', createPairing);
+    contactForm?.addEventListener('submit', addContact);
+    requestForm?.addEventListener('submit', createRequest);
+    shareSend?.addEventListener('click', sendShare);
+    shareCancel?.addEventListener('click', closeShareModal);
+    shareModalClose?.addEventListener('click', closeShareModal);
+    shareModal?.addEventListener('close', () => {
+        sharingItem = null;
+        hideError(shareSendError);
+    });
+    addDocumentOpen?.addEventListener('click', () => {
+        hideError(addError);
+        addStatus.textContent = '';
+        openDialog(addDocumentModal);
+    });
+    document.getElementById('item-file')?.addEventListener('change', (event) => {
+        const file = event.currentTarget.files?.[0];
+        if (itemFileName) {
+            itemFileName.textContent = file ? file.name : t('PDF o imagen · máximo 100 MB');
+        }
+    });
+    addDocumentClose?.addEventListener('click', () => closeDialog(addDocumentModal));
+    addDocumentCancel?.addEventListener('click', () => closeDialog(addDocumentModal));
+    manageAccessClose?.addEventListener('click', () => closeDialog(manageAccessModal));
+    manageAccessDone?.addEventListener('click', () => closeDialog(manageAccessModal));
+    pairingCopy?.addEventListener('click', async () => {
+        if (!pairingCode?.textContent) {
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(pairingCode.textContent.replace(/\s/g, ''));
+            showToast(t('Código copiado.'));
+        } catch {
+            showToast(t('No se pudo copiar el código.'));
+        }
+    });
+    document.querySelectorAll('[data-tab]').forEach((button) => {
+        button.addEventListener('click', () => switchTab(button.dataset.tab));
+        button.addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+                return;
+            }
+
+            event.preventDefault();
+            const tabs = Array.from(document.querySelectorAll('[data-tab]'));
+            const index = tabs.indexOf(button);
+            const next = event.key === 'ArrowRight'
+                ? tabs[(index + 1) % tabs.length]
+                : tabs[(index - 1 + tabs.length) % tabs.length];
+            next.focus();
+            switchTab(next.dataset.tab);
+        });
+    });
+    document.querySelectorAll('[data-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+            currentFilter = button.dataset.filter;
+            renderItems();
+        });
+    });
+    for (const dialog of [addDocumentModal, shareModal, manageAccessModal]) {
+        dialog?.addEventListener('click', (event) => {
+            if (event.target === dialog) {
+                closeDialog(dialog);
+            }
+        });
+    }
+    setupConfirmDialog();
+    setupRecoveryDropZone();
+    init();
+}
