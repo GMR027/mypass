@@ -2076,7 +2076,7 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
 
             item {
                 Text(
-                    text = stringResource(R.string.version, "0.2.0"),
+                    text = stringResource(R.string.version, "0.3.0"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MpColors.OnSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),

@@ -355,7 +355,7 @@ object ApiClient {
             .put("wrapped_master_key", wrappedMasterKey)
             .put("pin_salt", pinSalt)
             .put("pin_params", params)
-            .put("app_version", "0.2.0")
+            .put("app_version", "0.3.0")
         val response = request("POST", "/devices", token, body.toString().toByteArray(), "application/json")
         return JSONObject(response).getJSONObject("data").getString("id")
     }
