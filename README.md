@@ -121,6 +121,19 @@ android/app/build/outputs/apk/release/app-release.apk
 
 El keystore está en `android/keystore/` y la contraseña en `android/keystore.properties`; ambos fuera de Git. Hay que respaldarlos para poder actualizar la app instalada.
 
+En un equipo nuevo, si no tienes el keystore original, puedes generar uno propio:
+
+```bash
+mkdir -p android/keystore
+keytool -genkeypair -v \
+  -keystore android/keystore/mypass-release.jks \
+  -alias mypass -keyalg RSA -keysize 4096 -validity 10000
+cp android/keystore.properties.example android/keystore.properties
+# Edita las contraseñas en android/keystore.properties
+```
+
+Si no existe `android/keystore.properties`, el build release se firma con la clave debug para poder instalarlo en pruebas. Para producción usa siempre el keystore original: una app instalada solo se puede actualizar con la misma firma.
+
 Instalación por ADB (cuando MIUI lo permita):
 
 ```bash
