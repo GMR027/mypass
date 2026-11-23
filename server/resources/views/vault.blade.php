@@ -28,12 +28,16 @@
         </p>
 
         <section id="vault-no-keys" hidden>
-            <div class="mp-card mx-auto max-w-2xl p-6 text-center md:p-10">
-                <span class="mp-icon-tile-lg mx-auto">
-                    <x-icon name="shield_lock" class="text-[32px]" />
+            <div class="mp-hero-panel mx-auto max-w-3xl p-6 text-center sm:p-10">
+                <span class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-white/10 text-white">
+                    <x-icon name="shield_lock" class="text-[34px]" />
                 </span>
-                <h1 class="mp-title-lg mt-4">{{ __('Tu bóveda aún no está configurada') }}</h1>
-                <p class="mp-body mx-auto mt-2 max-w-lg">{{ __('Primero crea la llave de la bóveda y guarda tu llave de emergencia en esta computadora.') }}</p>
+                <span class="mp-hero-pill mt-5">
+                    <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+                    {{ __('Tu billetera digital') }}
+                </span>
+                <h1 class="mx-auto mt-4 max-w-xl text-[clamp(1.9rem,3vw,2.8rem)] font-bold leading-[1.05] tracking-[-0.04em] text-white">{{ __('Tu bóveda aún no está configurada') }}</h1>
+                <p class="mx-auto mt-3 max-w-lg text-[17px] leading-relaxed text-primary-fixed-dim">{{ __('Primero crea la llave de la bóveda y guarda tu llave de emergencia en esta computadora. Después podrás abrir tus pases en un toque.') }}</p>
                 <a href="{{ route('onboarding') }}" class="mp-btn mp-btn-primary mt-6">
                     <x-icon name="vpn_key" class="text-[21px]" />
                     {{ __('Configurar mi bóveda') }}
@@ -42,13 +46,48 @@
         </section>
 
         <section id="vault-locked" hidden>
-            <div class="mb-6 flex items-center gap-3">
-                <span class="mp-icon-tile">
-                    <x-icon name="lock" class="text-[24px]" />
-                </span>
-                <div>
-                    <p class="mp-eyebrow">{{ __('Mi bóveda') }}</p>
-                    <p class="mp-hint mp-break">{{ $email }}</p>
+            <div class="mp-hero-panel mb-5 p-6 sm:p-8 lg:p-10">
+                <div class="mp-hero-copy grid items-center gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                    <div>
+                        <span class="mp-hero-pill">
+                            <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+                            {{ __('Tu billetera está protegida') }}
+                        </span>
+                        <h1 class="mt-4 text-[clamp(2rem,3.4vw,3.1rem)] font-bold leading-[1.02] tracking-[-0.045em] text-white">
+                            {{ __('Tus pases te esperan.') }}
+                        </h1>
+                        <p class="mt-4 max-w-xl text-lg leading-relaxed text-primary-fixed-dim">
+                            {{ __('Escribe tu llave de bóveda y entra directo a tus pases, boletos y tarjetas. El contenido se descifra únicamente en este navegador.') }}
+                        </p>
+                        <p class="mt-5 flex items-center gap-2 text-sm text-white/60">
+                            <x-icon name="shield_lock" class="text-[18px]" />
+                            {{ $email }}
+                        </p>
+                    </div>
+                    <div class="relative mx-auto w-full max-w-[340px]">
+                        <div class="rounded-[1.75rem] border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
+                            <div class="rounded-[1.25rem] bg-white p-4 shadow-2xl">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="mp-badge mp-badge-primary">
+                                        <x-icon name="wallet" class="text-[16px]" filled />
+                                        {{ __('Mi billetera') }}
+                                    </span>
+                                    <x-icon name="lock" class="text-[20px] text-outline" />
+                                </div>
+                                <div class="mt-4 space-y-2.5">
+                                    <div class="h-3 w-3/4 rounded-full bg-surface-container-high"></div>
+                                    <div class="h-3 w-1/2 rounded-full bg-surface-container"></div>
+                                </div>
+                                <div class="mt-4 rounded-xl bg-surface-container-low p-3">
+                                    <div class="flex items-end justify-between">
+                                        <span class="font-mono text-[15px] font-bold tracking-[0.2em] text-on-surface">•••• ••••</span>
+                                        <x-icon name="qr_code_2" class="text-[36px] text-primary" />
+                                    </div>
+                                </div>
+                                <p class="mt-3 text-center text-[11px] font-semibold text-on-surface-variant">{{ __('Desbloquea para ver tus pases') }}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -58,8 +97,8 @@
                         <x-icon name="lock" class="text-[17px]" />
                         {{ __('Bóveda bloqueada') }}
                     </span>
-                    <h1 class="mp-title-lg mt-3">{{ __('Abrir mi bóveda') }}</h1>
-                    <p class="mp-body mt-2">{{ __('Escribe la llave de la bóveda que creaste en esta computadora.') }}</p>
+                    <h2 class="mp-title-md mt-3">{{ __('Abrir mi bóveda') }}</h2>
+                    <p class="mp-body-sm mt-2">{{ __('Escribe la llave de la bóveda que creaste en esta computadora.') }}</p>
 
                     <form id="unlock-form" class="mt-6 space-y-4">
                         <div>
@@ -79,7 +118,7 @@
 
                         <button type="submit" class="mp-btn mp-btn-primary w-full">
                             <x-icon name="lock_open" class="text-[21px]" />
-                            {{ __('Desbloquear') }}
+                            {{ __('Desbloquear y ver mis pases') }}
                         </button>
                     </form>
 
@@ -103,7 +142,7 @@
                     </div>
 
                     <label id="recovery-drop-zone"
-                           class="mt-5 block cursor-pointer rounded-2xl border-2 border-dashed border-outline/40 bg-surface-container-low px-5 py-8 text-center transition-colors hover:border-primary hover:bg-surface-container">
+                           class="mt-5 block cursor-pointer rounded-2xl border-2 border-dashed border-outline/30 bg-surface-container-low/70 px-5 py-8 text-center transition-colors hover:border-primary hover:bg-primary-fixed/30">
                         <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary shadow-sm">
                             <x-icon name="upload_file" class="text-[28px]" />
                         </span>

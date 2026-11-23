@@ -1,11 +1,31 @@
 <x-auth-shell :title="__('Crear cuenta')">
     <div class="mb-6">
-        <span class="mp-icon-tile-lg">
-            <x-icon name="badge" class="text-[30px]" />
-        </span>
-        <h1 class="mp-title-lg mt-4">{{ __('Crear cuenta') }}</h1>
-        <p class="mp-body mt-2">{{ __('Crea tu cuenta y después configura tu bóveda personal con calma.') }}</p>
+        <div class="flex items-start justify-between gap-4">
+            <span class="mp-icon-tile-lg">
+                <x-icon name="badge" class="text-[30px]" />
+            </span>
+            <span class="mp-badge mp-badge-primary">
+                <x-icon name="shield_lock" class="text-[16px]" filled />
+                {{ __('Bóveda protegida') }}
+            </span>
+        </div>
+        <p class="mp-eyebrow mt-5">{{ __('Empieza en menos de un minuto') }}</p>
+        <h1 class="mp-title-lg mt-2">{{ __('Crear cuenta') }}</h1>
+        <p class="mp-body mt-2">{{ __('Crea tu cuenta, configura tu bóveda y abre tu billetera de pases.') }}</p>
     </div>
+
+    <ol class="mb-6 grid grid-cols-3 gap-2 text-center" aria-label="{{ __('Pasos de registro') }}">
+        @foreach ([
+            [__('Cuenta'), 'person'],
+            [__('Bóveda'), 'shield_lock'],
+            [__('Pases'), 'wallet'],
+        ] as $index => [$label, $icon])
+            <li class="rounded-xl border border-outline-variant/50 bg-surface-container-low/60 p-2.5">
+                <span class="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[13px] font-bold text-on-primary">{{ $index + 1 }}</span>
+                <span class="mt-1.5 block text-[12px] font-semibold text-on-surface-variant">{{ $label }}</span>
+            </li>
+        @endforeach
+    </ol>
 
     @if ($errors->any())
         <div class="mp-alert mp-alert-error mb-5" role="alert">

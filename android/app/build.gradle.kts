@@ -27,6 +27,12 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0"
+
+        val apiBaseUrl = (project.findProperty("mypass.apiBaseUrl") as String?)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "http://127.0.0.1:38022/api/v1"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     signingConfigs {
@@ -58,12 +64,14 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation("androidx.fragment:fragment:1.9.1")
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.ui)

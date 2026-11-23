@@ -127,9 +127,9 @@ class SecurityController extends Controller
         ]);
 
         Mail::raw(
-            __('Tu código de verificación de mypass es: :code. Vence en 10 minutos.', ['code' => $code]),
+            __('Tu código de verificación de My Pass es: :code. Vence en 10 minutos.', ['code' => $code]),
             function (Message $message) use ($user): void {
-                $message->to($user->email)->subject(__('Código de verificación de mypass'));
+                $message->to($user->email)->subject(__('Código de verificación de My Pass'));
             },
         );
 

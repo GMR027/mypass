@@ -1,12 +1,12 @@
 # Contexto base para aplicar el diseño visual
 
-**Proyecto:** mypass  
+**Proyecto:** My Pass
 **Fecha:** 22 de noviembre de 2026  
 **Uso:** este archivo resume el estado real del proyecto y las reglas que se deben respetar cuando lleguen los diseños. Sirve como punto de revisión antes de empezar a aplicar estilos.
 
 ---
 
-## 1. Qué es mypass
+## 1. Qué es My Pass
 
 Bóveda personal cifrada de extremo a extremo para documentos, boletos, tarjetas y pases.
 
@@ -37,7 +37,7 @@ Bóveda personal cifrada de extremo a extremo para documentos, boletos, tarjetas
 - Modo simple en web y Android.
 - Traducción completa ES/EN en web, incluidos mensajes de validación y autenticación.
 - Página de inicio pública.
-- Backend con **57 pruebas y 273 aserciones pasando**.
+- Backend con **58 pruebas y 278 aserciones pasando**.
 - Billetera de pases, generador OCR, presentación QR, notificaciones y desbloqueo con huella en Android.
 - Recuperación de cuenta, cambio de frase de bóveda, llave de emergencia y auto-bloqueo web.
 
@@ -256,7 +256,7 @@ cd server
 ./serve-local.sh
 ```
 
-Disponible en `http://127.0.0.1:8000`. Usar `serve-local.sh` para permitir subidas de hasta 128 MB.
+Disponible en `http://127.0.0.1:38021`. Usar `serve-local.sh` para permitir subidas de hasta 128 MB.
 
 ### Compilar estilos
 
@@ -285,7 +285,7 @@ APK resultante:
 android/app/build/outputs/apk/release/app-release.apk
 ```
 
-La tablet de pruebas se conecta por ADB inalámbrico y requiere `adb reverse tcp:8000 tcp:8000` para hablar con el servidor local.
+La tablet de pruebas se conecta por ADB inalámbrico y requiere `adb reverse tcp:38022 tcp:38021` para hablar con el servidor local.
 
 ---
 
@@ -293,7 +293,7 @@ La tablet de pruebas se conecta por ADB inalámbrico y requiere `adb reverse tcp
 
 Antes de aplicar la primera pantalla conviene confirmar:
 
-- [ ] ¿Habrá logo definitivo o se usa el logotipo tipográfico `mypass`?
+- [ ] ¿Habrá logo definitivo o se usa el logotipo tipográfico `My Pass`?
 - [ ] ¿Paleta de marca y color de acento?
 - [ ] ¿Tipografía principal y secundaria?
 - [ ] ¿Librería de iconos o set propio en SVG?

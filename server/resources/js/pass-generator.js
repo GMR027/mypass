@@ -712,7 +712,7 @@ class PassGenerator {
         }[this.state.codeType] || 'QR';
         return this.state.decodedPayload
             ? tf(':format · leído del boleto original', { format })
-            : tf(':format · generado por mypass', { format });
+            : tf(':format · generado por My Pass', { format });
     }
 
     buildPassObject() {

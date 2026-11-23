@@ -12,7 +12,7 @@ import java.util.UUID
 class ApiException(val statusCode: Int, message: String) : Exception(message)
 
 object ApiClient {
-    private const val BASE_URL = "http://127.0.0.1:8000/api/v1"
+    private val BASE_URL = BuildConfig.API_BASE_URL.trimEnd('/')
 
     fun login(email: String, password: String): JSONObject {
         val body = JSONObject()

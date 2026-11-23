@@ -1,3 +1,7 @@
+# Secretos locales
+.env
+.env.*
+
 # Android
 android/.gradle/
 android/local.properties

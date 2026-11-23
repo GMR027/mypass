@@ -72,6 +72,24 @@
             </div>
         </div>
 
+        <section id="pass-next" class="mp-next-pass mb-5 p-5 sm:p-6" hidden aria-live="polite">
+            <div class="relative z-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+                <div class="min-w-0">
+                    <span class="mp-next-pass__label">
+                        <x-icon name="bolt" class="text-[15px]" filled />
+                        {{ __('Tu próximo pase') }}
+                    </span>
+                    <h3 id="pass-next-title" class="mt-3 truncate text-[clamp(1.45rem,2.5vw,2rem)] font-bold leading-tight tracking-[-0.03em] text-white"></h3>
+                    <p id="pass-next-meta" class="mt-1 text-sm text-white/65"></p>
+                    <div id="pass-next-badges" class="mt-3 flex flex-wrap gap-1.5"></div>
+                </div>
+                <button id="pass-next-present" type="button" class="mp-btn mp-btn-primary shrink-0 border-white/15 bg-white/15 text-white hover:bg-white/20">
+                    <x-icon name="qr_code_2" class="text-[21px]" />
+                    {{ __('Presentar ahora') }}
+                </button>
+            </div>
+        </section>
+
         <div class="relative mb-4 max-w-md">
             <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
                 <x-icon name="search" class="text-[21px]" />
@@ -136,7 +154,7 @@
                         <h3 class="mp-title-sm">{{ __('Pila de tarjetas') }}</h3>
                         <span class="rounded-full bg-surface-container px-2 py-0.5 text-[12px] font-medium text-on-surface-variant">{{ __('Toca para abrir') }}</span>
                     </div>
-                    <span id="pass-sort-label" class="hidden text-sm font-semibold text-primary sm:inline">{{ __('Más recientes') }}</span>
+                    <span id="pass-sort-label" class="hidden text-sm font-semibold text-primary sm:inline">{{ __('Próximos primero') }}</span>
                 </div>
                 <div id="pass-stack" class="mp-wallet-stack" aria-live="polite"></div>
             </div>
@@ -197,7 +215,7 @@
                     <div class="mt-4 flex items-center justify-between border-t border-outline-variant/50 pt-3 text-[12px] text-on-surface-variant">
                         <span class="flex items-center gap-1">
                             <x-icon name="lock" class="text-[15px] text-primary" />
-                            {{ __('Protegido por mypass') }}
+                            {{ __('Protegido por My Pass') }}
                         </span>
                         <span id="pass-item-id" class="font-mono text-[11px] text-outline"></span>
                     </div>

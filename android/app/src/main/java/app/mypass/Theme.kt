@@ -6,6 +6,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -15,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 object MpColors {
-    val Background = Color(0xFFF7F9FF)
+    val Background = Color(0xFFF6F9FF)
     val Surface = Color(0xFFFFFFFF)
     val SurfaceLow = Color(0xFFEDF4FF)
     val SurfaceContainer = Color(0xFFE4EFFD)
@@ -43,6 +44,26 @@ object MpColors {
     val OnErrorContainer = Color(0xFF93000A)
     val Success = Color(0xFF1B6B3A)
     val SuccessContainer = Color(0xFFD7F5DF)
+    val Accent = Color(0xFFFD8A42)
+    val AccentDeep = Color(0xFF9B4500)
+    val AccentSoft = Color(0xFFFFF2E8)
+    val BrandMid = Color(0xFF0D4B36)
+    val BrandSoft = Color(0xFFE8F5EE)
+}
+
+object MpGradients {
+    val Brand = Brush.linearGradient(
+        listOf(Color(0xFF01261A), Color(0xFF012D1D), Color(0xFF0D4B36)),
+    )
+    val BrandDeep = Brush.linearGradient(
+        listOf(Color(0xFF001E14), Color(0xFF012D1D), Color(0xFF0A4230)),
+    )
+    val Warm = Brush.linearGradient(
+        listOf(Color(0xFF3B1A00), Color(0xFF9B4500), Color(0xFFFD8A42)),
+    )
+    val Sheen = Brush.linearGradient(
+        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent, Color.Black.copy(alpha = 0.08f)),
+    )
 }
 
 private val MpColorScheme = lightColorScheme(
@@ -170,11 +191,11 @@ private val MpTypography = Typography(
 )
 
 private val MpShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(26.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )
 
 @Composable

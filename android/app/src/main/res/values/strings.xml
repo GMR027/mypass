@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">mypass</string>
+    <string name="app_name">My Pass</string>
     <string name="loading">Cargando…</string>
     <string name="sign_in">Entrar</string>
     <string name="sign_out">Salir de la cuenta</string>
@@ -253,7 +253,7 @@
     <string name="valid_until_date">Válido hasta %1$s</string>
     <string name="pass_code">Código del pase</string>
     <string name="pass_code_unavailable">Código no disponible</string>
-    <string name="pass_generated_code">Código generado por mypass</string>
+    <string name="pass_generated_code">Código generado por My Pass</string>
     <string name="pass_read_code">Código leído del boleto original</string>
     <string name="present_code">Presentar código</string>
     <string name="presentation">Presentación</string>
@@ -380,4 +380,34 @@
     <string name="notif_share_accepted">%1$s aceptó el documento que enviaste.</string>
     <string name="notif_document_request">%1$s te pidió un documento: %2$s.</string>
     <string name="notif_default">Tienes actividad nueva en tu bóveda.</string>
+    <string name="active_document">Documento activo</string>
+    <string name="encrypted_ready">Cifrado listo</string>
+    <string name="secure_recipient">Destinatario seguro</string>
+    <string name="recommended">Recomendado</string>
+    <string name="send_copy_help">El documento se queda en tu bóveda.</string>
+    <string name="transfer_help">Cede la titularidad de este documento.</string>
+    <string name="transfer_warning_title">Nota importante sobre transferencia</string>
+    <string name="pin_change_help">Usa al menos 6 dígitos.</string>
+    <string name="pin_mismatch">Los PIN nuevos no coinciden.</string>
+    <string name="expiry_invalid">La fecha no es válida. Usa el formato AAAA-MM-DD.</string>
+    <string name="brightness_max">Brillo al máximo</string>
+    <string name="auth_wallet_eyebrow">TU BILLETERA DIGITAL</string>
+    <string name="auth_wallet_title">Tus pases te esperan.</string>
+    <string name="auth_wallet_subtitle">Desbloquea y ve directo a tu billetera.</string>
+    <string name="home_wallet_subtitle">Tus pases y boletos, primero. El resto queda bajo tu llave.</string>
+    <string name="home_my_passes">Tus pases</string>
+    <string name="home_next_badge">Próximo</string>
+    <string name="home_present_now">Presentar ahora</string>
+    <string name="home_pass_count">%1$d pases listos</string>
+    <string name="home_pass_count_one">%1$d pase listo</string>
+    <string name="locked_wallet_title">Tus pases están listos</string>
+    <string name="locked_wallet_subtitle">Desbloquea para tenerlos a la mano.</string>
+    <string name="auth_demo_membership">MEMBRESÍA</string>
+    <string name="auth_demo_member_title">Círculo My Pass</string>
+    <string name="auth_demo_member_subtitle">Miembro desde 2026</string>
+    <string name="auth_demo_event">EVENTO</string>
+    <string name="auth_demo_event_title">Noche de jazz</string>
+    <string name="auth_demo_event_subtitle">Teatro Real · 21:00</string>
+    <string name="auth_demo_boarding">PASE DE ABORDAR</string>
+    <string name="auth_demo_flight_subtitle">IB 6401 · Puerta 12 · 14A</string>
 </resources>

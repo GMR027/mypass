@@ -1,11 +1,13 @@
 package app.mypass
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,6 +70,7 @@ enum class MpButtonVariant {
     Secondary,
     Quiet,
     Danger,
+    Destructive,
 }
 
 enum class MpBadgeTone {
@@ -102,9 +107,10 @@ fun MpLogo(
         }
         if (showName) {
             Text(
-                text = "mypass",
+                text = "My Pass",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.8).sp,
                 color = if (inverse) Color.White else MpColors.Primary,
             )
         }
@@ -135,6 +141,7 @@ fun MpButton(
                 color = when (variant) {
                     MpButtonVariant.Primary -> MpColors.OnPrimary
                     MpButtonVariant.Danger -> MpColors.OnErrorContainer
+                    MpButtonVariant.Destructive -> Color.White
                     else -> MpColors.Primary
                 },
             )
@@ -150,19 +157,34 @@ fun MpButton(
     }
 
     when (variant) {
-        MpButtonVariant.Primary -> Button(
-            onClick = onClick,
-            modifier = buttonModifier,
-            enabled = enabled && !loading,
-            shape = MaterialTheme.shapes.medium,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MpColors.Primary,
-                contentColor = MpColors.OnPrimary,
-                disabledContainerColor = MpColors.Primary.copy(alpha = 0.35f),
-                disabledContentColor = Color.White.copy(alpha = 0.8f),
-            ),
-            contentPadding = contentPadding,
-        ) { content() }
+        MpButtonVariant.Primary -> {
+            val shape = MaterialTheme.shapes.medium
+            val brush = if (enabled && !loading) {
+                MpGradients.Brand
+            } else {
+                Brush.linearGradient(listOf(MpColors.Primary.copy(alpha = 0.35f), MpColors.Primary.copy(alpha = 0.28f)))
+            }
+            Button(
+                onClick = onClick,
+                modifier = buttonModifier
+                    .shadow(if (enabled && !loading) 8.dp else 0.dp, shape)
+                    .background(brush = brush, shape = shape),
+                enabled = enabled && !loading,
+                shape = shape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = MpColors.OnPrimary,
+                    disabledContainerColor = Color.Transparent,
+                    disabledContentColor = Color.White.copy(alpha = 0.8f),
+                ),
+                elevation = ButtonDefaults.buttonElevation(
+                    defaultElevation = 0.dp,
+                    pressedElevation = 0.dp,
+                    disabledElevation = 0.dp,
+                ),
+                contentPadding = contentPadding,
+            ) { content() }
+        }
 
         MpButtonVariant.Secondary -> OutlinedButton(
             onClick = onClick,
@@ -204,6 +226,20 @@ fun MpButton(
             ),
             contentPadding = contentPadding,
         ) { content() }
+
+        MpButtonVariant.Destructive -> Button(
+            onClick = onClick,
+            modifier = buttonModifier,
+            enabled = enabled && !loading,
+            shape = MaterialTheme.shapes.medium,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MpColors.Error,
+                contentColor = Color.White,
+                disabledContainerColor = MpColors.Error.copy(alpha = 0.35f),
+                disabledContentColor = Color.White.copy(alpha = 0.8f),
+            ),
+            contentPadding = contentPadding,
+        ) { content() }
     }
 }
 
@@ -228,14 +264,44 @@ fun MpCard(
 ) {
     Surface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         color = MpColors.Surface,
-        border = BorderStroke(1.dp, MpColors.OutlineVariant.copy(alpha = 0.55f)),
-        shadowElevation = 1.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        shadowElevation = 2.dp,
     ) {
         Box(modifier = Modifier.padding(contentPadding)) {
             content()
         }
+    }
+}
+
+@Composable
+fun MpHeroPanel(
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(24.dp),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(32.dp))
+            .background(MpGradients.BrandDeep),
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            drawCircle(
+                color = MpColors.Accent.copy(alpha = 0.16f),
+                radius = size.minDimension * 0.42f,
+                center = androidx.compose.ui.geometry.Offset(size.width * 0.92f, size.height * 0.04f),
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = 0.05f),
+                radius = size.minDimension * 0.6f,
+                center = androidx.compose.ui.geometry.Offset(size.width * 0.08f, size.height * 1.05f),
+            )
+        }
+        Column(
+            modifier = Modifier.padding(contentPadding),
+            content = content,
+        )
     }
 }
 

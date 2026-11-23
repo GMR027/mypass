@@ -55,6 +55,15 @@ function formatDate(value, options = {}) {
         return '';
     }
 
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toLocaleDateString(locale(), {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            ...options,
+        });
+    }
+
     const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
     if (!year || !month || !day) {
         return String(value);
@@ -84,6 +93,73 @@ function isExpired(item) {
 
     const date = new Date(item.expires_at);
     return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
+}
+
+function parsePassDate(value) {
+    if (!value) {
+        return null;
+    }
+
+    const text = String(value).trim();
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+        return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    }
+
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function passDateFor(entry) {
+    const fields = entry?.pass?.fields || {};
+    return parsePassDate(fields.date)
+        || parsePassDate(fields.expires)
+        || parsePassDate(entry?.item?.expires_at);
+}
+
+function startOfToday() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+
+function isUpcoming(entry) {
+    const date = passDateFor(entry);
+    return Boolean(date) && date.getTime() >= startOfToday();
+}
+
+function updatedTimestamp(entry) {
+    const value = entry?.item?.updated_at;
+    if (!value) {
+        return 0;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function sortActivePasses(entries) {
+    const today = startOfToday();
+
+    return [...entries].sort((a, b) => {
+        const dateA = passDateFor(a);
+        const dateB = passDateFor(b);
+        const upcomingA = Boolean(dateA) && dateA.getTime() >= today;
+        const upcomingB = Boolean(dateB) && dateB.getTime() >= today;
+
+        if (upcomingA && upcomingB) {
+            return dateA.getTime() - dateB.getTime();
+        }
+
+        if (upcomingA !== upcomingB) {
+            return upcomingA ? -1 : 1;
+        }
+
+        if (dateA && dateB && dateA.getTime() !== dateB.getTime()) {
+            return dateB.getTime() - dateA.getTime();
+        }
+
+        return updatedTimestamp(b) - updatedTimestamp(a);
+    });
 }
 
 function passFromItem(item) {
@@ -188,13 +264,18 @@ function themeColor(pass) {
 }
 
 function createPassCardElement(item, options = {}) {
-    const { interactive = true, selected = false, compact = false, preview = false } = options;
+    const { interactive = true, selected = false, compact = false, preview = false, badge = null, highlight = false } = options;
     const pass = passFromItem(item);
     const node = document.createElement(interactive ? 'button' : 'article');
     if (interactive) {
         node.type = 'button';
     }
-    node.className = ['mp-pass-card', selected ? 'is-selected' : '', compact ? 'mp-pass-card--compact' : ''].filter(Boolean).join(' ');
+    node.className = [
+        'mp-pass-card',
+        selected ? 'is-selected' : '',
+        compact ? 'mp-pass-card--compact' : '',
+        highlight ? 'mp-pass-card--highlight' : '',
+    ].filter(Boolean).join(' ');
     node.dataset.category = pass.category;
     node.dataset.passId = item.id;
     node.style.setProperty('--pass-color', themeColor(pass));
@@ -219,7 +300,7 @@ function createPassCardElement(item, options = {}) {
     names.appendChild(el('p', 'mp-pass-card__eyebrow truncate', pass.issuer || categoryLabel(pass.category)));
     names.appendChild(el('p', 'mp-pass-card__title truncate', pass.title));
     identity.append(tile, names);
-    header.append(identity, el('span', 'mp-pass-card__chip shrink-0', badgeFor(pass)));
+    header.append(identity, el('span', 'mp-pass-card__chip shrink-0', badge || badgeFor(pass)));
     body.appendChild(header);
 
     if (pass.category === 'flight') {
@@ -442,6 +523,11 @@ class WalletApp {
         this.printButton = document.getElementById('pass-print');
         this.editButton = document.getElementById('pass-edit');
         this.quickPresent = document.getElementById('pass-quick-present');
+        this.nextCard = document.getElementById('pass-next');
+        this.nextTitle = document.getElementById('pass-next-title');
+        this.nextMeta = document.getElementById('pass-next-meta');
+        this.nextBadges = document.getElementById('pass-next-badges');
+        this.nextPresent = document.getElementById('pass-next-present');
         this.addToggle = document.getElementById('pass-add-toggle');
         this.addMenu = document.getElementById('pass-add-menu');
         this.viewStack = document.getElementById('pass-view-stack');
@@ -512,6 +598,7 @@ class WalletApp {
         });
 
         this.quickPresent?.addEventListener('click', () => this.presentSelected());
+        this.nextPresent?.addEventListener('click', () => this.presentNext());
         this.presentButton?.addEventListener('click', () => this.presentSelected());
         this.copyButton?.addEventListener('click', () => this.copySelected());
         this.downloadButton?.addEventListener('click', () => this.downloadSelected());
@@ -572,7 +659,9 @@ class WalletApp {
     }
 
     activePasses() {
-        return this.allPasses().filter((entry) => !entry.archived && entry.item.state !== 'transferred');
+        return sortActivePasses(
+            this.allPasses().filter((entry) => !entry.archived && entry.item.state !== 'transferred'),
+        );
     }
 
     archivedPasses() {
@@ -611,6 +700,51 @@ class WalletApp {
         return this.allPasses().find((entry) => entry.item.id === this.selectedId) || null;
     }
 
+    nextPassEntry() {
+        return this.activePasses()[0] || null;
+    }
+
+    presentNext() {
+        const entry = this.nextPassEntry();
+        if (!entry) {
+            this.options.toast(t('Primero elige un pase.'));
+            return;
+        }
+
+        this.selectedId = entry.item.id;
+        this.refresh();
+        this.presentSelected();
+    }
+
+    refreshNextPass() {
+        if (!this.nextCard) {
+            return;
+        }
+
+        const entry = this.nextPassEntry();
+        this.nextCard.hidden = !entry;
+
+        if (!entry || !this.nextTitle || !this.nextMeta || !this.nextBadges) {
+            return;
+        }
+
+        const { pass, item } = entry;
+        const date = passDateFor(entry);
+        this.nextTitle.textContent = pass.title;
+        this.nextMeta.textContent = [
+            pass.issuer || categoryLabel(pass.category),
+            date
+                ? formatDate(date)
+                : (item.expires_at ? formatDate(item.expires_at) : t('Sin fecha')),
+        ].filter(Boolean).join(' · ');
+
+        this.nextBadges.replaceChildren();
+        this.nextBadges.appendChild(el('span', 'rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/80', categoryLabel(pass.category)));
+        if (isUpcoming(entry)) {
+            this.nextBadges.appendChild(el('span', 'rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold text-accent-deep', t('Próximo')));
+        }
+    }
+
     refresh() {
         if (!this.stack) {
             return;
@@ -647,6 +781,7 @@ class WalletApp {
         this.renderStack(filtered);
         this.renderInspector();
         this.renderArchive(archive);
+        this.refreshNextPass();
     }
 
     renderStack(entries) {
@@ -673,7 +808,12 @@ class WalletApp {
 
         entries.forEach((entry, index) => {
             const selected = entry.item.id === this.selectedId;
-            const card = createPassCardElement(entry.item, { selected });
+            const next = this.nextPassEntry();
+            const card = createPassCardElement(entry.item, {
+                selected,
+                badge: next?.item.id === entry.item.id ? t('Próximo') : null,
+                highlight: next?.item.id === entry.item.id,
+            });
             card.style.zIndex = selected ? String(40) : String(30 - index);
             card.addEventListener('click', () => this.select(entry.item.id));
             card.addEventListener('keydown', (event) => {
@@ -741,7 +881,7 @@ class WalletApp {
         this.codeCaption.textContent = payload.length > 74 ? `${payload.slice(0, 74)}…` : payload;
         this.codeHash.textContent = pass.code?.source === 'decoded'
             ? t('Código leído del boleto original')
-            : t('Código generado por mypass');
+            : t('Código generado por My Pass');
         this.itemId.textContent = item.id.slice(0, 8).toUpperCase();
 
         const shareAllowed = pass.options?.share !== false && this.options.canShare();
@@ -916,7 +1056,7 @@ class WalletApp {
 
         const link = document.createElement('a');
         link.href = canvas.toDataURL('image/png');
-        link.download = `mypass-${entry.pass.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pase'}.png`;
+        link.download = `my-pass-${entry.pass.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'pase'}.png`;
         link.click();
         this.options.toast(t('Código descargado como imagen.'));
     }
@@ -986,7 +1126,7 @@ class WalletApp {
 
         const footer = doc.createElement('p');
         footer.className = 'footer';
-        footer.textContent = t('Generado por mypass · Guarda este pase en un lugar seguro.');
+        footer.textContent = t('Generado por My Pass · Guarda este pase en un lugar seguro.');
         doc.body.appendChild(footer);
 
         popup.focus();

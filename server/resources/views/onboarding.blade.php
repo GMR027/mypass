@@ -1,9 +1,19 @@
 <x-layout :title="__('Configurar bóveda')">
     <div class="mx-auto max-w-3xl">
-        <div class="mb-6">
-            <p class="mp-eyebrow">{{ __('Configurar mi bóveda') }}</p>
-            <h1 class="mp-title-lg mt-2">{{ __('Configurar mi bóveda') }}</h1>
-            <p class="mp-body mt-2">{{ __('Crea la llave de tu bóveda y guarda la llave de emergencia. La llave de emergencia no se guarda en el servidor.') }}</p>
+        <div class="mp-hero-panel mb-6 p-6 sm:p-8">
+            <div class="mp-hero-copy grid items-center gap-6 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div>
+                    <span class="mp-hero-pill">
+                        <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+                        {{ __('Tu billetera digital') }}
+                    </span>
+                    <h1 class="mt-4 text-[clamp(2rem,3.4vw,3rem)] font-bold leading-[1.02] tracking-[-0.045em] text-white">{{ __('Configura tu bóveda y abre tus pases.') }}</h1>
+                    <p class="mt-3 max-w-xl text-[17px] leading-relaxed text-primary-fixed-dim">{{ __('Crea la llave de tu bóveda y guarda la llave de emergencia. La llave de emergencia no se guarda en el servidor.') }}</p>
+                </div>
+                <span class="hidden h-24 w-24 items-center justify-center rounded-[2rem] bg-white/10 text-white sm:flex">
+                    <x-icon name="vpn_key" class="text-[46px]" />
+                </span>
+            </div>
         </div>
 
         <ol class="mp-stepper" aria-label="{{ __('Pasos de configuración') }}">
@@ -40,9 +50,9 @@
                     </span>
                     <h2 class="mp-title-md mt-4">{{ __('Esta cuenta ya tiene una bóveda configurada.') }}</h2>
                     <p class="mp-body mt-2">{{ __('Puedes abrirla y desbloquearla con tu llave de bóveda de forma segura en cualquier momento.') }}</p>
-                    <a href="{{ route('vault') }}" class="mp-btn mp-btn-primary mt-6">
-                        <x-icon name="key" class="text-[21px]" />
-                        {{ __('Abrir mi bóveda') }}
+                    <a href="{{ route('vault', ['tab' => 'pases']) }}" class="mp-btn mp-btn-primary mt-6">
+                        <x-icon name="wallet" class="text-[21px]" />
+                        {{ __('Abrir mi billetera') }}
                     </a>
                 </div>
             </section>
@@ -173,9 +183,9 @@
                     <p class="mp-eyebrow mt-4">{{ __('Paso 3 completado') }}</p>
                     <h2 class="mp-title-lg mt-2">{{ __('Bóveda configurada.') }}</h2>
                     <p class="mp-body mx-auto mt-2 max-w-lg">{{ __('Guarda el archivo o la hoja de recuperación antes de continuar. Tus credenciales y documentos ahora están protegidos con cifrado de nivel bancario.') }}</p>
-                    <a href="{{ route('vault') }}" class="mp-btn mp-btn-primary mt-6">
-                        <x-icon name="lock_open" class="text-[21px]" />
-                        {{ __('Volver a mi bóveda') }}
+                    <a href="{{ route('vault', ['tab' => 'pases']) }}" class="mp-btn mp-btn-primary mt-6">
+                        <x-icon name="wallet" class="text-[21px]" />
+                        {{ __('Abrir mi billetera') }}
                     </a>
                 </div>
             </section>

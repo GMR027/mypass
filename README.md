@@ -1,4 +1,4 @@
-# mypass
+# My Pass
 
 Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con backend Laravel y MySQL.
 
@@ -44,7 +44,7 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
   - aviso de documentos por vencer;
   - página de inicio pública;
   - interfaz completa en español e inglés, con selector de idioma.
-- Pruebas de API y de navegador pasando (57 pruebas, 273 aserciones).
+- Pruebas de API y de navegador pasando (58 pruebas, 278 aserciones).
 - App Android en Kotlin + Compose, instalada en la tablet de pruebas.
 - Billetera de pases con pestañas Documentos, Pases, Familia y Dispositivos.
 - Generador de pases con OCR local (Tesseract.js), PDF.js, ZXing y códigos QR/PDF417/Aztec/Code 128.
@@ -64,6 +64,17 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
 - Android SDK en `~/Android/Sdk`.
 - `adb` nativo en `~/.local/bin/adb`.
 
+## Clonar en otro equipo
+
+```bash
+git clone https://github.com/GMR027/mypass.git
+cd mypass
+```
+
+No se versionan `.env`, `.env.testing`, `local.properties`, el keystore, los builds ni los APK. Hay que crearlos en el equipo nuevo siguiendo las secciones siguientes.
+
+Para el clúster, el backend debe publicarse con HTTPS y un dominio estable. Configura en `server/.env` al menos `APP_URL`, `DB_*`, `MAIL_*` y `SESSION_DOMAIN`, y mantén `upload_max_filesize` y `post_max_size` en 128 MB o más.
+
 ## Backend
 
 ```bash
@@ -72,7 +83,7 @@ cp .env.example .env
 composer install
 php artisan key:generate
 php artisan migrate
-./serve-local.sh
+PORT=38021 ./serve-local.sh
 ```
 
 `serve-local.sh` usa el servidor integrado de PHP con un límite de subida de 128 MB.
@@ -109,14 +120,40 @@ Instalación por ADB (cuando MIUI lo permita):
 
 ```bash
 adb connect 192.168.1.73:<puerto-de-depuracion-inalambrica>
+adb reverse tcp:38022 tcp:38021
 adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
+
+La app compila por defecto contra `http://127.0.0.1:38022/api/v1`, por eso el `adb reverse` debe estar activo mientras se prueba contra el servidor local. El puerto 38021 queda para la web y para la depuración inalámbrica de la tablet.
+
+Para apuntar cualquier modelo Android 13+ al servidor del clúster, compila con la URL pública:
+
+```bash
+cd android
+JAVA_HOME="$HOME/.local/opt/jdk-21" ./gradlew assembleRelease \
+  -Pmypass.apiBaseUrl=https://mypass.example.com/api/v1
+```
+
+Ese valor queda dentro de `BuildConfig.API_BASE_URL` y no necesita `adb reverse`. Usa HTTPS con un certificado válido: la configuración de red del APK solo permite tráfico sin cifrar hacia `localhost` y `127.0.0.1`.
 
 La tablet tiene Android 13 y MIUI 14. MIUI bloquea la instalación de apps de desarrolladores no verificados durante las primeras 24 horas. Hay que esperar y activar:
 
 `Ajustes → Opciones de desarrollador → Apps de desarrolladores no verificados`
 
 También se puede usar otro dispositivo Android 13+ para probar antes.
+
+## Prototipos de la landing
+
+En `docs/landing-preview/` están los HTML exportados de Stitch para escritorio y móvil, además del APK de descarga local (ignorado por Git). Para verlos:
+
+```bash
+python3 -m http.server 38100 --directory docs/landing-preview
+```
+
+- `index.html`: landing de escritorio.
+- `login.html`: acceso de escritorio con descarga de APK.
+- `mobile.html`: landing móvil.
+- `login-mobile.html`: acceso móvil con descarga de APK.
 
 ## API v1
 

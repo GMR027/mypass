@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso — My Pass</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#012D1D',
+              dark: '#012417',
+              surface: '#023824',
+              accent: '#FD8A42',
+              'accent-hover': '#e87933',
+              mint: '#E8F5EE',
+              'mint-border': '#B7E4C7',
+              lime: '#40C057',
+              light: '#F7F9FF',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #F7F9FF;
+      color: #111827;
+      overflow-x: hidden;
+    }
+    .radial-bg {
+      background-image:
+        radial-gradient(circle at 10% 20%, rgba(1, 45, 29, 0.04) 0%, transparent 45%),
+        radial-gradient(circle at 90% 80%, rgba(253, 138, 66, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 50% 10%, rgba(253, 138, 66, 0.03) 0%, transparent 35%);
+    }
+    .custom-shadow {
+      box-shadow: 0 20px 40px -15px rgba(1, 45, 29, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .pass-shadow-1 {
+      box-shadow: 0 24px 38px -10px rgba(0, 0, 0, 0.35), 0 10px 16px -6px rgba(0, 0, 0, 0.2);
+    }
+    .pass-shadow-2 {
+      box-shadow: 0 20px 30px -8px rgba(0, 0, 0, 0.25), 0 6px 12px -4px rgba(0, 0, 0, 0.15);
+    }
+  </style>
+</head>
+<body class="w-[1440px] h-[1100px] max-h-[1100px] overflow-hidden flex flex-col radial-bg select-none">
+
+  <!-- Header superior (80px) -->
+  <header class="w-full h-[80px] px-10 flex items-center justify-between border-b border-gray-100/80 bg-white/70 backdrop-blur-md flex-shrink-0 z-20">
+    <!-- Logotipo -->
+    <a href="index.html" class="flex items-center gap-3 group">
+      <div class="w-10 h-10 rounded-xl bg-brand flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
+        <!-- Isotipo candado -->
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <rect x="4" y="11" width="16" height="11" rx="2.5" ry="2.5"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          <circle cx="12" cy="16.5" r="1.5" fill="currentColor"></circle>
+        </svg>
+      </div>
+      <div class="flex items-center text-[22px] font-extrabold tracking-tight text-gray-900">
+        My Pass<span class="w-2 h-2 rounded-full bg-brand-accent ml-1 mb-2"></span>
+      </div>
+    </a>
+
+    <!-- Acciones cabecera -->
+    <div class="flex items-center gap-6">
+      <a href="index.html" class="text-sm font-semibold text-gray-600 hover:text-brand flex items-center gap-1.5 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        Volver al inicio
+      </a>
+
+      <!-- Selector de idioma -->
+      <div class="inline-flex items-center bg-gray-100 p-1 rounded-full text-xs font-bold border border-gray-200">
+        <span class="px-2.5 py-1 rounded-full bg-white text-gray-900 shadow-xs">ES</span>
+        <span class="px-2.5 py-1 rounded-full text-gray-500 hover:text-gray-900 cursor-pointer">EN</span>
+      </div>
+
+      <a href="#" class="text-sm font-semibold text-gray-500 hover:text-brand transition-colors flex items-center gap-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        ¿Necesitas ayuda?
+      </a>
+    </div>
+  </header>
+
+  <!-- Layout Principal de 2 Columnas -->
+  <main class="flex-1 w-full max-w-[1440px] px-7 py-5 flex gap-7 items-stretch overflow-hidden">
+
+    <!-- PANEL IZQUIERDO: Marca Verde (52%) -->
+    <section class="w-[52%] bg-brand rounded-[32px] p-12 flex flex-col justify-between relative overflow-hidden text-white shadow-xl flex-shrink-0">
+      <!-- Halos decorativos de fondo -->
+      <div class="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-surface blur-3xl pointer-events-none opacity-60"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] h-[460px] rounded-full border border-white/5 pointer-events-none"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] rounded-full border border-white/5 pointer-events-none"></div>
+      <div class="absolute top-[42%] right-[18%] w-64 h-64 rounded-full bg-brand-accent/15 blur-3xl pointer-events-none"></div>
+
+      <!-- Cabecera panel izquierdo -->
+      <div class="relative z-10">
+        <div class="flex items-center justify-between mb-5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-white/10 backdrop-blur flex items-center justify-center text-white border border-white/15">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <rect x="4" y="11" width="16" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <span class="text-lg font-bold tracking-tight text-white">My Pass</span>
+          </div>
+
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-[11px] font-bold tracking-wider text-white uppercase">
+            <span class="w-2 h-2 rounded-full bg-brand-accent animate-pulse"></span>
+            Billetera digital cifrada
+          </div>
+        </div>
+
+        <h1 class="text-[44px] font-extrabold leading-[1.12] tracking-tight mb-3">
+          Todo lo que importa,<br>
+          <span class="relative inline-block text-[#69E0A5]">
+            bajo llave.
+            <svg class="absolute -bottom-1 left-0 w-full" height="6" viewBox="0 0 220 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 4C55 2 165 2 218 4" stroke="#FD8A42" stroke-width="3.5" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </h1>
+        <p class="text-[15px] leading-relaxed text-white/75 max-w-[460px]">
+          Tus boletos, documentos y pases viven cifrados en tu dispositivo. Solo tú puedes abrirlos.
+        </p>
+      </div>
+
+      <!-- Mockup Central: Pases Flotantes con Rotación Ligera -->
+      <div class="relative my-2 py-4 flex items-center justify-center z-10">
+        <!-- Pase 1: Pase de abordar (verde suave/oscuro) -->
+        <div class="w-[370px] bg-[#0A3D28] border border-white/15 rounded-2xl p-5 text-white pass-shadow-1 transform -rotate-3 hover:rotate-0 transition-transform duration-300 relative z-10">
+          <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-extrabold uppercase tracking-widest bg-white/10 px-2 py-0.5 rounded text-white/90">Pase de abordaje</span>
+              <span class="text-xs font-bold text-white/60">Iberia · IB 6401</span>
+            </div>
+            <svg class="w-4 h-4 text-brand-accent" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+            </svg>
+          </div>
+
+          <div class="flex items-center justify-between my-2">
+            <div>
+              <div class="text-2xl font-black tracking-tight">MAD</div>
+              <div class="text-[10px] text-white/50">Madrid-Barajas</div>
+            </div>
+            <div class="flex flex-col items-center px-4">
+              <svg class="w-6 h-6 text-white/40 rotate-90" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7"></path>
+              </svg>
+              <span class="text-[9px] text-brand-accent font-bold mt-0.5">DIRECTO</span>
+            </div>
+            <div class="text-right">
+              <div class="text-2xl font-black tracking-tight">MEX</div>
+              <div class="text-[10px] text-white/50">Cd. de México</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 pt-3 border-t border-white/10 text-center">
+            <div class="bg-black/20 rounded-lg py-1 px-2">
+              <div class="text-[9px] uppercase tracking-wider text-white/40">Puerta</div>
+              <div class="text-xs font-bold">12</div>
+            </div>
+            <div class="bg-black/20 rounded-lg py-1 px-2">
+              <div class="text-[9px] uppercase tracking-wider text-white/40">Asiento</div>
+              <div class="text-xs font-bold text-[#69E0A5]">14A</div>
+            </div>
+            <div class="bg-black/20 rounded-lg py-1 px-2">
+              <div class="text-[9px] uppercase tracking-wider text-white/40">Grupo</div>
+              <div class="text-xs font-bold">2</div>
+            </div>
+          </div>
+
+          <!-- Código de barras simulado -->
+          <div class="mt-3 pt-2.5 border-t border-dashed border-white/15 flex items-center justify-between">
+            <div class="h-6 flex items-center gap-[2px]">
+              <div class="w-1 h-5 bg-white/70"></div>
+              <div class="w-0.5 h-5 bg-white/70"></div>
+              <div class="w-1.5 h-5 bg-white/70"></div>
+              <div class="w-0.5 h-5 bg-white/70"></div>
+              <div class="w-2 h-5 bg-white/70"></div>
+              <div class="w-0.5 h-5 bg-white/70"></div>
+              <div class="w-1 h-5 bg-white/70"></div>
+              <div class="w-1.5 h-5 bg-white/70"></div>
+              <div class="w-0.5 h-5 bg-white/70"></div>
+              <div class="w-2 h-5 bg-white/70"></div>
+              <div class="w-1 h-5 bg-white/70"></div>
+              <div class="w-0.5 h-5 bg-white/70"></div>
+              <div class="w-1.5 h-5 bg-white/70"></div>
+              <div class="w-0.5 h-5 bg-white/70"></div>
+              <div class="w-1 h-5 bg-white/70"></div>
+            </div>
+            <span class="text-[10px] font-mono text-white/40">IB6401-E2EE</span>
+          </div>
+        </div>
+
+        <!-- Pase 2: Entrada evento crema/naranja superpuesta -->
+        <div class="w-[330px] bg-[#FFFBF7] text-gray-900 border border-brand-accent/20 rounded-2xl p-4 pass-shadow-2 transform translate-x-12 -translate-y-16 rotate-4 hover:rotate-1 transition-transform duration-300 relative z-20">
+          <div class="flex items-center justify-between mb-2">
+            <div class="inline-flex items-center gap-1.5 bg-orange-100 text-brand-accent px-2 py-0.5 rounded-full text-[10px] font-bold">
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-accent"></span>
+              EVENTO
+            </div>
+            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Acceso VIP</span>
+          </div>
+
+          <div class="text-sm font-extrabold text-gray-900">Noche de jazz</div>
+          <div class="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
+            <svg class="w-3.5 h-3.5 text-brand-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            Teatro Real · 21:00 h
+          </div>
+
+          <div class="mt-3 pt-2.5 border-t border-dashed border-gray-200 flex items-center justify-between">
+            <div>
+              <div class="text-[9px] uppercase font-bold text-gray-400">Fila / Butaca</div>
+              <div class="text-xs font-black text-brand">Platea 04 · B12</div>
+            </div>
+
+            <!-- Mini QR Vectorial -->
+            <div class="w-8 h-8 bg-white border border-gray-200 rounded p-0.5 flex flex-wrap gap-0.5">
+              <div class="w-3 h-3 border-2 border-gray-900 rounded-[1px] p-[1px]"><div class="w-full h-full bg-gray-900"></div></div>
+              <div class="w-3 h-3 border-2 border-gray-900 rounded-[1px] p-[1px] ml-auto"><div class="w-full h-full bg-gray-900"></div></div>
+              <div class="w-3 h-3 border-2 border-gray-900 rounded-[1px] p-[1px]"><div class="w-full h-full bg-gray-900"></div></div>
+              <div class="w-1.5 h-1.5 bg-gray-900 ml-auto mt-auto"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pie del panel izquierdo: 3 beneficios y nota -->
+      <div class="relative z-10 pt-4 border-t border-white/10">
+        <div class="grid grid-cols-3 gap-3 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+              <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+              </svg>
+            </div>
+            <span class="text-xs font-semibold text-white/90">Cifrado local</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+              <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path>
+              </svg>
+            </div>
+            <span class="text-xs font-semibold text-white/90">Sin anuncios</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+              <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+              </svg>
+            </div>
+            <span class="text-xs font-semibold text-white/90">Web + Android</span>
+          </div>
+        </div>
+
+        <p class="text-[12px] text-white/55 text-center font-medium">
+          Ni nosotros podemos ver tus documentos. Cifrado autenticado de extremo a extremo.
+        </p>
+      </div>
+    </section>
+
+    <!-- COLUMNA DERECHA: Tarjeta Login + Tarjeta APK + Pie (48%) -->
+    <section class="w-[48%] flex flex-col justify-center items-center py-1">
+
+      <div class="w-[520px] flex flex-col gap-4">
+
+        <!-- TARJETA DE LOGIN (Blanca, ancho 520px, radio 28px, padding 36px) -->
+        <div class="bg-white rounded-[28px] p-8 border border-gray-100/90 custom-shadow flex-shrink-0">
+
+          <!-- Fila superior: Candado e indicador -->
+          <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 rounded-2xl bg-brand-mint border border-brand-mint-border/50 flex items-center justify-center text-brand">
+              <!-- Candado abierto -->
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <rect x="4" y="11" width="16" height="11" rx="2.5" ry="2.5"></rect>
+                <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                <circle cx="12" cy="16.5" r="1.5" fill="currentColor"></circle>
+              </svg>
+            </div>
+
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] font-bold text-emerald-800">
+              <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+              </svg>
+              CIFRADO LOCAL
+            </div>
+          </div>
+
+          <!-- Título y subtítulo -->
+          <div class="mb-5">
+            <span class="text-[11px] font-extrabold text-brand-accent tracking-widest uppercase block mb-1">
+              Tu billetera digital
+            </span>
+            <h2 class="text-[32px] font-extrabold text-gray-900 tracking-tight leading-none">
+              Entrar
+            </h2>
+            <p class="text-[13px] text-gray-500 mt-1 font-medium">
+              Abre tu cuenta y ten tus pases a la mano en segundos.
+            </p>
+          </div>
+
+          <!-- Formulario -->
+          <form class="space-y-3.5" onsubmit="event.preventDefault()">
+            <!-- Campo Correo -->
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Correo electrónico</label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
+                <input
+                  type="email"
+                  value="edgar@ejemplo.com"
+                  placeholder="edgar@ejemplo.com"
+                  class="w-full pl-10 pr-4 py-2.5 bg-gray-50/70 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                >
+              </div>
+            </div>
+
+            <!-- Campo Contraseña -->
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Contraseña</label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0110 0v4"></path>
+                  </svg>
+                </div>
+                <input
+                  type="password"
+                  value="••••••••••••••••"
+                  placeholder="Introduce tu contraseña"
+                  class="w-full pl-10 pr-10 py-2.5 bg-gray-50/70 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                >
+                <button type="button" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-700">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Fila opciones adicionales -->
+            <div class="flex items-center justify-between pt-1">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked class="w-4 h-4 text-brand rounded border-gray-300 focus:ring-brand focus:ring-offset-0">
+                <span class="text-xs font-semibold text-gray-600">Recordarme en este equipo</span>
+              </label>
+              <a href="#" class="text-xs font-bold text-brand-accent hover:text-brand-accent-hover transition-colors">
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
+
+            <!-- Botón primario de entrada -->
+            <button class="w-full py-3 px-6 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all group mt-1">
+              <span>Entrar</span>
+              <svg class="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+              </svg>
+            </button>
+          </form>
+
+          <!-- Divisor -->
+          <div class="relative my-3 text-center">
+            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+            <span class="relative bg-white px-3 text-[11px] uppercase tracking-wider font-bold text-gray-400">o</span>
+          </div>
+
+          <!-- Registro -->
+          <div class="text-center text-xs text-gray-600">
+            ¿No tienes cuenta? <a href="index.html" class="font-extrabold text-brand hover:underline">Crear cuenta</a>
+          </div>
+
+          <!-- Caja de aviso informativo (crema) -->
+          <div class="mt-3.5 bg-[#FFF9F2] border border-[#FFE3CC] rounded-xl p-2.5 flex items-center gap-2.5">
+            <div class="w-6 h-6 rounded-full bg-brand-accent/15 flex items-center justify-center flex-shrink-0 text-brand-accent">
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.381z" clip-rule="evenodd"></path>
+              </svg>
+            </div>
+            <p class="text-[11px] leading-snug text-gray-700 font-medium">
+              Al desbloquear tu bóveda, tus pases y boletos aparecen primero.
+            </p>
+          </div>
+        </div>
+
+        <!-- TARJETA DE DESCARGA APK (Ancho 520px, radio 22px, fondo #E8F5EE) -->
+        <div class="bg-brand-mint border border-brand-mint-border rounded-[22px] p-5 flex flex-col gap-3 shadow-sm flex-shrink-0">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <!-- Icono Android en cuadro blanco de 48px -->
+              <div class="w-12 h-12 rounded-xl bg-white border border-brand-mint-border flex items-center justify-center text-brand flex-shrink-0 shadow-xs">
+                <!-- Icono Android -->
+                <svg class="w-6 h-6 text-brand" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0002 0-.5516.4482-1.0002.9993-1.0002.5516 0 .9997.4486.9997 1.0002 0 .5516-.4481 1.0002-.9997 1.0002m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0002 0-.5516.4482-1.0002.9993-1.0002.5516 0 .9997.4486.9997 1.0002 0 .5516-.4481 1.0002-.9997 1.0002m11.4045-6.02l1.9964-3.456a.4161.4161 0 00-.1518-.5676.4163.4163 0 00-.5681.1521l-2.0223 3.503C15.5835 8.4144 13.8553 8.125 12 8.125c-1.8557 0-3.5835.2894-5.1357.8289L4.842 5.4509a.4164.4164 0 00-.5681-.1521.4157.4157 0 00-.1518.5676l1.9964 3.456C2.6883 11.1867.3438 14.6589 0 18.74h24c-.3438-4.0811-2.6883-7.5533-6.1185-9.4186"/>
+                </svg>
+              </div>
+
+              <div>
+                <h3 class="text-base font-extrabold text-brand leading-tight">My Pass para Android</h3>
+                <p class="text-[12px] text-gray-600 mt-0.5 leading-snug">
+                  Descarga la app y lleva tus pases en el bolsillo. Misma bóveda, mismo cifrado.
+                </p>
+              </div>
+            </div>
+
+            <!-- Código QR decorativo -->
+            <div class="flex flex-col items-center flex-shrink-0">
+              <div class="w-14 h-14 bg-white p-1.5 rounded-lg border border-brand-mint-border flex flex-col justify-between shadow-xs">
+                <div class="flex justify-between">
+                  <div class="w-4 h-4 bg-brand rounded-[2px] p-[2px]"><div class="w-full h-full bg-white rounded-[1px] p-[1px]"><div class="w-full h-full bg-brand"></div></div></div>
+                  <div class="w-4 h-4 bg-brand rounded-[2px] p-[2px]"><div class="w-full h-full bg-white rounded-[1px] p-[1px]"><div class="w-full h-full bg-brand"></div></div></div>
+                </div>
+                <div class="flex justify-between items-end">
+                  <div class="w-4 h-4 bg-brand rounded-[2px] p-[2px]"><div class="w-full h-full bg-white rounded-[1px] p-[1px]"><div class="w-full h-full bg-brand"></div></div></div>
+                  <div class="grid grid-cols-2 gap-[2px]">
+                    <div class="w-1.5 h-1.5 bg-brand"></div>
+                    <div class="w-1.5 h-1.5 bg-brand"></div>
+                    <div class="w-1.5 h-1.5 bg-brand"></div>
+                    <div class="w-1.5 h-1.5 bg-brand"></div>
+                  </div>
+                </div>
+              </div>
+              <span class="text-[9px] font-bold text-brand mt-1 uppercase tracking-tight">Escanea aquí</span>
+            </div>
+          </div>
+
+          <!-- Fila de descarga e información -->
+          <div class="pt-3 border-t border-brand-mint-border/60">
+            <div class="flex items-center gap-3">
+              <a href="mypass.apk" download class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-brand-accent px-3.5 py-2 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-brand-accent-hover hover:shadow">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                <span>Descargar APK</span>
+                <span class="ml-0.5 rounded bg-black/20 px-1.5 py-0.5 text-[9px] font-extrabold text-white">APK</span>
+              </a>
+
+              <div class="min-w-0 text-[10px] font-medium leading-tight text-gray-600">
+                <div class="font-semibold text-brand">Android 13 o superior</div>
+                <div class="text-gray-500">Instalación directa, sin Play Store</div>
+              </div>
+
+              <a href="#" class="ml-auto shrink-0 text-[10px] font-bold text-brand underline decoration-brand/30 underline-offset-4 hover:decoration-brand">
+                Ver requisitos
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pie de la columna -->
+        <p class="text-center text-[11px] text-gray-500 font-medium">
+          Al continuar aceptas los <a href="#" class="underline hover:text-gray-900">Términos</a> y la <a href="#" class="underline hover:text-gray-900">Política de privacidad</a>.
+        </p>
+
+      </div>
+    </section>
+
+  </main>
+
+</body>
+</html>

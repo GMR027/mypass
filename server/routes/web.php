@@ -34,6 +34,12 @@ Route::middleware(['auth', 'email-2fa'])->group(function () {
             'twoFactorEnabled' => filled($user->two_factor_confirmed_at),
             'deviceCount' => $user->devices()->whereNull('revoked_at')->count(),
             'contactCount' => $user->contacts()->where('status', 'accepted')->count(),
+            'documentCount' => $user->items()->where('state', '!=', 'transferred')->whereNull('deleted_at')->count(),
+            'passCount' => $user->items()
+                ->whereIn('type', ['ticket', 'card'])
+                ->where('state', '!=', 'transferred')
+                ->whereNull('deleted_at')
+                ->count(),
             'expiringCount' => $user->items()
                 ->whereNotNull('expires_at')
                 ->where('state', '!=', 'transferred')

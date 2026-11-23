@@ -1,10 +1,17 @@
 <x-auth-shell :title="__('Entrar')">
     <div class="mb-6">
-        <span class="mp-icon-tile-lg">
-            <x-icon name="lock_open" class="text-[30px]" />
-        </span>
-        <h1 class="mp-title-lg mt-4">{{ __('Entrar') }}</h1>
-        <p class="mp-body mt-2">{{ __('Usa tu cuenta para abrir la bóveda.') }}</p>
+        <div class="flex items-start justify-between gap-4">
+            <span class="mp-icon-tile-lg">
+                <x-icon name="lock_open" class="text-[30px]" />
+            </span>
+            <span class="mp-badge mp-badge-primary">
+                <x-icon name="encrypted" class="text-[16px]" filled />
+                {{ __('Cifrado local') }}
+            </span>
+        </div>
+        <p class="mp-eyebrow mt-5">{{ __('Tu billetera digital') }}</p>
+        <h1 class="mp-title-lg mt-2">{{ __('Entrar') }}</h1>
+        <p class="mp-body mt-2">{{ __('Abre tu cuenta y ten tus pases a la mano en segundos.') }}</p>
     </div>
 
     @if ($errors->any())
@@ -65,8 +72,8 @@
         </a>
     </p>
 
-    <div class="mt-6 flex items-start gap-3 rounded-xl bg-surface-container-low p-4 text-sm leading-relaxed text-on-surface-variant">
-        <x-icon name="verified_user" class="mt-0.5 text-[20px] text-primary" />
-        <p>{{ __('Sesión protegida bajo arquitectura Zero-Knowledge') }}</p>
+    <div class="mt-6 flex items-start gap-3 rounded-2xl bg-accent-soft p-4 text-sm leading-relaxed text-on-surface-variant">
+        <x-icon name="bolt" class="mt-0.5 text-[20px] text-accent-deep" />
+        <p>{{ __('Al desbloquear tu bóveda, tus pases y boletos aparecen primero.') }}</p>
     </div>
 </x-auth-shell>

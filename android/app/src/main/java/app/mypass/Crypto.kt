@@ -150,7 +150,7 @@ object Crypto {
     fun decryptFile(key: ByteArray, input: ByteArray): ByteArray {
         check(input.size >= HEADER_SIZE) { "El archivo está incompleto." }
         check(input[0] == MAGIC[0] && input[1] == MAGIC[1] && input[2] == MAGIC[2] && input[3] == MAGIC[3]) {
-            "El archivo no tiene el formato de mypass."
+            "El archivo no tiene el formato de My Pass."
         }
         check(input[4] == VERSION) { "La versión del archivo no es compatible." }
 

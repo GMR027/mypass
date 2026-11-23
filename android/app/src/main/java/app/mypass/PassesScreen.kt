@@ -8,6 +8,8 @@ import android.util.Base64
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -38,8 +40,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -82,7 +86,11 @@ import java.util.Locale
 
 @Composable
 fun HomeScreen(state: UiState, viewModel: MainViewModel) {
-    val passes = state.items.filter { it.pass != null && !isExpired(it) && it.state != "transferred" }
+    val passes = sortActivePassItems(
+        state.items.filter { it.pass != null && !isExpired(it) && it.state != "transferred" },
+    )
+    val nextPass = passes.firstOrNull()
+    val otherPasses = passes.drop(1).take(5)
     val expiring = state.items.count { item ->
         if (item.pass != null) {
             return@count false
@@ -92,22 +100,38 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
             !date.isAfter(LocalDate.now().plusDays(30))
     }
     val firstName = state.email.substringBefore("@").ifBlank { stringResource(R.string.app_name) }
+    var presentingItem by remember { mutableStateOf<UiItem?>(null) }
+    val todayLabel = remember {
+        LocalDate.now()
+            .format(DateTimeFormatter.ofPattern("EEEE d MMM", Locale.getDefault()))
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+    }
+
+    presentingItem?.let { item ->
+        PassPresentationDialog(item = item, onDismiss = { presentingItem = null })
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         MpTopBar(state = state, onLock = viewModel::lock)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = stringResource(R.string.home_greeting, firstName),
-                        style = MaterialTheme.typography.headlineMedium,
+                        text = todayLabel.uppercase(Locale.getDefault()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MpColors.AccentDeep,
+                        letterSpacing = 1.1.sp,
                     )
                     Text(
-                        text = stringResource(R.string.home_subtitle),
+                        text = stringResource(R.string.home_greeting, firstName),
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.home_wallet_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MpColors.OnSurfaceVariant,
                     )
@@ -115,50 +139,79 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
             }
 
             item { MpStatusBanner(state.status, state.error) }
-            item { VaultStatusCard(state) }
 
-            item {
-                Text(
-                    text = stringResource(R.string.home_quick_actions),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        QuickAction(
-                            title = stringResource(R.string.vault),
-                            subtitle = stringResource(R.string.home_open_vault),
-                            icon = Icons.Filled.Lock,
-                            modifier = Modifier.weight(1f),
-                            onClick = viewModel::backToVault,
-                        )
-                        QuickAction(
-                            title = stringResource(R.string.passes),
-                            subtitle = stringResource(R.string.home_open_passes),
-                            icon = Icons.Filled.DateRange,
-                            modifier = Modifier.weight(1f),
-                            onClick = viewModel::openPasses,
-                        )
+            if (nextPass != null) {
+                item {
+                    NextPassHero(
+                        item = nextPass,
+                        passCount = passes.size,
+                        onPresent = { presentingItem = nextPass },
+                        onOpenPasses = viewModel::openPasses,
+                    )
+                }
+
+                if (otherPasses.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_my_passes),
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = viewModel::openPasses) {
+                                Text(stringResource(R.string.home_view_all))
+                            }
+                        }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        QuickAction(
-                            title = stringResource(R.string.scan_pass),
-                            subtitle = stringResource(R.string.home_scan_pass),
-                            icon = Icons.Filled.Add,
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.openScanner(true) },
-                        )
-                        QuickAction(
-                            title = stringResource(R.string.family),
-                            subtitle = stringResource(R.string.home_open_family),
-                            icon = Icons.Filled.Person,
-                            modifier = Modifier.weight(1f),
-                            onClick = viewModel::openFamily,
-                        )
+                    items(otherPasses, key = { "home-${it.id}" }) { item ->
+                        PassCompactCard(item = item, onClick = { viewModel.openPasses() })
+                    }
+                }
+            } else {
+                item {
+                    MpCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            MpIconTile(painter = painterResource(R.drawable.ic_ticket), size = 64)
+                            Text(
+                                text = stringResource(R.string.no_passes_title),
+                                style = MaterialTheme.typography.headlineSmall,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = stringResource(R.string.no_passes_subtitle),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MpColors.OnSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            MpButton(
+                                text = stringResource(R.string.create_first_pass),
+                                onClick = { viewModel.openScanner(true) },
+                                icon = Icons.Filled.Add,
+                                fillWidth = true,
+                            )
+                        }
                     }
                 }
             }
+
+            item {
+                QuickActionDock(
+                    onVault = viewModel::backToVault,
+                    onPasses = viewModel::openPasses,
+                    onScan = { viewModel.openScanner(true) },
+                    onFamily = viewModel::openFamily,
+                )
+            }
+
+            item { VaultStatusCard(state) }
 
             if (expiring > 0) {
                 item { ExpiryBanner(count = expiring) }
@@ -173,59 +226,259 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                     )
                 }
             }
+        }
+    }
+}
 
-            item {
+@Composable
+private fun NextPassHero(
+    item: UiItem,
+    passCount: Int,
+    onPresent: () -> Unit,
+    onOpenPasses: () -> Unit,
+) {
+    val pass = item.pass ?: return
+    val gradient = passGradient(pass)
+    val dateLabel = passDateLabel(item)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.Transparent,
+        shadowElevation = 12.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gradient),
+        ) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.08f),
+                    radius = size.minDimension * 0.55f,
+                    center = androidx.compose.ui.geometry.Offset(size.width * 0.96f, size.height * 0.02f),
+                )
+            }
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        text = stringResource(R.string.home_recent_passes),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (passes.isNotEmpty()) {
-                        TextButton(onClick = viewModel::openPasses) {
-                            Text(stringResource(R.string.home_view_all))
-                        }
-                    }
-                }
-            }
-
-            if (passes.isEmpty()) {
-                item {
-                    MpCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f)) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
-                            MpIconTile(icon = Icons.Filled.DateRange, size = 56)
-                            Text(
-                                text = stringResource(R.string.no_passes_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Center,
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(MpColors.Accent),
                             )
                             Text(
-                                text = stringResource(R.string.no_passes_subtitle),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MpColors.OnSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                            MpButton(
-                                text = stringResource(R.string.create_first_pass),
-                                onClick = { viewModel.openScanner(true) },
-                                icon = Icons.Filled.Add,
-                                fillWidth = true,
+                                text = stringResource(R.string.home_next_badge),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
                             )
                         }
                     }
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.12f)) {
+                        Text(
+                            text = categoryLabel(pass.category),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.86f),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = if (passCount == 1) stringResource(R.string.home_pass_count_one, passCount) else stringResource(R.string.home_pass_count, passCount),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.58f),
+                    )
                 }
-            } else {
-                items(passes.take(3), key = { it.id }) { item ->
-                    PassCompactCard(item = item, onClick = viewModel::openPasses)
+
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = pass.issuer.ifBlank { categoryLabel(pass.category) },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.66f),
+                    )
+                    Text(
+                        text = pass.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = pass.holder.ifBlank { item.title }.takeIf { it != pass.title }.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                if (dateLabel != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.DateRange,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White,
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        onClick = onPresent,
+                        shape = CircleShape,
+                        color = Color.White,
+                        contentColor = MpColors.Primary,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_qr_code),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.home_present_now),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Surface(
+                        onClick = onOpenPasses,
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color.White,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DateRange,
+                            contentDescription = stringResource(R.string.home_view_all),
+                            modifier = Modifier.padding(14.dp).size(20.dp),
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QuickActionDock(
+    onVault: () -> Unit,
+    onPasses: () -> Unit,
+    onScan: () -> Unit,
+    onFamily: () -> Unit,
+) {
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = stringResource(R.string.home_quick_actions),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                QuickActionItem(
+                    title = stringResource(R.string.vault),
+                    icon = Icons.Filled.Lock,
+                    modifier = Modifier.weight(1f),
+                    onClick = onVault,
+                )
+                QuickActionItem(
+                    title = stringResource(R.string.passes),
+                    icon = Icons.Filled.DateRange,
+                    modifier = Modifier.weight(1f),
+                    onClick = onPasses,
+                )
+                QuickActionItem(
+                    title = stringResource(R.string.scan_pass),
+                    icon = Icons.Filled.Add,
+                    modifier = Modifier.weight(1f),
+                    onClick = onScan,
+                    accent = true,
+                )
+                QuickActionItem(
+                    title = stringResource(R.string.family),
+                    icon = Icons.Filled.Person,
+                    modifier = Modifier.weight(1f),
+                    onClick = onFamily,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickActionItem(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    accent: Boolean = false,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (accent) MpColors.AccentSoft else MpColors.PrimaryFixed),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (accent) MpColors.AccentDeep else MpColors.Primary,
+                modifier = Modifier.size(23.dp),
+            )
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MpColors.OnSurfaceVariant,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -354,7 +607,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     }
 
     val allPasses = state.items.filter { it.pass != null }
-    val active = allPasses.filterNot { isExpired(it) || it.state == "transferred" }
+    val active = sortActivePassItems(allPasses.filterNot { isExpired(it) || it.state == "transferred" })
     val archived = allPasses.filter { isExpired(it) || it.state == "transferred" }
     val filtered = if (filter == "all") active else active.filter { it.pass?.category == filter }
     val selected = allPasses.firstOrNull { it.id == selectedId } ?: active.firstOrNull()
@@ -510,6 +763,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                     item {
                         PassDetailCard(
                             item = selected,
+                            isNext = selected.id == active.firstOrNull()?.id,
                             hasContacts = acceptedContacts.isNotEmpty(),
                             onPresent = { presentingItem = selected },
                             onShare = { shareItem = selected },
@@ -572,57 +826,58 @@ private fun NewPassDialog(
     onSelect: (String) -> Unit,
 ) {
     val categories = listOf(
-        "flight" to R.string.flight,
-        "event" to R.string.event,
-        "transit" to R.string.transit,
-        "id" to R.string.identity,
-        "membership" to R.string.membership,
+        Triple("flight", R.string.flight, Icons.Filled.Send),
+        Triple("event", R.string.event, Icons.Filled.DateRange),
+        Triple("transit", R.string.transit, Icons.Filled.Place),
+        Triple("id", R.string.identity, Icons.Filled.Person),
+        Triple("membership", R.string.membership, Icons.Filled.Star),
     )
 
-    AlertDialog(
+    MpDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        containerColor = Color.White,
-        title = { Text(stringResource(R.string.create_pass_from_scratch), style = MaterialTheme.typography.headlineSmall) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = stringResource(R.string.choose_pass_type),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MpColors.OnSurfaceVariant,
-                )
-                categories.forEach { (category, label) ->
-                    TextButton(
-                        onClick = { onSelect(category) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = stringResource(label),
-                            modifier = Modifier.weight(1f),
-                            color = MpColors.OnSurface,
-                            textAlign = TextAlign.Start,
-                        )
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = null,
-                            tint = MpColors.Primary,
-                        )
-                    }
-                }
-            }
+        header = {
+            MpDialogHeader(
+                icon = Icons.Filled.Add,
+                title = stringResource(R.string.create_pass_from_scratch),
+                subtitle = stringResource(R.string.choose_pass_type),
+                onClose = onDismiss,
+            )
         },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
-            }
+        actions = {
+            MpDialogActions(
+                primaryLabel = stringResource(R.string.cancel),
+                onPrimary = onDismiss,
+                primaryVariant = MpButtonVariant.Secondary,
+            )
         },
-    )
+    ) {
+        categories.forEach { (category, label, icon) ->
+            MpOptionCard(
+                title = stringResource(label),
+                onClick = { onSelect(category) },
+                leading = {
+                    MpIconTile(
+                        icon = icon,
+                        size = 44,
+                    )
+                },
+                trailing = {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = MpColors.Primary,
+                        modifier = Modifier.size(22.dp),
+                    )
+                },
+            )
+        }
+    }
 }
 
 @Composable
 private fun PassDetailCard(
     item: UiItem,
+    isNext: Boolean,
     hasContacts: Boolean,
     onPresent: () -> Unit,
     onShare: () -> Unit,
@@ -650,7 +905,14 @@ private fun PassDetailCard(
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                PassCardHeader(pass = pass, badge = categoryLabel(pass.category))
+                PassCardHeader(
+                    pass = pass,
+                    badge = if (isNext) {
+                        "${categoryLabel(pass.category)} · ${stringResource(R.string.home_next_badge)}"
+                    } else {
+                        categoryLabel(pass.category)
+                    },
+                )
                 PassCardBody(pass = pass)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1114,87 +1376,147 @@ private fun PassPresentationDialog(item: UiItem, onDismiss: () -> Unit) {
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = Color.White) {
+    MpFullScreenWindow(onDismissRequest = onDismiss) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.presentation),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MpColors.Primary,
+                )
+                Text(
+                    text = pass.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = listOf(pass.issuer, pass.holder).filter { it.isNotBlank() }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                )
+            }
+            MpIconButton(
+                icon = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.close),
+                onClick = onDismiss,
+                container = MpColors.SurfaceLow,
+                tint = MpColors.OnSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White,
+            border = BorderStroke(1.dp, MpColors.OutlineVariant.copy(alpha = 0.45f)),
+            shadowElevation = 2.dp,
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .safeDrawingPadding()
                     .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = stringResource(R.string.pass_code),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentScale = ContentScale.Fit,
+                    )
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        MpIconTile(painter = painterResource(R.drawable.ic_qr_code), size = 80)
                         Text(
-                            text = stringResource(R.string.presentation),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MpColors.Primary,
-                        )
-                        Text(
-                            text = pass.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = listOf(pass.issuer, pass.holder).filter { it.isNotBlank() }.joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall,
+                            text = stringResource(R.string.pass_code_unavailable),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MpColors.OnSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
-                    }
                 }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = stringResource(R.string.pass_code),
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit,
-                        )
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            MpIconTile(painter = painterResource(R.drawable.ic_qr_code), size = 80)
-                            Text(
-                                text = stringResource(R.string.pass_code_unavailable),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MpColors.OnSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.presentation_hint),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MpColors.OnSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                MpButton(
-                    text = stringResource(R.string.close_presentation),
-                    onClick = onDismiss,
-                    fillWidth = true,
-                )
             }
         }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            MpBadge(
+                text = stringResource(R.string.brightness_max),
+                tone = MpBadgeTone.Primary,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        MpButton(
+            text = stringResource(R.string.close_presentation),
+            onClick = onDismiss,
+            fillWidth = true,
+        )
     }
 }
 
 internal fun isExpired(item: UiItem): Boolean {
     val date = item.expiresAt?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() } ?: return false
     return date.isBefore(LocalDate.now())
+}
+
+internal fun passRelevantDate(item: UiItem): LocalDate? {
+    val fields = item.pass?.fields.orEmpty()
+    for (value in listOf(fields["date"], fields["expires"], item.expiresAt)) {
+        val date = value?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+        if (date != null) {
+            return date
+        }
+    }
+    return null
+}
+
+internal fun sortActivePassItems(items: List<UiItem>): List<UiItem> {
+    val today = LocalDate.now()
+    return items.sortedWith(Comparator { a, b ->
+        val dateA = passRelevantDate(a)
+        val dateB = passRelevantDate(b)
+        val upcomingA = dateA != null && !dateA.isBefore(today)
+        val upcomingB = dateB != null && !dateB.isBefore(today)
+
+        when {
+            upcomingA && upcomingB -> dateA!!.compareTo(dateB!!)
+            upcomingA != upcomingB -> if (upcomingA) -1 else 1
+            dateA != null && dateB != null -> dateB.compareTo(dateA)
+            else -> (b.updatedAt ?: "").compareTo(a.updatedAt ?: "")
+        }
+    })
+}
+
+private fun passDateLabel(item: UiItem): String? {
+    val date = passRelevantDate(item) ?: return null
+    val locale = Locale.getDefault()
+    return date.format(DateTimeFormatter.ofPattern("d MMM", locale))
 }
 
 private fun passPayload(item: UiItem, pass: UiPass): String {

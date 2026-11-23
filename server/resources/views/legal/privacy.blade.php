@@ -6,8 +6,8 @@
 
         <div class="mp-card mp-card-pad mt-6 space-y-6">
             <section>
-                <h2 class="mp-title-sm">{{ __('Qué es mypass') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('mypass es una bóveda personal para guardar documentos, boletos, tarjetas y pases. El contenido se cifra en tu dispositivo antes de salir de él. El servidor guarda blobs cifrados y metadatos también cifrados; no puede leer tus documentos ni tus llaves.') }}</p>
+                <h2 class="mp-title-sm">{{ __('Qué es My Pass') }}</h2>
+                <p class="mp-body-sm mt-2">{{ __('My Pass es una bóveda personal para guardar documentos, boletos, tarjetas y pases. El contenido se cifra en tu dispositivo antes de salir de él. El servidor guarda blobs cifrados y metadatos también cifrados; no puede leer tus documentos ni tus llaves.') }}</p>
             </section>
 
             <section>

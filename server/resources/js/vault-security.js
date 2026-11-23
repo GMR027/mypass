@@ -170,7 +170,7 @@ if (root) {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = 'mypass-llave-emergencia.mypss';
+        anchor.download = 'my-pass-llave-emergencia.mypss';
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(url), 60000);
     }

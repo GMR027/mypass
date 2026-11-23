@@ -7,7 +7,7 @@
         <div class="mp-card mp-card-pad mt-6 space-y-6">
             <section>
                 <h2 class="mp-title-sm">{{ __('El servicio') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('mypass te permite organizar documentos y pases en una bóveda cifrada, sincronizarla con tus dispositivos y compartir copias cifradas con contactos que acepten el envío. El servicio se ofrece tal como está y puede cambiar o interrumpirse.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('My Pass te permite organizar documentos y pases en una bóveda cifrada, sincronizarla con tus dispositivos y compartir copias cifradas con contactos que acepten el envío. El servicio se ofrece tal como está y puede cambiar o interrumpirse.') }}</p>
             </section>
 
             <section>
@@ -27,7 +27,7 @@
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Contenido y responsabilidad') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('Conservas la titularidad de tu contenido. No podemos revisarlo porque está cifrado. Debes mantener tus propios respaldos y verificar que los datos de tus pases sean correctos antes de usarlos. No garantizamos que un lector externo acepte un código generado por mypass.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('Conservas la titularidad de tu contenido. No podemos revisarlo porque está cifrado. Debes mantener tus propios respaldos y verificar que los datos de tus pases sean correctos antes de usarlos. No garantizamos que un lector externo acepte un código generado por My Pass.') }}</p>
             </section>
 
             <section>

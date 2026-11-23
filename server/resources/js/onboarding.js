@@ -264,7 +264,7 @@ function downloadRecovery() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'mypass-recovery.mypss';
+    anchor.download = 'my-pass-recovery.mypss';
     anchor.click();
     URL.revokeObjectURL(url);
 }
@@ -283,9 +283,9 @@ function printRecovery() {
 
     printWindow.document.write(`
         <html lang="${window.mypassLocale === 'en' ? 'en' : 'es'}">
-        <head><title>${t('mypass — llave de emergencia')}</title></head>
+        <head><title>${t('My Pass — llave de emergencia')}</title></head>
         <body style="font-family: sans-serif; padding: 2rem;">
-            <h1>${t('mypass — llave de emergencia')}</h1>
+            <h1>${t('My Pass — llave de emergencia')}</h1>
             <p>${t('Guarda esta hoja en un lugar seguro. No la compartas.')}</p>
             <p style="font-family: monospace; font-size: 1.8rem; letter-spacing: 0.2rem;">
                 ${formatDigits(recoveryDigits)}

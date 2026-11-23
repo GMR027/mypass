@@ -15,7 +15,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -103,6 +110,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -222,29 +231,45 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
             .imePadding(),
     ) {
         Box(modifier = Modifier.weight(1f)) {
-            when (state.screen) {
-                Screen.Loading -> LoadingScreen()
-                Screen.Login -> LoginScreen(state = state, viewModel = viewModel)
-                Screen.Pair -> PairScreen(state = state, viewModel = viewModel)
-                Screen.PinSetup -> PinSetupScreen(state = state, viewModel = viewModel)
-                Screen.TwoFactor -> TwoFactorScreen(state = state, viewModel = viewModel)
-                Screen.Locked -> LockedScreen(state = state, viewModel = viewModel)
-                Screen.Home -> HomeScreen(state = state, viewModel = viewModel)
-                Screen.Vault -> VaultScreen(
-                    state = state,
-                    viewModel = viewModel,
-                    onAdd = { filePicker.launch(arrayOf("application/pdf", "image/*")) },
-                )
-                Screen.Passes -> PassesScreen(state = state, viewModel = viewModel)
-                Screen.PassEditor -> PassEditorScreen(state = state, viewModel = viewModel)
-                Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
-                Screen.Scan -> ScannerScreen(state = state, viewModel = viewModel)
-                Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
-                Screen.Viewer -> ViewerScreen(state = state, viewModel = viewModel)
+            AnimatedContent(
+                targetState = state.screen,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(180)) togetherWith
+                        fadeOut(animationSpec = tween(120))
+                },
+                label = "screen",
+            ) { screen ->
+                when (screen) {
+                    Screen.Loading -> LoadingScreen()
+                    Screen.Login -> LoginScreen(state = state, viewModel = viewModel)
+                    Screen.Pair -> PairScreen(state = state, viewModel = viewModel)
+                    Screen.PinSetup -> PinSetupScreen(state = state, viewModel = viewModel)
+                    Screen.TwoFactor -> TwoFactorScreen(state = state, viewModel = viewModel)
+                    Screen.Locked -> LockedScreen(state = state, viewModel = viewModel)
+                    Screen.Home -> HomeScreen(state = state, viewModel = viewModel)
+                    Screen.Vault -> VaultScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        onAdd = { filePicker.launch(arrayOf("application/pdf", "image/*")) },
+                    )
+                    Screen.Passes -> PassesScreen(state = state, viewModel = viewModel)
+                    Screen.PassEditor -> PassEditorScreen(state = state, viewModel = viewModel)
+                    Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
+                    Screen.Scan -> ScannerScreen(state = state, viewModel = viewModel)
+                    Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
+                    Screen.Viewer -> ViewerScreen(state = state, viewModel = viewModel)
+                }
             }
         }
         if (showBottomBar) {
-            MpBottomBar(screen = state.screen, viewModel = viewModel)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                MpBottomBar(screen = state.screen, viewModel = viewModel)
+            }
         }
     }
 }
@@ -275,21 +300,43 @@ private fun AuthShell(content: @Composable () -> Unit) {
 
         if (wide) {
             Row(modifier = Modifier.fillMaxSize()) {
-                Surface(
+                Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(0.96f)
                         .fillMaxHeight()
-                        .padding(top = 24.dp),
-                    color = MpColors.Primary,
+                        .background(MpGradients.BrandDeep),
                 ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawCircle(
+                            color = MpColors.Accent.copy(alpha = 0.2f),
+                            radius = size.minDimension * 0.34f,
+                            center = androidx.compose.ui.geometry.Offset(size.width * 0.96f, size.height * 0.04f),
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.05f),
+                            radius = size.minDimension * 0.56f,
+                            center = androidx.compose.ui.geometry.Offset(size.width * 0.02f, size.height * 1.02f),
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(48.dp),
+                            .padding(44.dp),
                         verticalArrangement = Arrangement.SpaceBetween,
                     ) {
                         MpLogo(inverse = true)
-                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.1f),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.auth_wallet_eyebrow),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                )
+                            }
                             Text(
                                 text = stringResource(R.string.auth_brand_title),
                                 style = MaterialTheme.typography.displaySmall,
@@ -300,9 +347,9 @@ private fun AuthShell(content: @Composable () -> Unit) {
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MpColors.PrimaryFixed,
                             )
+                            AuthPassStack()
                             AuthFeature(Icons.Filled.Lock, stringResource(R.string.auth_feature_encryption), stringResource(R.string.auth_feature_encryption_help))
                             AuthFeature(Icons.Filled.Phone, stringResource(R.string.auth_feature_devices), stringResource(R.string.auth_feature_devices_help))
-                            AuthFeature(Icons.Filled.AccountCircle, stringResource(R.string.auth_feature_private), stringResource(R.string.auth_feature_private_help))
                         }
                         Text(
                             text = stringResource(R.string.auth_brand_footer),
@@ -314,14 +361,14 @@ private fun AuthShell(content: @Composable () -> Unit) {
 
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.04f)
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
                         .padding(32.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Box(modifier = Modifier.widthIn(max = 560.dp)) {
+                    Box(modifier = Modifier.widthIn(max = 580.dp)) {
                         content()
                     }
                 }
@@ -337,11 +384,132 @@ private fun AuthShell(content: @Composable () -> Unit) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     MpLogo()
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(18.dp))
+                MpHeroPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(18.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.auth_wallet_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = stringResource(R.string.auth_wallet_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MpColors.PrimaryFixed,
+                    )
+                }
+                Spacer(modifier = Modifier.height(18.dp))
                 Box(modifier = Modifier.widthIn(max = 560.dp)) {
                     content()
                 }
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthPassStack() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(250.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        MiniPassCard(
+            eyebrow = stringResource(R.string.auth_demo_membership),
+            title = stringResource(R.string.auth_demo_member_title),
+            subtitle = stringResource(R.string.auth_demo_member_subtitle),
+            gradient = Brush.linearGradient(listOf(Color(0xFF064E3B), Color(0xFF0C6B51))),
+            modifier = Modifier
+                .offset(y = 58.dp)
+                .rotate(-5f),
+        )
+        MiniPassCard(
+            eyebrow = stringResource(R.string.auth_demo_event),
+            title = stringResource(R.string.auth_demo_event_title),
+            subtitle = stringResource(R.string.auth_demo_event_subtitle),
+            gradient = Brush.linearGradient(listOf(Color(0xFF3B1D6E), Color(0xFF5B2AA0))),
+            modifier = Modifier
+                .offset(x = 34.dp, y = -10.dp)
+                .rotate(3f),
+        )
+        MiniPassCard(
+            eyebrow = stringResource(R.string.auth_demo_boarding),
+            title = "MAD  →  MEX",
+            subtitle = stringResource(R.string.auth_demo_flight_subtitle),
+            gradient = Brush.linearGradient(listOf(Color(0xFF0C2340), Color(0xFF1B3A5C))),
+            modifier = Modifier
+                .offset(y = -76.dp)
+                .rotate(-2f),
+        )
+    }
+}
+
+@Composable
+private fun MiniPassCard(
+    eyebrow: String,
+    title: String,
+    subtitle: String,
+    gradient: Brush,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.width(310.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Transparent,
+        shadowElevation = 14.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gradient)
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = eyebrow,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                        letterSpacing = 1.2.sp,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f)) {
+                        Text(
+                            text = "My Pass",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.66f),
+                )
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    repeat(18) { index ->
+                        Box(
+                            modifier = Modifier
+                                .width(if (index % 3 == 0) 3.dp else 2.dp)
+                                .height(22.dp)
+                                .background(Color.White.copy(alpha = if (index % 4 == 0) 0.8f else 0.5f)),
+                        )
+                    }
+                }
             }
         }
     }
@@ -353,7 +521,7 @@ private fun AuthFeature(icon: ImageVector, title: String, subtitle: String) {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(Color.White.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -374,27 +542,46 @@ private fun AuthCard(
     state: UiState,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        MpIconTile(icon = icon, size = 64)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MpColors.OnSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                MpStatusBanner(state.status, state.error)
-                content()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(32.dp),
+        color = MpColors.Surface,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        shadowElevation = 12.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                MpIconTile(icon = icon, size = 56)
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(shape = CircleShape, color = MpColors.AccentSoft) {
+                    Text(
+                        text = "My Pass",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MpColors.AccentDeep,
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
+                    )
+                }
             }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MpColors.OnSurfaceVariant,
+                )
+            }
+            MpStatusBanner(state.status, state.error)
+            content()
         }
     }
 }
@@ -618,6 +805,37 @@ private fun LockedScreen(state: UiState, viewModel: MainViewModel) {
             subtitle = stringResource(R.string.locked_help),
             state = state,
         ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MpColors.AccentSoft,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_ticket),
+                        contentDescription = null,
+                        tint = MpColors.AccentDeep,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Column {
+                        Text(
+                            text = stringResource(R.string.locked_wallet_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MpColors.AccentDeep,
+                        )
+                        Text(
+                            text = stringResource(R.string.locked_wallet_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             if (biometricReady) {
                 MpButton(
                     text = stringResource(R.string.unlock_with_biometric),
@@ -1091,6 +1309,7 @@ private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
                 blockContact = null
             },
             onDismiss = { blockContact = null },
+            icon = Icons.Filled.Warning,
         )
     }
 
@@ -1673,71 +1892,104 @@ private fun ChangePinDialog(
     var current by remember { mutableStateOf("") }
     var next by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
+    val valid = current.length >= 6 &&
+        next.length >= 6 &&
+        confirmation.length >= 6 &&
+        next == confirmation
+    val mismatch = next.isNotBlank() && confirmation.isNotBlank() && next != confirmation
 
-    AlertDialog(
+    MpDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        containerColor = Color.White,
-        title = { Text(stringResource(R.string.change_pin_title), style = MaterialTheme.typography.headlineSmall) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                MpPasswordField(
-                    value = current,
-                    onValueChange = { current = it.filter(Char::isDigit).take(12) },
-                    label = stringResource(R.string.current_pin),
-                    keyboardType = KeyboardType.NumberPassword,
-                )
-                MpPasswordField(
-                    value = next,
-                    onValueChange = { next = it.filter(Char::isDigit).take(12) },
-                    label = stringResource(R.string.new_pin),
-                    keyboardType = KeyboardType.NumberPassword,
-                )
-                MpPasswordField(
-                    value = confirmation,
-                    onValueChange = { confirmation = it.filter(Char::isDigit).take(12) },
-                    label = stringResource(R.string.confirm_new_pin),
-                    keyboardType = KeyboardType.NumberPassword,
-                )
-            }
+        header = {
+            MpDialogHeader(
+                icon = Icons.Filled.Lock,
+                title = stringResource(R.string.change_pin_title),
+                subtitle = stringResource(R.string.pin_change_help),
+                onClose = onDismiss,
+            )
         },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(current, next, confirmation) },
-                enabled = current.length >= 6 &&
-                    next.length >= 6 &&
-                    confirmation.length >= 6 &&
-                    next == confirmation,
-            ) {
-                Text(stringResource(R.string.save_pin), color = MpColors.Primary, fontWeight = FontWeight.SemiBold)
-            }
+        actions = {
+            MpDialogActions(
+                primaryLabel = stringResource(R.string.save_pin),
+                onPrimary = { onSave(current, next, confirmation) },
+                primaryEnabled = valid,
+                secondaryLabel = stringResource(R.string.cancel),
+                onSecondary = onDismiss,
+            )
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
-            }
-        },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            MpPasswordField(
+                value = current,
+                onValueChange = { current = it.filter(Char::isDigit).take(12) },
+                label = stringResource(R.string.current_pin),
+                keyboardType = KeyboardType.NumberPassword,
+            )
+            MpPasswordField(
+                value = next,
+                onValueChange = { next = it.filter(Char::isDigit).take(12) },
+                label = stringResource(R.string.new_pin),
+                keyboardType = KeyboardType.NumberPassword,
+            )
+            MpPasswordField(
+                value = confirmation,
+                onValueChange = { confirmation = it.filter(Char::isDigit).take(12) },
+                label = stringResource(R.string.confirm_new_pin),
+                keyboardType = KeyboardType.NumberPassword,
+            )
+        }
+        if (mismatch) {
+            MpCallout(
+                text = stringResource(R.string.pin_mismatch),
+                tone = MpCalloutTone.Error,
+            )
+        }
+    }
 }
 
 @Composable
 internal fun MpTopBar(state: UiState, onLock: () -> Unit) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .background(Color.White),
     ) {
-        MpLogo()
-        Spacer(modifier = Modifier.weight(1f))
-        MpIconButton(
-            icon = Icons.Filled.Lock,
-            contentDescription = stringResource(R.string.lock),
-            onClick = onLock,
-            container = MpColors.SurfaceLow,
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        MpAvatar(name = state.email.ifBlank { "M" }, size = 40)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MpLogo()
+            Spacer(modifier = Modifier.width(4.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End,
+            ) {
+                Text(
+                    text = stringResource(R.string.vault_open_badge),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MpColors.Primary,
+                )
+                Text(
+                    text = state.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            MpIconButton(
+                icon = Icons.Filled.Lock,
+                contentDescription = stringResource(R.string.lock),
+                onClick = onLock,
+                container = MpColors.SurfaceLow,
+                tint = MpColors.Primary,
+            )
+            MpAvatar(name = state.email.ifBlank { "M" }, size = 40)
+        }
+        MpDivider()
     }
 }
 
@@ -1758,43 +2010,55 @@ fun SubScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -
 
 @Composable
 private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
-    NavigationBar(
-        containerColor = Color.White,
-        tonalElevation = 0.dp,
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 620.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        shadowElevation = 16.dp,
     ) {
-        NavigationBarItem(
-            selected = screen == Screen.Home,
-            onClick = { if (screen != Screen.Home) viewModel.backToHome() },
-            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-            label = { Text(stringResource(R.string.home)) },
-            colors = bottomBarColors(),
-        )
-        NavigationBarItem(
-            selected = screen == Screen.Vault,
-            onClick = { if (screen != Screen.Vault) viewModel.backToVault() },
-            icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-            label = { Text(stringResource(R.string.vault)) },
-            colors = bottomBarColors(),
-        )
-        NavigationBarItem(
-            selected = screen == Screen.Passes,
-            onClick = { if (screen != Screen.Passes) viewModel.openPasses() },
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_ticket),
-                    contentDescription = null,
-                )
-            },
-            label = { Text(stringResource(R.string.passes)) },
-            colors = bottomBarColors(),
-        )
-        NavigationBarItem(
-            selected = screen == Screen.Settings,
-            onClick = { if (screen != Screen.Settings) viewModel.openSettings() },
-            icon = { Icon(Icons.Filled.Person, contentDescription = null) },
-            label = { Text(stringResource(R.string.profile)) },
-            colors = bottomBarColors(),
-        )
+        NavigationBar(
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp,
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.clip(RoundedCornerShape(28.dp)),
+        ) {
+            NavigationBarItem(
+                selected = screen == Screen.Home,
+                onClick = { if (screen != Screen.Home) viewModel.backToHome() },
+                icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                label = { Text(stringResource(R.string.home)) },
+                colors = bottomBarColors(),
+            )
+            NavigationBarItem(
+                selected = screen == Screen.Passes,
+                onClick = { if (screen != Screen.Passes) viewModel.openPasses() },
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_ticket),
+                        contentDescription = null,
+                    )
+                },
+                label = { Text(stringResource(R.string.passes)) },
+                colors = bottomBarColors(),
+            )
+            NavigationBarItem(
+                selected = screen == Screen.Vault,
+                onClick = { if (screen != Screen.Vault) viewModel.backToVault() },
+                icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                label = { Text(stringResource(R.string.vault)) },
+                colors = bottomBarColors(),
+            )
+            NavigationBarItem(
+                selected = screen == Screen.Settings,
+                onClick = { if (screen != Screen.Settings) viewModel.openSettings() },
+                icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                label = { Text(stringResource(R.string.profile)) },
+                colors = bottomBarColors(),
+            )
+        }
     }
 }
 
@@ -1838,24 +2102,34 @@ internal fun ConfirmDialog(
     confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    icon: ImageVector = Icons.Filled.Delete,
 ) {
-    AlertDialog(
+    MpDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        containerColor = Color.White,
-        title = { Text(title, style = MaterialTheme.typography.headlineSmall) },
-        text = { Text(message, style = MaterialTheme.typography.bodyMedium, color = MpColors.OnSurfaceVariant) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(confirmLabel, color = MpColors.Error, fontWeight = FontWeight.SemiBold)
-            }
+        header = {
+            MpDialogHeader(
+                icon = icon,
+                title = title,
+                tone = MpDialogTone.Danger,
+                onClose = onDismiss,
+            )
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = MpColors.Primary)
-            }
+        actions = {
+            MpDialogActions(
+                primaryLabel = confirmLabel,
+                onPrimary = onConfirm,
+                primaryVariant = MpButtonVariant.Destructive,
+                secondaryLabel = stringResource(R.string.cancel),
+                onSecondary = onDismiss,
+            )
         },
-    )
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MpColors.OnSurfaceVariant,
+        )
+    }
 }
 
 @Composable
@@ -1867,86 +2141,114 @@ internal fun ShareDialog(
 ) {
     var contactId by remember { mutableStateOf(contacts.firstOrNull()?.id.orEmpty()) }
     var mode by remember { mutableStateOf("copy") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        containerColor = Color.White,
-        title = {
-            Column {
-                Text(stringResource(R.string.send_item, item.title), style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    stringResource(R.string.share_dialog_help),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.contact), style = MaterialTheme.typography.titleSmall)
-                for (contact in contacts) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material3.RadioButton(
-                            selected = contactId == contact.id,
-                            onClick = { contactId = contact.id },
-                        )
-                        Text(
-                            text = stringResource(R.string.contact_name_email, contact.name, contact.email),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-
-                Text(stringResource(R.string.share_mode), style = MaterialTheme.typography.titleSmall)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.RadioButton(
-                        selected = mode == "copy",
-                        onClick = { mode = "copy" },
-                    )
-                    Text(stringResource(R.string.send_copy), style = MaterialTheme.typography.bodyMedium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.RadioButton(
-                        selected = mode == "transfer",
-                        onClick = { mode = "transfer" },
-                    )
-                    Text(stringResource(R.string.transfer), style = MaterialTheme.typography.bodyMedium)
-                }
-
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MpColors.SecondaryFixed,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(Icons.Filled.Warning, contentDescription = null, tint = MpColors.OnSecondaryFixed, modifier = Modifier.size(18.dp))
-                        Text(
-                            stringResource(R.string.transfer_warning),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MpColors.OnSecondaryFixed,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (contactId.isNotBlank()) onSend(contactId, mode) },
-                enabled = contactId.isNotBlank(),
-            ) {
-                Text(stringResource(R.string.send), color = MpColors.Primary, fontWeight = FontWeight.SemiBold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
-            }
+    val summaryPainter = painterResource(
+        when (item.type) {
+            "ticket" -> R.drawable.ic_ticket
+            "card" -> R.drawable.ic_card
+            else -> R.drawable.ic_document
         },
     )
+
+    MpDialog(
+        onDismissRequest = onDismiss,
+        header = {
+            MpDialogHeader(
+                icon = Icons.Filled.Send,
+                title = stringResource(R.string.send_item, item.title),
+                subtitle = stringResource(R.string.share_dialog_help),
+                onClose = onDismiss,
+            )
+        },
+        actions = {
+            MpDialogActions(
+                primaryLabel = stringResource(R.string.send),
+                onPrimary = { if (contactId.isNotBlank()) onSend(contactId, mode) },
+                primaryEnabled = contactId.isNotBlank(),
+                primaryIcon = Icons.Filled.Send,
+                secondaryLabel = stringResource(R.string.cancel),
+                onSecondary = onDismiss,
+            )
+        },
+    ) {
+        MpSummaryCard(
+            label = stringResource(R.string.active_document),
+            title = item.title,
+            painter = summaryPainter,
+            badge = {
+                MpBadge(
+                    text = stringResource(R.string.encrypted_ready),
+                    tone = MpBadgeTone.Primary,
+                )
+            },
+        )
+
+        MpDialogSection(
+            title = stringResource(R.string.contact),
+            hint = stringResource(R.string.secure_recipient),
+        ) {
+            if (contacts.isEmpty()) {
+                MpCallout(
+                    text = stringResource(R.string.share_needs_contact),
+                    tone = MpCalloutTone.Info,
+                )
+            } else {
+                contacts.forEach { contact ->
+                    MpSelectableCard(
+                        title = contact.name,
+                        subtitle = contact.email,
+                        selected = contactId == contact.id,
+                        onSelect = { contactId = contact.id },
+                        trailing = if (contactId == contact.id) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MpColors.Primary,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
+
+        MpDialogSection(title = stringResource(R.string.share_mode)) {
+            MpSelectableCard(
+                title = stringResource(R.string.send_copy),
+                subtitle = stringResource(R.string.send_copy_help),
+                selected = mode == "copy",
+                onSelect = { mode = "copy" },
+                badge = {
+                    MpBadge(
+                        text = stringResource(R.string.recommended),
+                        tone = MpBadgeTone.Primary,
+                    )
+                },
+            )
+            MpSelectableCard(
+                title = stringResource(R.string.transfer),
+                subtitle = stringResource(R.string.transfer_help),
+                selected = mode == "transfer",
+                onSelect = { mode = "transfer" },
+            )
+        }
+
+        if (mode == "transfer") {
+            MpCallout(
+                title = stringResource(R.string.transfer_warning_title),
+                text = stringResource(R.string.transfer_warning),
+                tone = MpCalloutTone.Warning,
+            )
+        } else {
+            MpCallout(
+                text = stringResource(R.string.send_copy_help),
+                tone = MpCalloutTone.Success,
+            )
+        }
+    }
 }
 
 @Composable
@@ -1960,48 +2262,42 @@ private fun ExpiryDialog(
     }
     val valid = value.isBlank() || runCatching { LocalDate.parse(value) }.isSuccess
 
-    AlertDialog(
+    MpDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        containerColor = Color.White,
-        title = { Text(stringResource(R.string.expiry_title, item.title), style = MaterialTheme.typography.headlineSmall) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    stringResource(R.string.expiry_help),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MpColors.OnSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { text ->
-                        value = text.filter { it.isDigit() || it == '-' }.take(10)
-                    },
-                    label = { Text(stringResource(R.string.expiry_date_hint)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MpColors.Primary,
-                        unfocusedBorderColor = MpColors.OutlineVariant,
-                    ),
-                )
-            }
+        header = {
+            MpDialogHeader(
+                icon = Icons.Filled.DateRange,
+                title = stringResource(R.string.expiry_title, item.title),
+                subtitle = stringResource(R.string.expiry_help),
+                onClose = onDismiss,
+            )
         },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(value.takeIf { it.isNotBlank() }) },
-                enabled = valid,
-            ) {
-                Text(stringResource(R.string.save), color = MpColors.Primary, fontWeight = FontWeight.SemiBold)
-            }
+        actions = {
+            MpDialogActions(
+                primaryLabel = stringResource(R.string.save),
+                onPrimary = { onSave(value.takeIf { it.isNotBlank() }) },
+                primaryEnabled = valid,
+                secondaryLabel = stringResource(R.string.cancel),
+                onSecondary = onDismiss,
+            )
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel), color = MpColors.OnSurfaceVariant)
-            }
-        },
-    )
+    ) {
+        MpTextField(
+            value = value,
+            onValueChange = { text ->
+                value = text.filter { it.isDigit() || it == '-' }.take(10)
+            },
+            label = stringResource(R.string.expiry_date_hint),
+            placeholder = stringResource(R.string.expiry_date_hint),
+            keyboardType = KeyboardType.Text,
+        )
+        if (!valid) {
+            MpCallout(
+                text = stringResource(R.string.expiry_invalid),
+                tone = MpCalloutTone.Error,
+            )
+        }
+    }
 }
 
 @Composable

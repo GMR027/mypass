@@ -77,6 +77,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Redirects
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify where users are redirected after completing
+    | different authentication flows. The pass wallet is the first thing
+    | people expect to see after signing in.
+    |
+    */
+
+    'redirects' => [
+        'login' => '/vault?tab=pases',
+        'register' => '/dashboard',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Fortify Routes Prefix / Subdomain
     |--------------------------------------------------------------------------
     |

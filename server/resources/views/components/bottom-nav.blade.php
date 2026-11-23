@@ -10,13 +10,6 @@
             'tab' => null,
         ],
         [
-            'key' => 'boveda',
-            'label' => __('Bóveda'),
-            'icon' => 'lock',
-            'href' => route('vault', ['tab' => 'docs']),
-            'tab' => 'docs',
-        ],
-        [
             'key' => 'pases',
             'label' => __('Pases'),
             'icon' => 'wallet',
@@ -24,6 +17,12 @@
             'tab' => 'pases',
         ],
         [
+            'key' => 'boveda',
+            'label' => __('Bóveda'),
+            'icon' => 'lock',
+            'href' => route('vault', ['tab' => 'docs']),
+            'tab' => 'docs',
+        ],        [
             'key' => 'perfil',
             'label' => __('Perfil'),
             'icon' => 'account_circle',

@@ -348,7 +348,7 @@ function decryptFile(bytes) {
     const header = bytes.slice(0, HEADER_SIZE);
     const magic = header.slice(0, 4);
     if (!magic.every((value, index) => value === MAGIC[index])) {
-        throw new Error(t('El archivo no tiene el formato de mypass.'));
+        throw new Error(t('El archivo no tiene el formato de My Pass.'));
     }
     if (header[4] !== VERSION) {
         throw new Error(t('La versión del archivo no es compatible.'));
@@ -536,7 +536,7 @@ async function unlockFromFile(file) {
         const kit = JSON.parse(await file.text());
 
         if (kit.format !== 'mypss' || kit.type !== 'recovery-key') {
-            throw new Error(t('El archivo no es un kit de recuperación de mypass.'));
+            throw new Error(t('El archivo no es un kit de recuperación de My Pass.'));
         }
 
         const digits = String(kit.key ?? '').replace(/\D/g, '');
@@ -2279,7 +2279,7 @@ function lock(reason = '') {
 
 function initialTab() {
     const tab = new URLSearchParams(window.location.search).get('tab');
-    return ['docs', 'pases', 'generador', 'family', 'devices'].includes(tab) ? tab : 'docs';
+    return ['docs', 'pases', 'generador', 'family', 'devices'].includes(tab) ? tab : 'pases';
 }
 
 function setVaultStatus(open) {
