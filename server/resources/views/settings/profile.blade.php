@@ -16,6 +16,66 @@
             <p class="mp-alert mp-alert-success mb-5" role="status">{{ session('status') }}</p>
         @endif
 
+        <section class="mp-card mp-card-pad mb-5">
+            <div class="flex flex-col gap-5 sm:flex-row sm:items-center">
+                <div class="relative h-24 w-24 shrink-0">
+                    <span class="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-primary text-3xl font-bold uppercase text-on-primary ring-4 ring-primary-fixed/60" aria-hidden="true">
+                        @if ($user->avatar_url)
+                            <img src="{{ $user->avatar_url }}" alt="" class="h-full w-full object-cover">
+                        @else
+                            {{ mb_substr($user->name ?: $user->email, 0, 1) }}
+                        @endif
+                    </span>
+                    <span class="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary ring-2 ring-white" aria-hidden="true">
+                        <x-icon name="photo_camera" class="text-[17px]" />
+                    </span>
+                </div>
+
+                <div class="min-w-0 flex-1">
+                    <h2 class="mp-title-sm">{{ __('Foto de perfil') }}</h2>
+                    <p class="mp-hint mt-1">{{ __('Sube una foto para que tu cuenta sea más fácil de reconocer.') }}</p>
+
+                    @if ($errors->updateAvatar->any())
+                        <div class="mp-alert mp-alert-error mt-3" role="alert">
+                            <x-icon name="error" class="mt-0.5 text-[21px]" />
+                            <ul class="list-inside list-disc space-y-1">
+                                @foreach ($errors->updateAvatar->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    <form method="POST" action="{{ route('settings.profile.avatar.update') }}"
+                          enctype="multipart/form-data" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                        @csrf
+                        <div class="min-w-0 flex-1">
+                            <label for="profile-avatar" class="mp-label">{{ __('Archivo de imagen') }}</label>
+                            <input id="profile-avatar" name="avatar" type="file" required
+                                   accept="image/jpeg,image/png,image/webp"
+                                   class="mp-file-input">
+                            <p class="mp-hint mt-1">{{ __('JPG, PNG o WEBP. Máximo 4 MB.') }}</p>
+                        </div>
+                        <button type="submit" class="mp-btn mp-btn-primary shrink-0">
+                            <x-icon name="add_photo_alternate" class="text-[20px]" />
+                            {{ $user->avatar_url ? __('Cambiar foto') : __('Subir foto') }}
+                        </button>
+                    </form>
+
+                    @if ($user->avatar_url)
+                        <form method="POST" action="{{ route('settings.profile.avatar.destroy') }}" class="mt-2">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="mp-btn mp-btn-quiet">
+                                <x-icon name="delete" class="text-[20px]" />
+                                {{ __('Quitar foto') }}
+                            </button>
+                        </form>
+                    @endif
+                </div>
+            </div>
+        </section>
+
         <section class="mp-card mp-card-pad">
             <div class="flex items-start gap-4">
                 <span class="mp-icon-tile">

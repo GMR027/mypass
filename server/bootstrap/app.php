@@ -17,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // El TLS termina en ingress-nginx; sin esto Laravel genera URLs http://
+        // y las cookies Secure no se comportan correctamente.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'email-2fa' => EnsureEmailTwoFactorVerified::class,
         ]);

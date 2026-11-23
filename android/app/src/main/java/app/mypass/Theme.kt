@@ -26,6 +26,7 @@ object MpColors {
     val OnSurfaceVariant = Color(0xFF414844)
     val Outline = Color(0xFF717973)
     val OutlineVariant = Color(0xFFC1C8C2)
+    val Border = Color(0xFFD0D7E2)
     val Primary = Color(0xFF012D1D)
     val PrimaryContainer = Color(0xFF1B4332)
     val OnPrimary = Color(0xFFFFFFFF)

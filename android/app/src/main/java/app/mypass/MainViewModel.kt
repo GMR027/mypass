@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
@@ -16,6 +17,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 import java.security.KeyPairGenerator
 import java.security.PrivateKey
 import java.security.spec.MGF1ParameterSpec
@@ -39,6 +41,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.min
 
+private const val AVATAR_CACHE_FILE = "profile-avatar"
+private const val MAX_AVATAR_SOURCE_BYTES = 20 * 1024 * 1024
+private const val MAX_AVATAR_UPLOAD_BYTES = 4 * 1024 * 1024
+private const val MAX_AVATAR_EDGE_PX = 512
+
 enum class Screen {
     Loading,
     Login,
@@ -50,6 +57,10 @@ enum class Screen {
     Vault,
     Passes,
     PassEditor,
+    Credentials,
+    CredentialEditor,
+    Medical,
+    MedicalEditor,
     Family,
     Scan,
     Settings,
@@ -69,6 +80,113 @@ data class UiPass(
     val themeColor: String,
     val options: Map<String, Boolean>,
     val logo: String? = null,
+    val appearance: PassAppearance = PassAppearance(),
+)
+
+data class UiCredential(
+    val category: String,
+    val username: String,
+    val password: String,
+    val url: String,
+    val notes: String,
+    val tags: List<String>,
+    val favorite: Boolean,
+    val passwordChangedAt: String?,
+    val totpSecret: String?,
+    val totpAlgorithm: String,
+    val totpDigits: Int,
+    val totpPeriod: Int,
+)
+
+data class CredentialDraft(
+    val itemId: String? = null,
+    val version: Int? = null,
+    val category: String = "login",
+    val title: String = "",
+    val username: String = "",
+    val password: String = "",
+    val url: String = "",
+    val notes: String = "",
+    val tags: String = "",
+    val favorite: Boolean = false,
+    val passwordChangedAt: String? = null,
+    val totpSecret: String? = null,
+    val totpAlgorithm: String = "SHA1",
+    val totpDigits: Int = 6,
+    val totpPeriod: Int = 30,
+    val existingBlobId: String? = null,
+    val existingAttachmentName: String? = null,
+    val attachmentUri: String? = null,
+    val attachmentName: String? = null,
+    val clearAttachment: Boolean = false,
+    val isNew: Boolean = true,
+)
+
+data class UiMedicalContact(
+    val name: String = "",
+    val relation: String = "",
+    val phone: String = "",
+)
+
+data class UiMedicalInsurance(
+    val provider: String = "",
+    val plan: String = "",
+    val policyNumber: String = "",
+    val memberId: String = "",
+    val phone: String = "",
+)
+
+data class UiMedicalDoctor(
+    val name: String = "",
+    val phone: String = "",
+    val clinic: String = "",
+)
+
+data class UiMedicalCard(
+    val holder: String = "",
+    val birthDate: String = "",
+    val bloodType: String = "",
+    val allergies: List<String> = emptyList(),
+    val conditions: List<String> = emptyList(),
+    val medications: List<String> = emptyList(),
+    val contacts: List<UiMedicalContact> = emptyList(),
+    val insurance: UiMedicalInsurance = UiMedicalInsurance(),
+    val doctor: UiMedicalDoctor = UiMedicalDoctor(),
+    val organDonor: Boolean = false,
+    val notes: String = "",
+)
+
+data class MedicalDraft(
+    val itemId: String? = null,
+    val version: Int? = null,
+    val title: String = "",
+    val holder: String = "",
+    val birthDate: String = "",
+    val bloodType: String = "",
+    val allergies: String = "",
+    val conditions: String = "",
+    val medications: String = "",
+    val contactName: String = "",
+    val contactRelation: String = "",
+    val contactPhone: String = "",
+    val extraContacts: List<UiMedicalContact> = emptyList(),
+    val insuranceProvider: String = "",
+    val insurancePlan: String = "",
+    val insurancePolicy: String = "",
+    val insuranceMember: String = "",
+    val insurancePhone: String = "",
+    val doctorName: String = "",
+    val doctorPhone: String = "",
+    val doctorClinic: String = "",
+    val organDonor: Boolean = false,
+    val notes: String = "",
+    val expiresAt: String = "",
+    val existingBlobId: String? = null,
+    val existingAttachmentName: String? = null,
+    val attachmentUri: String? = null,
+    val attachmentName: String? = null,
+    val clearAttachment: Boolean = false,
+    val isNew: Boolean = true,
 )
 
 data class PassDraft(
@@ -85,6 +203,7 @@ data class PassDraft(
     val codeSource: String = "generated",
     val themeColor: String = "#0c2340",
     val logo: String? = null,
+    val appearance: PassAppearance = PassAppearance(),
     val options: Map<String, Boolean> = mapOf(
         "presentation" to true,
         "share" to true,
@@ -145,12 +264,18 @@ data class UiItem(
     val updatedAt: String? = null,
     val ocrText: String = "",
     val pass: UiPass? = null,
+    val credential: UiCredential? = null,
+    val medical: UiMedicalCard? = null,
     val metadataJson: JSONObject? = null,
 )
 
 data class UiState(
     val screen: Screen = Screen.Loading,
     val email: String = "",
+    val name: String = "",
+    val avatarUrl: String = "",
+    val avatarPath: String? = null,
+    val avatarVersion: Long = 0L,
     val error: String? = null,
     val status: String? = null,
     val busy: Boolean = false,
@@ -168,6 +293,8 @@ data class UiState(
     val viewerMime: String? = null,
     val viewerName: String? = null,
     val passDraft: PassDraft? = null,
+    val credentialDraft: CredentialDraft? = null,
+    val medicalDraft: MedicalDraft? = null,
     val scanForPass: Boolean = false,
     val scanSourcePath: String? = null,
 )
@@ -187,6 +314,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var identityPrivateKey: ByteArray? = null
 
     init {
+        val cachedAvatar = avatarCacheFile().takeIf { it.exists() }
+
         _state.value = UiState(
             screen = when {
                 store.hasVault() -> Screen.Locked
@@ -196,8 +325,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             simpleMode = store.simpleMode(),
             biometricEnabled = store.biometricEnabled(),
             email = store.email(),
+            name = store.name(),
+            avatarUrl = store.avatarUrl(),
+            avatarPath = cachedAvatar?.absolutePath,
+            avatarVersion = cachedAvatar?.lastModified() ?: 0L,
         )
     }
+
+    private fun avatarCacheFile(): File = File(getApplication<Application>().filesDir, AVATAR_CACHE_FILE)
 
     private fun text(id: Int, vararg args: Any): String =
         getApplication<Application>().getString(id, *args)
@@ -252,15 +387,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         error(text(R.string.error_no_session))
                     }
 
+                    val account = body.optJSONObject("user")
+                    val accountName = account
+                        ?.optString("name")
+                        ?.trim()
+                        .orEmpty()
+                    val avatarUrl = account
+                        ?.optString("avatar_url")
+                        ?.takeIf { it.isNotBlank() && it != "null" }
+                        .orEmpty()
                     if (store.hasVault() && store.email().isNotBlank() && store.email() != email.trim()) {
                         store.clearAll()
                     }
                     store.saveToken(token)
                     store.saveEmail(email.trim())
+                    store.saveName(accountName)
+                    store.saveAvatarUrl(avatarUrl)
                     withContext(Dispatchers.Main) {
                         _state.value = _state.value.copy(
                             screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
                             email = email.trim(),
+                            name = accountName,
+                            avatarUrl = avatarUrl,
                             busy = false,
                             status = null,
                             twoFactorToken = null,
@@ -268,6 +416,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             biometricEnabled = store.biometricEnabled(),
                         )
                     }
+                    refreshAvatar(avatarUrl)
                 }
                 .onFailure { error ->
                     withContext(Dispatchers.Main) {
@@ -303,20 +452,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         error(text(R.string.error_no_session))
                     }
 
-                    val accountEmail = body.optJSONObject("user")?.optString("email")
+                    val account = body.optJSONObject("user")
+                    val accountEmail = account?.optString("email")
                         ?.takeIf { it.isNotBlank() }
                         ?: _state.value.email
+                    val accountName = account
+                        ?.optString("name")
+                        ?.trim()
+                        .orEmpty()
+                    val avatarUrl = account
+                        ?.optString("avatar_url")
+                        ?.takeIf { it.isNotBlank() && it != "null" }
+                        .orEmpty()
                     if (store.hasVault() && store.email().isNotBlank() && store.email() != accountEmail) {
                         store.clearAll()
                     }
                     if (accountEmail.isNotBlank()) {
                         store.saveEmail(accountEmail)
                     }
+                    store.saveName(accountName)
+                    store.saveAvatarUrl(avatarUrl)
                     store.saveToken(accessToken)
                     withContext(Dispatchers.Main) {
                         _state.value = _state.value.copy(
                             screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
                             email = accountEmail,
+                            name = accountName,
+                            avatarUrl = avatarUrl,
                             busy = false,
                             status = null,
                             error = null,
@@ -325,6 +487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             biometricEnabled = store.biometricEnabled(),
                         )
                     }
+                    refreshAvatar(avatarUrl)
                 }
                 .onFailure { error ->
                     withContext(Dispatchers.Main) {
@@ -808,6 +971,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             notifications = emptyList(),
             familyStatus = null,
             passDraft = null,
+            credentialDraft = null,
+            medicalDraft = null,
             scanForPass = false,
             scanSourcePath = null,
             status = null,
@@ -828,6 +993,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 checkDeviceAllowed(token)
+                loadAccountProfile(token)
                 loadIdentityKeys(key, token)
                 uploadPending(key, token)
                 fetchServer(key, token)
@@ -848,6 +1014,218 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private suspend fun loadAccountProfile(token: String) {
+        val user = runCatching { ApiClient.me(token) }.getOrNull() ?: return
+        val name = user.optString("name").trim()
+        val avatarUrl = user.optString("avatar_url")
+            .takeIf { it.isNotBlank() && it != "null" }
+            .orEmpty()
+
+        if (name.isNotBlank() && name != _state.value.name) {
+            store.saveName(name)
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(name = name)
+            }
+        }
+
+        if (avatarUrl.isBlank() && avatarCacheFile().exists()) {
+            refreshAvatar("")
+        } else if (avatarUrl != store.avatarUrl() || avatarUrl != _state.value.avatarUrl) {
+            store.saveAvatarUrl(avatarUrl)
+            refreshAvatar(avatarUrl)
+        } else if (avatarUrl.isNotBlank() && !avatarCacheFile().exists()) {
+            refreshAvatar(avatarUrl)
+        }
+    }
+
+    private suspend fun refreshAvatar(url: String) {
+        val cacheFile = avatarCacheFile()
+
+        if (url.isBlank()) {
+            if (cacheFile.exists()) {
+                cacheFile.delete()
+            }
+            store.saveAvatarUrl("")
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    avatarUrl = "",
+                    avatarPath = null,
+                    avatarVersion = System.currentTimeMillis(),
+                )
+            }
+            return
+        }
+
+        if (url == _state.value.avatarUrl && cacheFile.exists()) {
+            return
+        }
+
+        val bytes = runCatching { ApiClient.downloadUrl(url) }.getOrNull() ?: return
+        if (bytes.isEmpty()) {
+            return
+        }
+        runCatching { cacheFile.writeBytes(bytes) }.onFailure { return }
+
+        val validImage = runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(cacheFile.absolutePath, bounds)
+            bounds.outWidth > 0 && bounds.outHeight > 0
+        }.getOrDefault(false)
+
+        if (!validImage) {
+            cacheFile.delete()
+            return
+        }
+
+        store.saveAvatarUrl(url)
+        withContext(Dispatchers.Main) {
+            _state.value = _state.value.copy(
+                avatarUrl = url,
+                avatarPath = cacheFile.absolutePath,
+                avatarVersion = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    fun uploadAvatar(uri: Uri) {
+        val token = store.token()
+        if (token == null) {
+            showError(text(R.string.error_sign_in_again))
+            return
+        }
+        if (_state.value.busy) {
+            return
+        }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_avatar_uploading),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val bytes = prepareAvatar(uri)
+                val response = ApiClient.uploadAvatar(token, bytes)
+                val url = response.optString("avatar_url")
+                    .takeIf { it.isNotBlank() && it != "null" }
+                    ?: error(text(R.string.error_avatar_upload))
+
+                val cacheFile = avatarCacheFile()
+                cacheFile.writeBytes(bytes)
+                store.saveAvatarUrl(url)
+
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        avatarUrl = url,
+                        avatarPath = cacheFile.absolutePath,
+                        avatarVersion = System.currentTimeMillis(),
+                        busy = false,
+                        status = text(R.string.status_avatar_updated),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_avatar_upload),
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteAvatar() {
+        val token = store.token()
+        if (token == null) {
+            showError(text(R.string.error_sign_in_again))
+            return
+        }
+        if (_state.value.busy) {
+            return
+        }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_avatar_removing),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { ApiClient.deleteAvatar(token) }
+                .onSuccess {
+                    clearAvatarCache()
+                    store.saveAvatarUrl("")
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(
+                            avatarUrl = "",
+                            avatarPath = null,
+                            avatarVersion = System.currentTimeMillis(),
+                            busy = false,
+                            status = text(R.string.status_avatar_removed),
+                            error = null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(
+                            busy = false,
+                            status = null,
+                            error = error.message ?: text(R.string.error_avatar_remove),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun clearAvatarCache() {
+        avatarCacheFile().delete()
+    }
+
+    private fun prepareAvatar(uri: Uri): ByteArray {
+        val resolver = getApplication<Application>().contentResolver
+        val source = resolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error(text(R.string.error_avatar_file))
+
+        if (source.size > MAX_AVATAR_SOURCE_BYTES) {
+            error(text(R.string.error_avatar_file))
+        }
+
+        val bitmap = runCatching {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(source))) { decoder, info, _ ->
+                val longestEdge = maxOf(info.size.width, info.size.height)
+                if (longestEdge > MAX_AVATAR_EDGE_PX) {
+                    val scale = MAX_AVATAR_EDGE_PX.toFloat() / longestEdge
+                    decoder.setTargetSize(
+                        (info.size.width * scale).toInt().coerceAtLeast(1),
+                        (info.size.height * scale).toInt().coerceAtLeast(1),
+                    )
+                }
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        }.getOrNull() ?: error(text(R.string.error_avatar_file))
+
+        val output = ByteArrayOutputStream()
+        val compressed = runCatching {
+            bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 86, output)
+        }.getOrDefault(false)
+        bitmap.recycle()
+
+        if (!compressed) {
+            error(text(R.string.error_avatar_file))
+        }
+
+        val bytes = output.toByteArray()
+        if (bytes.isEmpty() || bytes.size > MAX_AVATAR_UPLOAD_BYTES) {
+            error(text(R.string.error_avatar_file))
+        }
+
+        return bytes
     }
 
     private suspend fun checkDeviceAllowed(token: String) {
@@ -1019,6 +1397,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             error = null,
             familyStatus = null,
             passDraft = null,
+            credentialDraft = null,
+            medicalDraft = null,
         )
     }
 
@@ -1028,6 +1408,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             error = null,
             familyStatus = null,
             passDraft = null,
+            credentialDraft = null,
+            medicalDraft = null,
         )
     }
 
@@ -1037,6 +1419,138 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             error = null,
             status = null,
             passDraft = null,
+        )
+    }
+
+    fun openCredentials() {
+        _state.value = _state.value.copy(
+            screen = Screen.Credentials,
+            credentialDraft = null,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun openMedical() {
+        _state.value = _state.value.copy(
+            screen = Screen.Medical,
+            medicalDraft = null,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun newCredential() {
+        _state.value = _state.value.copy(
+            screen = Screen.CredentialEditor,
+            credentialDraft = CredentialDraft(),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun editCredential(item: UiItem) {
+        val credential = item.credential ?: return
+        val local = store.findItem(item.id)
+        _state.value = _state.value.copy(
+            screen = Screen.CredentialEditor,
+            credentialDraft = CredentialDraft(
+                itemId = item.id,
+                version = local?.version ?: 1,
+                category = credential.category,
+                title = item.title,
+                username = credential.username,
+                password = credential.password,
+                url = credential.url,
+                notes = credential.notes,
+                tags = credential.tags.joinToString(", "),
+                favorite = credential.favorite,
+                passwordChangedAt = credential.passwordChangedAt,
+                totpSecret = credential.totpSecret,
+                totpAlgorithm = credential.totpAlgorithm,
+                totpDigits = credential.totpDigits,
+                totpPeriod = credential.totpPeriod,
+                existingBlobId = item.blobId,
+                existingAttachmentName = item.blobId?.let {
+                    item.metadataJson?.optString("original_name")
+                        ?.takeIf { name -> name.isNotBlank() && name != "null" }
+                },
+                isNew = false,
+            ),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun discardCredentialDraft() {
+        _state.value = _state.value.copy(
+            screen = Screen.Credentials,
+            credentialDraft = null,
+            busy = false,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun newMedicalCard() {
+        _state.value = _state.value.copy(
+            screen = Screen.MedicalEditor,
+            medicalDraft = MedicalDraft(),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun editMedicalCard(item: UiItem) {
+        val medical = item.medical ?: return
+        val local = store.findItem(item.id)
+        val contact = medical.contacts.firstOrNull() ?: UiMedicalContact()
+        _state.value = _state.value.copy(
+            screen = Screen.MedicalEditor,
+            medicalDraft = MedicalDraft(
+                itemId = item.id,
+                version = local?.version ?: 1,
+                title = item.title,
+                holder = medical.holder,
+                birthDate = medical.birthDate,
+                bloodType = medical.bloodType,
+                allergies = medical.allergies.joinToString(", "),
+                conditions = medical.conditions.joinToString(", "),
+                medications = medical.medications.joinToString(", "),
+                contactName = contact.name,
+                contactRelation = contact.relation,
+                contactPhone = contact.phone,
+                extraContacts = medical.contacts.drop(1),
+                insuranceProvider = medical.insurance.provider,
+                insurancePlan = medical.insurance.plan,
+                insurancePolicy = medical.insurance.policyNumber,
+                insuranceMember = medical.insurance.memberId,
+                insurancePhone = medical.insurance.phone,
+                doctorName = medical.doctor.name,
+                doctorPhone = medical.doctor.phone,
+                doctorClinic = medical.doctor.clinic,
+                organDonor = medical.organDonor,
+                notes = medical.notes,
+                expiresAt = item.expiresAt?.take(10).orEmpty(),
+                existingBlobId = item.blobId,
+                existingAttachmentName = item.blobId?.let {
+                    item.metadataJson?.optString("original_name")
+                        ?.takeIf { name -> name.isNotBlank() && name != "null" }
+                },
+                isNew = false,
+            ),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun discardMedicalDraft() {
+        _state.value = _state.value.copy(
+            screen = Screen.Medical,
+            medicalDraft = null,
+            busy = false,
+            error = null,
+            status = null,
         )
     }
 
@@ -1215,6 +1729,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 codeSource = pass.codeSource,
                 themeColor = pass.themeColor,
                 logo = pass.logo,
+                appearance = pass.appearance,
                 options = pass.options,
                 ocrText = item.ocrText,
                 isNew = false,
@@ -1360,6 +1875,425 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveCredential(draft: CredentialDraft) {
+        val key = masterKey ?: return
+        val token = store.token()
+        val id = draft.itemId ?: store.newItemId()
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_saving_credential),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val title = draft.title.ifBlank {
+                    draft.username.ifBlank { text(R.string.credential_fallback_title) }
+                }
+                val tags = commaList(draft.tags)
+                val totp = Totp.parse(draft.totpSecret.orEmpty())
+                if (draft.totpSecret.orEmpty().isNotBlank() && totp == null) {
+                    error(text(R.string.error_invalid_totp))
+                }
+
+                val existing = store.findItem(id)
+                val previousMetadata = existing?.let { local ->
+                    runCatching {
+                        JSONObject(String(Crypto.open(key, Base64.decode(local.encryptedMetadata, Base64.NO_WRAP))))
+                    }.getOrNull()
+                }
+                val metadata = previousMetadata?.let { JSONObject(it.toString()) } ?: JSONObject()
+                metadata
+                    .put("title", title)
+                    .put("type", "credential")
+                    .put("expires_at", JSONObject.NULL)
+                val credentialJson = metadata.optJSONObject("credential") ?: JSONObject()
+                credentialJson
+                    .put("category", draft.category)
+                    .put("username", draft.username.trim())
+                    .put("password", draft.password)
+                    .put("url", draft.url.trim())
+                    .put("notes", draft.notes.trim())
+                    .put("tags", JSONArray(tags))
+                    .put("favorite", draft.favorite)
+                    .put(
+                        "password_changed_at",
+                        if (draft.password.isNotBlank()) {
+                            draft.passwordChangedAt ?: java.time.LocalDate.now().toString()
+                        } else {
+                            JSONObject.NULL
+                        },
+                    )
+                    .put("totp", totp?.toJson() ?: JSONObject.NULL)
+                metadata.put("credential", credentialJson)
+
+                var localPath = existing?.localPath
+                var blobId = existing?.blobId
+                var changedAttachment = false
+
+                if (draft.clearAttachment) {
+                    localPath?.let { runCatching { File(it).delete() } }
+                    localPath = null
+                    blobId = null
+                    changedAttachment = true
+                    metadata.remove("original_name")
+                    metadata.remove("mime")
+                    metadata.remove("size")
+                }
+
+                draft.attachmentUri?.let { uri ->
+                    val attachment = readAttachment(Uri.parse(uri))
+                    if (attachment.bytes.size > 25 * 1024 * 1024) {
+                        error(text(R.string.error_file_too_large))
+                    }
+                    val encryptedFile = Crypto.encryptFile(key, attachment.bytes)
+                    localPath = store.writeVaultFile(id, encryptedFile).absolutePath
+                    changedAttachment = true
+                    metadata
+                        .put("original_name", attachment.name)
+                        .put("mime", attachment.mime)
+                        .put("size", attachment.bytes.size)
+
+                    if (!draft.isNew && existing?.pendingUpload != true) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        blobId = ApiClient.uploadBlob(activeToken, encryptedFile)
+                    }
+                }
+
+                val encryptedMetadata = Base64.encodeToString(
+                    Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                    Base64.NO_WRAP,
+                )
+
+                if (draft.isNew) {
+                    store.upsert(
+                        LocalItem(
+                            id = id,
+                            type = "credential",
+                            state = "active",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = null,
+                            version = 1,
+                            expiresAt = null,
+                            localPath = localPath,
+                            pendingUpload = true,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                } else {
+                    val local = existing ?: error(text(R.string.error_document_not_found))
+                    var version = local.version
+                    if (!local.pendingUpload) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        ApiClient.updateItem(
+                            token = activeToken,
+                            id = id,
+                            encryptedMetadata = encryptedMetadata,
+                            expiresAt = null,
+                            version = local.version,
+                            blobId = blobId,
+                            updateBlob = changedAttachment,
+                        )
+                        version += 1
+                    }
+                    store.upsert(
+                        local.copy(
+                            type = "credential",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = blobId,
+                            expiresAt = null,
+                            localPath = localPath,
+                            version = version,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                }
+
+                refreshItems(key)
+                if (draft.isNew) {
+                    sync()
+                }
+
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.Credentials,
+                        credentialDraft = null,
+                        busy = false,
+                        status = text(R.string.status_credential_saved),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_save_credential),
+                    )
+                }
+            }
+        }
+    }
+
+    fun toggleCredentialFavorite(item: UiItem) {
+        val credential = item.credential ?: return
+        val key = masterKey ?: return
+        val token = store.token() ?: return
+        val local = store.findItem(item.id) ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val metadata = local.metadata(key)
+                val credentialJson = metadata.optJSONObject("credential") ?: JSONObject()
+                credentialJson.put("favorite", !credential.favorite)
+                metadata.put("credential", credentialJson)
+                val encryptedMetadata = Base64.encodeToString(
+                    Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                    Base64.NO_WRAP,
+                )
+                var version = local.version
+                if (!local.pendingUpload) {
+                    ApiClient.updateItem(token, item.id, encryptedMetadata, local.expiresAt, local.version)
+                    version += 1
+                }
+                store.upsert(
+                    local.copy(
+                        encryptedMetadata = encryptedMetadata,
+                        version = version,
+                        updatedAt = VaultStore.now(),
+                    ),
+                )
+                refreshItems(key)
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        error = error.message ?: text(R.string.error_save_credential),
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveMedicalCard(draft: MedicalDraft) {
+        val key = masterKey ?: return
+        val token = store.token()
+        val id = draft.itemId ?: store.newItemId()
+        val expiresAt = draft.expiresAt.takeIf { it.isNotBlank() }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_saving_medical),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val title = draft.title.ifBlank {
+                    draft.holder.ifBlank { text(R.string.medical_fallback_title) }
+                }
+                val contacts = JSONArray()
+                val firstContact = JSONObject()
+                    .put("name", draft.contactName.trim())
+                    .put("relation", draft.contactRelation.trim())
+                    .put("phone", draft.contactPhone.trim())
+                if (draft.contactName.isNotBlank() || draft.contactPhone.isNotBlank()) {
+                    contacts.put(firstContact)
+                }
+                draft.extraContacts.forEach { contact ->
+                    if (contact.name.isNotBlank() || contact.phone.isNotBlank()) {
+                        contacts.put(
+                            JSONObject()
+                                .put("name", contact.name)
+                                .put("relation", contact.relation)
+                                .put("phone", contact.phone),
+                        )
+                    }
+                }
+
+                val existing = store.findItem(id)
+                val previousMetadata = existing?.let { local ->
+                    runCatching {
+                        JSONObject(String(Crypto.open(key, Base64.decode(local.encryptedMetadata, Base64.NO_WRAP))))
+                    }.getOrNull()
+                }
+                val metadata = previousMetadata?.let { JSONObject(it.toString()) } ?: JSONObject()
+                metadata
+                    .put("title", title)
+                    .put("type", "medical_card")
+                    .put("expires_at", expiresAt ?: JSONObject.NULL)
+                val medicalJson = metadata.optJSONObject("medical") ?: JSONObject()
+                medicalJson
+                    .put("holder", draft.holder.trim())
+                    .put("birth_date", draft.birthDate)
+                    .put("blood_type", draft.bloodType)
+                    .put("allergies", JSONArray(commaList(draft.allergies)))
+                    .put("conditions", JSONArray(commaList(draft.conditions)))
+                    .put("medications", JSONArray(commaList(draft.medications)))
+                    .put("emergency_contacts", contacts)
+                    .put(
+                        "insurance",
+                        JSONObject()
+                            .put("provider", draft.insuranceProvider.trim())
+                            .put("plan", draft.insurancePlan.trim())
+                            .put("policy_number", draft.insurancePolicy.trim())
+                            .put("member_id", draft.insuranceMember.trim())
+                            .put("phone", draft.insurancePhone.trim()),
+                    )
+                    .put(
+                        "doctor",
+                        JSONObject()
+                            .put("name", draft.doctorName.trim())
+                            .put("phone", draft.doctorPhone.trim())
+                            .put("clinic", draft.doctorClinic.trim()),
+                    )
+                    .put("organ_donor", draft.organDonor)
+                    .put("notes", draft.notes.trim())
+                metadata.put("medical", medicalJson)
+
+                var localPath = existing?.localPath
+                var blobId = existing?.blobId
+                var changedAttachment = false
+
+                if (draft.clearAttachment) {
+                    localPath?.let { runCatching { File(it).delete() } }
+                    localPath = null
+                    blobId = null
+                    changedAttachment = true
+                    metadata.remove("original_name")
+                    metadata.remove("mime")
+                    metadata.remove("size")
+                }
+
+                draft.attachmentUri?.let { uri ->
+                    val attachment = readAttachment(Uri.parse(uri))
+                    if (attachment.bytes.size > 25 * 1024 * 1024) {
+                        error(text(R.string.error_file_too_large))
+                    }
+                    val encryptedFile = Crypto.encryptFile(key, attachment.bytes)
+                    localPath = store.writeVaultFile(id, encryptedFile).absolutePath
+                    changedAttachment = true
+                    metadata
+                        .put("original_name", attachment.name)
+                        .put("mime", attachment.mime)
+                        .put("size", attachment.bytes.size)
+                    if (!draft.isNew && existing?.pendingUpload != true) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        blobId = ApiClient.uploadBlob(activeToken, encryptedFile)
+                    }
+                }
+
+                val encryptedMetadata = Base64.encodeToString(
+                    Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                    Base64.NO_WRAP,
+                )
+
+                if (draft.isNew) {
+                    store.upsert(
+                        LocalItem(
+                            id = id,
+                            type = "medical_card",
+                            state = "active",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = null,
+                            version = 1,
+                            expiresAt = expiresAt,
+                            localPath = localPath,
+                            pendingUpload = true,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                } else {
+                    val local = existing ?: error(text(R.string.error_document_not_found))
+                    var version = local.version
+                    if (!local.pendingUpload) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        ApiClient.updateItem(
+                            token = activeToken,
+                            id = id,
+                            encryptedMetadata = encryptedMetadata,
+                            expiresAt = expiresAt,
+                            version = local.version,
+                            blobId = blobId,
+                            updateBlob = changedAttachment,
+                        )
+                        version += 1
+                    }
+                    store.upsert(
+                        local.copy(
+                            type = "medical_card",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = blobId,
+                            expiresAt = expiresAt,
+                            localPath = localPath,
+                            version = version,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                }
+
+                refreshItems(key)
+                Reminders.checkNow(getApplication())
+                if (draft.isNew) {
+                    sync()
+                }
+
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.Medical,
+                        medicalDraft = null,
+                        busy = false,
+                        status = text(R.string.status_medical_saved),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_save_medical),
+                    )
+                }
+            }
+        }
+    }
+
+    private data class PickedAttachment(
+        val bytes: ByteArray,
+        val name: String,
+        val mime: String,
+    )
+
+    private fun readAttachment(uri: Uri): PickedAttachment {
+        val resolver = getApplication<Application>().contentResolver
+        val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: "adjunto"
+        val mime = resolver.getType(uri) ?: "application/octet-stream"
+        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error(text(R.string.error_read_file))
+        return PickedAttachment(bytes = bytes, name = name, mime = mime)
+    }
+
+    private fun commaList(value: String): List<String> {
+        return value.split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
+    private fun LocalItem.metadata(key: ByteArray): JSONObject {
+        return JSONObject(String(Crypto.open(key, Base64.decode(encryptedMetadata, Base64.NO_WRAP))))
+    }
+
+    private fun TotpConfig.toJson(): JSONObject {
+        return JSONObject()
+            .put("secret", secret)
+            .put("algorithm", algorithm)
+            .put("digits", digits)
+            .put("period", period)
+    }
+
     private fun analyzeBitmap(
         bitmap: Bitmap,
         sourcePath: String?,
@@ -1462,6 +2396,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             .put("themeColor", draft.themeColor)
             .put("logo", draft.logo ?: JSONObject.NULL)
+            .put("appearance", draft.appearance.toJson())
             .put(
                 "options",
                 JSONObject()
@@ -1870,6 +2805,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> null
             }
 
+            val credential = metadata?.optJSONObject("credential")?.let(::parseUiCredential)
+            val medical = metadata?.optJSONObject("medical")?.let(::parseUiMedical)
+
             UiItem(
                 id = item.id,
                 type = item.type,
@@ -1884,6 +2822,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 updatedAt = item.updatedAt,
                 ocrText = metadata?.optString("ocr_text")?.takeIf { it.isNotBlank() && it != "null" } ?: "",
                 pass = pass,
+                credential = credential,
+                medical = medical,
                 metadataJson = metadata,
             )
         }
@@ -1937,6 +2877,99 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ?: passThemeColor(category, json.optString("theme")),
             options = options,
             logo = json.optString("logo").takeIf { it.isNotBlank() && it != "null" },
+            appearance = PassAppearance.fromJson(json.optJSONObject("appearance")),
+        )
+    }
+
+    private fun parseUiCredential(json: JSONObject): UiCredential {
+        val tags = mutableListOf<String>()
+        json.optJSONArray("tags")?.let { array ->
+            for (index in 0 until array.length()) {
+                array.optString(index).takeIf { it.isNotBlank() }?.let(tags::add)
+            }
+        }
+
+        val totp = json.optJSONObject("totp")
+        val secret = totp?.optString("secret")?.takeIf { it.isNotBlank() && it != "null" }
+            ?: json.optString("totp_secret").takeIf { it.isNotBlank() && it != "null" }
+
+        return UiCredential(
+            category = json.optString("category").takeIf { it.isNotBlank() } ?: "login",
+            username = json.optString("username").takeIf { it != "null" }.orEmpty(),
+            password = json.optString("password").takeIf { it != "null" }.orEmpty(),
+            url = json.optString("url").takeIf { it != "null" }.orEmpty(),
+            notes = json.optString("notes").takeIf { it != "null" }.orEmpty(),
+            tags = tags,
+            favorite = json.optBoolean("favorite", false),
+            passwordChangedAt = json.optString("password_changed_at")
+                .takeIf { it.isNotBlank() && it != "null" },
+            totpSecret = secret,
+            totpAlgorithm = totp?.optString("algorithm")?.takeIf { it.isNotBlank() } ?: "SHA1",
+            totpDigits = totp?.optInt("digits", 6)?.coerceIn(4, 10) ?: 6,
+            totpPeriod = totp?.optInt("period", 30)?.coerceIn(10, 120) ?: 30,
+        )
+    }
+
+    private fun parseStringList(value: String?): List<String> {
+        return value.orEmpty()
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
+    private fun parseMedicalList(json: JSONObject, key: String): List<String> {
+        val array = json.optJSONArray(key)
+        if (array != null) {
+            val values = mutableListOf<String>()
+            for (index in 0 until array.length()) {
+                array.optString(index).takeIf { it.isNotBlank() && it != "null" }?.let(values::add)
+            }
+            return values
+        }
+
+        return parseStringList(json.optString(key).takeIf { it != "null" })
+    }
+
+    private fun parseUiMedical(json: JSONObject): UiMedicalCard {
+        val contacts = mutableListOf<UiMedicalContact>()
+        json.optJSONArray("emergency_contacts")?.let { array ->
+            for (index in 0 until array.length()) {
+                val contact = array.optJSONObject(index) ?: continue
+                contacts.add(
+                    UiMedicalContact(
+                        name = contact.optString("name").takeIf { it != "null" }.orEmpty(),
+                        relation = contact.optString("relation").takeIf { it != "null" }.orEmpty(),
+                        phone = contact.optString("phone").takeIf { it != "null" }.orEmpty(),
+                    ),
+                )
+            }
+        }
+
+        val insurance = json.optJSONObject("insurance")
+        val doctor = json.optJSONObject("doctor")
+
+        return UiMedicalCard(
+            holder = json.optString("holder").takeIf { it != "null" }.orEmpty(),
+            birthDate = json.optString("birth_date").takeIf { it != "null" }.orEmpty(),
+            bloodType = json.optString("blood_type").takeIf { it != "null" }.orEmpty(),
+            allergies = parseMedicalList(json, "allergies"),
+            conditions = parseMedicalList(json, "conditions"),
+            medications = parseMedicalList(json, "medications"),
+            contacts = contacts,
+            insurance = UiMedicalInsurance(
+                provider = insurance?.optString("provider").orEmpty(),
+                plan = insurance?.optString("plan").orEmpty(),
+                policyNumber = insurance?.optString("policy_number").orEmpty(),
+                memberId = insurance?.optString("member_id").orEmpty(),
+                phone = insurance?.optString("phone").orEmpty(),
+            ),
+            doctor = UiMedicalDoctor(
+                name = doctor?.optString("name").orEmpty(),
+                phone = doctor?.optString("phone").orEmpty(),
+                clinic = doctor?.optString("clinic").orEmpty(),
+            ),
+            organDonor = json.optBoolean("organ_donor", false),
+            notes = json.optString("notes").takeIf { it != "null" }.orEmpty(),
         )
     }
 

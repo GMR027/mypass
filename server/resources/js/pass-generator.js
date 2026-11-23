@@ -5,6 +5,13 @@ import {
     passPayload,
     renderCodeInto,
 } from './passes';
+import {
+    MAX_BACKGROUND_DATA_URL,
+    normalizeAppearance,
+    PASS_TEXTURES,
+    TEXTURE_SIZE_FACTORS,
+    textureImage,
+} from './pass-appearance';
 import { parseBcbp, parsePassText } from './pass-parser';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
@@ -14,6 +21,8 @@ const locale = () => (window.mypassLocale === 'en' ? 'en-US' : 'es-MX');
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 2400;
 const MAX_LOGO_EDGE = 256;
+const MAX_BACKGROUND_FILE_SIZE = 15 * 1024 * 1024;
+const MAX_BACKGROUND_EDGE = 1600;
 
 let ocrWorkerPromise = null;
 let ocrLogger = null;
@@ -226,6 +235,7 @@ class PassGenerator {
             decodedPayload: null,
             codeSource: 'generated',
             logo: null,
+            appearance: normalizeAppearance(null),
             file: null,
             fileName: '',
             baseMetadata: {},
@@ -266,10 +276,26 @@ class PassGenerator {
         this.categories = document.getElementById('generator-categories');
         this.themes = document.getElementById('generator-themes');
         this.colorInput = document.getElementById('generator-color');
+        this.colorValue = document.getElementById('generator-color-value');
         this.codeType = document.getElementById('generator-code-type');
         this.logoInput = document.getElementById('generator-logo');
         this.logoPreview = document.getElementById('generator-logo-preview');
         this.logoClear = document.getElementById('generator-logo-clear');
+        this.textures = document.getElementById('generator-textures');
+        this.textureControls = document.getElementById('generator-texture-controls');
+        this.textureSize = document.getElementById('generator-texture-size');
+        this.textureRepeat = document.getElementById('generator-texture-repeat');
+        this.textureOpacity = document.getElementById('generator-texture-opacity');
+        this.textureOpacityValue = document.getElementById('generator-texture-opacity-value');
+        this.backgroundInput = document.getElementById('generator-background-image');
+        this.backgroundPreview = document.getElementById('generator-background-preview');
+        this.backgroundClear = document.getElementById('generator-background-clear');
+        this.backgroundControls = document.getElementById('generator-background-controls');
+        this.backgroundSize = document.getElementById('generator-background-size');
+        this.backgroundRepeat = document.getElementById('generator-background-repeat');
+        this.backgroundShade = document.getElementById('generator-background-shade');
+        this.backgroundShadeValue = document.getElementById('generator-background-shade-value');
+        this.appearanceReset = document.getElementById('generator-appearance-reset');
         this.fields = document.getElementById('generator-fields');
         this.noteList = document.getElementById('generator-note-list');
         this.noteInput = document.getElementById('generator-note-input');
@@ -381,6 +407,71 @@ class PassGenerator {
             this.renderLogo();
         });
 
+        this.textures?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-pass-texture]');
+            if (!button) {
+                return;
+            }
+            this.state.appearance.texture = button.dataset.passTexture;
+            this.renderAppearance();
+            this.renderPreview();
+        });
+
+        this.textureSize?.addEventListener('change', () => {
+            this.state.appearance.textureSize = this.textureSize.value;
+            this.renderPreview();
+        });
+
+        this.textureRepeat?.addEventListener('change', () => {
+            this.state.appearance.textureRepeat = this.textureRepeat.value;
+            this.renderPreview();
+        });
+
+        this.textureOpacity?.addEventListener('input', () => {
+            this.state.appearance.textureOpacity = Number(this.textureOpacity.value);
+            if (this.textureOpacityValue) {
+                this.textureOpacityValue.textContent = `${this.state.appearance.textureOpacity}%`;
+            }
+            this.renderPreview();
+        });
+
+        this.backgroundInput?.addEventListener('change', () => {
+            const file = this.backgroundInput.files?.[0];
+            if (file) {
+                this.handleBackgroundImage(file);
+            }
+        });
+
+        this.backgroundClear?.addEventListener('click', () => {
+            this.state.appearance.image = null;
+            this.renderAppearance();
+            this.renderPreview();
+        });
+
+        this.backgroundSize?.addEventListener('change', () => {
+            this.state.appearance.imageSize = this.backgroundSize.value;
+            this.renderPreview();
+        });
+
+        this.backgroundRepeat?.addEventListener('change', () => {
+            this.state.appearance.imageRepeat = this.backgroundRepeat.value;
+            this.renderPreview();
+        });
+
+        this.backgroundShade?.addEventListener('input', () => {
+            this.state.appearance.imageShade = Number(this.backgroundShade.value);
+            if (this.backgroundShadeValue) {
+                this.backgroundShadeValue.textContent = `${this.state.appearance.imageShade}%`;
+            }
+            this.renderPreview();
+        });
+
+        this.appearanceReset?.addEventListener('click', () => {
+            this.state.appearance = normalizeAppearance(null);
+            this.renderAppearance();
+            this.renderPreview();
+        });
+
         document.querySelectorAll('[data-generator-template]').forEach((button) => {
             button.addEventListener('click', () => {
                 this.closeTemplates();
@@ -464,6 +555,7 @@ class PassGenerator {
             this.state.decodedPayload = pass.code?.source === 'decoded' ? pass.code.payload : null;
             this.state.codeSource = pass.code?.source || 'generated';
             this.state.logo = pass.logo || null;
+            this.state.appearance = normalizeAppearance(pass.appearance);
             this.state.options = {
                 presentation: pass.options?.presentation !== false,
                 share: pass.options?.share !== false,
@@ -531,6 +623,7 @@ class PassGenerator {
     renderAll() {
         this.renderCategories();
         this.renderThemes();
+        this.renderAppearance();
         this.renderFields();
         this.renderNotes();
         this.renderLogo();
@@ -559,6 +652,108 @@ class PassGenerator {
         });
         if (this.colorInput) {
             this.colorInput.value = this.state.themeColor || THEME_COLORS.midnight;
+        }
+        if (this.colorValue) {
+            this.colorValue.textContent = (this.state.themeColor || THEME_COLORS.midnight).toUpperCase();
+        }
+        this.textures?.style.setProperty('--texture-swatch-color', this.state.themeColor);
+    }
+
+    renderAppearance() {
+        this.renderTextures();
+
+        const appearance = this.state.appearance;
+        if (this.textureControls) {
+            this.textureControls.hidden = appearance.texture === 'none';
+        }
+        if (this.textureSize) {
+            this.textureSize.value = appearance.textureSize;
+        }
+        if (this.textureRepeat) {
+            this.textureRepeat.value = appearance.textureRepeat;
+        }
+        if (this.textureOpacity) {
+            this.textureOpacity.value = String(appearance.textureOpacity);
+        }
+        if (this.textureOpacityValue) {
+            this.textureOpacityValue.textContent = `${appearance.textureOpacity}%`;
+        }
+
+        const hasImage = Boolean(appearance.image);
+        if (this.backgroundControls) {
+            this.backgroundControls.hidden = !hasImage;
+        }
+        if (this.backgroundClear) {
+            this.backgroundClear.hidden = !hasImage;
+        }
+        if (this.backgroundPreview) {
+            if (hasImage) {
+                this.backgroundPreview.src = appearance.image;
+                this.backgroundPreview.hidden = false;
+            } else {
+                this.backgroundPreview.removeAttribute('src');
+                this.backgroundPreview.hidden = true;
+            }
+        }
+        if (this.backgroundSize) {
+            this.backgroundSize.value = appearance.imageSize;
+        }
+        if (this.backgroundRepeat) {
+            this.backgroundRepeat.value = appearance.imageRepeat;
+        }
+        if (this.backgroundShade) {
+            this.backgroundShade.value = String(appearance.imageShade);
+        }
+        if (this.backgroundShadeValue) {
+            this.backgroundShadeValue.textContent = `${appearance.imageShade}%`;
+        }
+    }
+
+    renderTextures() {
+        if (!this.textures) {
+            return;
+        }
+
+        this.textures.replaceChildren();
+        this.textures.style.setProperty('--texture-swatch-color', this.state.themeColor);
+
+        const options = [
+            { id: 'none', label: t('Sin textura'), texture: null, size: null },
+            ...Object.entries(PASS_TEXTURES).map(([id, texture]) => ({
+                id,
+                label: t(texture.label),
+                texture,
+                size: texture.size,
+            })),
+        ];
+
+        for (const option of options) {
+            const active = option.id === this.state.appearance.texture;
+            const button = el('button', 'mp-texture-option');
+            button.type = 'button';
+            button.dataset.passTexture = option.id;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+
+            const preview = el('span', 'mp-texture-option__preview');
+            preview.setAttribute('aria-hidden', 'true');
+            if (option.texture) {
+                const factor = Math.min(1, TEXTURE_SIZE_FACTORS.sm);
+                preview.style.backgroundImage = textureImage(option.texture, 100);
+                preview.style.backgroundSize = `${Math.max(8, Math.round(option.size[0] * factor))}px ${Math.max(8, Math.round(option.size[1] * factor))}px`;
+                preview.style.backgroundRepeat = 'repeat';
+            } else {
+                preview.classList.add('mp-texture-option__preview--none');
+                preview.appendChild(icon('format_color_reset', 'text-[19px]'));
+            }
+
+            button.append(preview, el('span', 'mp-texture-option__label', option.label));
+            if (active) {
+                const check = el('span', 'mp-texture-option__check');
+                check.appendChild(icon('check', 'text-[13px]'));
+                button.appendChild(check);
+            }
+            this.textures.appendChild(button);
         }
     }
 
@@ -746,6 +941,7 @@ class PassGenerator {
             theme: this.state.theme,
             themeColor: this.state.themeColor,
             logo: this.state.logo,
+            appearance: normalizeAppearance(this.state.appearance),
             options: { ...this.state.options },
             confidence: this.state.confidence,
         };
@@ -1214,6 +1410,63 @@ class PassGenerator {
         }
         this.setStatus(t('Datos detectados. Revísalos antes de guardar.'));
         this.options.toast(t('Lectura completada. Revisa los campos.'));
+    }
+
+    async handleBackgroundImage(file) {
+        this.hideError();
+
+        if (!file.type.startsWith('image/')) {
+            this.showError(t('Usa una imagen JPG, PNG o WEBP.'));
+            return;
+        }
+        if (file.size > MAX_BACKGROUND_FILE_SIZE) {
+            this.showError(t('La imagen de fondo supera los 15 MB.'));
+            return;
+        }
+
+        try {
+            const bitmap = await createImageBitmap(file);
+            const dataUrl = await this.encodeBackgroundImage(bitmap);
+            bitmap.close?.();
+            this.state.appearance.image = dataUrl;
+            this.renderAppearance();
+            this.renderPreview();
+        } catch (error) {
+            this.showError(error.message || t('No se pudo leer la imagen de fondo.'));
+        } finally {
+            if (this.backgroundInput) {
+                this.backgroundInput.value = '';
+            }
+        }
+    }
+
+    async encodeBackgroundImage(bitmap) {
+        const attempts = [
+            { edge: MAX_BACKGROUND_EDGE, quality: 0.82 },
+            { edge: 1100, quality: 0.74 },
+        ];
+
+        for (const attempt of attempts) {
+            const scale = Math.min(1, attempt.edge / Math.max(bitmap.width, bitmap.height));
+            const width = Math.max(1, Math.round(bitmap.width * scale));
+            const height = Math.max(1, Math.round(bitmap.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            context.clearRect(0, 0, width, height);
+            context.drawImage(bitmap, 0, 0, width, height);
+
+            let dataUrl = canvas.toDataURL('image/webp', attempt.quality);
+            if (!dataUrl.startsWith('data:image/webp')) {
+                dataUrl = canvas.toDataURL('image/jpeg', attempt.quality);
+            }
+            if (dataUrl.length <= MAX_BACKGROUND_DATA_URL) {
+                return dataUrl;
+            }
+        }
+
+        throw new Error(t('La imagen es demasiado grande. Elige una más pequeña.'));
     }
 
     async handleLogo(file) {

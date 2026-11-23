@@ -28,6 +28,10 @@
                        @if (! $isSpanish) aria-current="true" @endif>EN</a>
                 </div>
 
+                <a href="{{ route('app.download', ['v' => '3']) }}" class="mp-btn mp-btn-quiet mp-btn-sm" download>
+                    <x-icon name="android" class="text-[18px]" />
+                    {{ __('Android') }}
+                </a>
                 <a href="{{ route('login') }}" class="mp-btn mp-btn-quiet mp-btn-sm">{{ __('Entrar') }}</a>
                 <a href="{{ route('register') }}" class="mp-btn mp-btn-primary mp-btn-sm">{{ __('Crear cuenta') }}</a>
             </nav>
@@ -49,7 +53,7 @@
                     {{ __('Guarda boletos, identificaciones, tarjetas y pases en una bóveda personal. Todo se cifra en tu dispositivo antes de salir; el servidor nunca ve tus documentos.') }}
                 </p>
 
-                <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+                <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <a href="{{ route('register') }}" class="mp-btn mp-btn-primary">
                         <x-icon name="lock" class="text-[20px]" />
                         {{ __('Crear mi bóveda') }}
@@ -57,6 +61,10 @@
                     <a href="{{ route('login') }}" class="mp-btn mp-btn-secondary">
                         {{ __('Ya tengo cuenta') }}
                         <x-icon name="arrow_forward" class="text-[20px]" />
+                    </a>
+                    <a href="{{ route('app.download', ['v' => '3']) }}" class="mp-btn mp-btn-secondary" download>
+                        <x-icon name="android" class="text-[20px]" />
+                        {{ __('Descargar Android') }}
                     </a>
                 </div>
 
@@ -289,6 +297,7 @@
                 © {{ date('Y') }} My Pass
             </p>
             <div class="flex flex-wrap items-center justify-center gap-3">
+                <a href="{{ route('app.download', ['v' => '3']) }}" class="hover:text-on-surface hover:underline" download>{{ __('Descargar Android') }}</a>
                 <a href="{{ route('legal.privacy') }}" class="hover:text-on-surface hover:underline">{{ __('Privacidad') }}</a>
                 <a href="{{ route('legal.terms') }}" class="hover:text-on-surface hover:underline">{{ __('Términos') }}</a>
                 <span>{{ __('Sin anuncios · Tus llaves se quedan contigo') }}</span>

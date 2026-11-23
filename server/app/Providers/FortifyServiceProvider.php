@@ -42,6 +42,7 @@ class FortifyServiceProvider extends ServiceProvider
             'request' => $request,
         ]));
         Fortify::twoFactorChallengeView(fn () => view('auth.two-factor-challenge'));
+        Fortify::verifyEmailView(fn () => view('auth.verify-email'));
 
         Fortify::createUsersUsing(CreateNewUser::class);
         Fortify::updateUserProfileInformationUsing(UpdateUserProfileInformation::class);

@@ -47,6 +47,42 @@ class VaultTest extends TestCase
         $this->assertSoftDeleted('items', ['id' => $itemId]);
     }
 
+    public function test_user_can_create_credentials_and_medical_cards(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user, 'sanctum');
+
+        $this->postJson('/api/v1/items', [
+            'type' => 'credential',
+            'encrypted_metadata' => base64_encode('credencial-cifrada'),
+        ])->assertCreated()
+            ->assertJsonPath('data.type', 'credential');
+
+        $this->postJson('/api/v1/items', [
+            'type' => 'medical_card',
+            'encrypted_metadata' => base64_encode('carnet-cifrado'),
+            'expires_at' => '2027-06-30',
+        ])->assertCreated()
+            ->assertJsonPath('data.type', 'medical_card')
+            ->assertJsonPath('data.expires_at', '2027-06-30T00:00:00+00:00');
+
+        $this->getJson('/api/v1/items')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
+    public function test_unknown_item_types_are_rejected(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user, 'sanctum');
+
+        $this->postJson('/api/v1/items', [
+            'type' => 'plain-password',
+            'encrypted_metadata' => base64_encode('dato'),
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('type');
+    }
+
     public function test_client_can_choose_item_id_for_offline_creation(): void
     {
         $user = User::factory()->create();

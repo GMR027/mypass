@@ -147,6 +147,18 @@ class VaultStore(context: Context) {
 
     fun email(): String = prefs.getString(KEY_EMAIL, "").orEmpty()
 
+    fun saveName(name: String) {
+        prefs.edit().putString(KEY_NAME, name).apply()
+    }
+
+    fun name(): String = prefs.getString(KEY_NAME, "").orEmpty()
+
+    fun saveAvatarUrl(url: String) {
+        prefs.edit().putString(KEY_AVATAR_URL, url).apply()
+    }
+
+    fun avatarUrl(): String = prefs.getString(KEY_AVATAR_URL, "").orEmpty()
+
     fun newItemId(): String = UUID.randomUUID().toString()
 
     fun vaultFile(id: String): File = File(vaultDir, "$id.mypd")
@@ -285,6 +297,8 @@ class VaultStore(context: Context) {
         const val KEY_SERVER_DEVICE_ID = "server_device_id"
         const val KEY_SIMPLE_MODE = "simple_mode"
         const val KEY_EMAIL = "email"
+        const val KEY_NAME = "name"
+        const val KEY_AVATAR_URL = "avatar_url"
         const val KEY_BIOMETRIC_CIPHERTEXT = "biometric_ciphertext"
         const val KEY_BIOMETRIC_IV = "biometric_iv"
         const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"

@@ -1,5 +1,6 @@
 package app.mypass
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -51,11 +53,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -112,6 +117,8 @@ fun MpLogo(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.8).sp,
                 color = if (inverse) Color.White else MpColors.Primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -128,11 +135,11 @@ fun MpButton(
     icon: ImageVector? = null,
     leadingIcon: (@Composable () -> Unit)? = null,
     fillWidth: Boolean = false,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
 ) {
     val buttonModifier = modifier
         .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
         .heightIn(min = 56.dp)
-    val contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
     val content: @Composable () -> Unit = {
         if (loading) {
             CircularProgressIndicator(
@@ -344,7 +351,12 @@ fun MpIconTile(
 }
 
 @Composable
-fun MpBadge(text: String, tone: MpBadgeTone = MpBadgeTone.Neutral, modifier: Modifier = Modifier) {
+fun MpBadge(
+    text: String,
+    tone: MpBadgeTone = MpBadgeTone.Neutral,
+    modifier: Modifier = Modifier,
+    showDot: Boolean = false,
+) {
     val background = when (tone) {
         MpBadgeTone.Primary -> MpColors.PrimaryFixed
         MpBadgeTone.Warning -> MpColors.SecondaryFixed
@@ -357,34 +369,74 @@ fun MpBadge(text: String, tone: MpBadgeTone = MpBadgeTone.Neutral, modifier: Mod
         MpBadgeTone.Danger -> MpColors.OnErrorContainer
         MpBadgeTone.Neutral -> MpColors.OnSurfaceVariant
     }
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = foreground,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier
-            .clip(CircleShape)
-            .background(background)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    )
+    val badgeModifier = modifier
+        .clip(CircleShape)
+        .background(background)
+
+    if (showDot) {
+        Row(
+            modifier = badgeModifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(foreground),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = foreground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    } else {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = foreground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = badgeModifier.padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+    }
 }
 
 @Composable
-fun MpAvatar(name: String, modifier: Modifier = Modifier, size: Int = 44) {
+fun MpAvatar(
+    name: String,
+    modifier: Modifier = Modifier,
+    size: Int = 44,
+    containerColor: Color = MpColors.PrimaryFixed,
+    contentColor: Color = MpColors.Primary,
+    textStyle: TextStyle = MaterialTheme.typography.titleMedium,
+    photo: Bitmap? = null,
+) {
     Box(
         modifier = modifier
             .size(size.dp)
             .clip(CircleShape)
-            .background(MpColors.PrimaryFixed),
+            .background(containerColor),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = name.trim().firstOrNull()?.uppercase() ?: "M",
-            style = MaterialTheme.typography.titleMedium,
-            color = MpColors.Primary,
-            fontWeight = FontWeight.Bold,
-        )
+        if (photo != null) {
+            Image(
+                bitmap = photo.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Text(
+                text = name.trim().firstOrNull()?.uppercase() ?: "M",
+                style = textStyle,
+                color = contentColor,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
@@ -572,12 +624,13 @@ fun MpIconButton(
     tint: Color = MpColors.OnSurfaceVariant,
     container: Color = Color.Transparent,
     enabled: Boolean = true,
+    shape: Shape = RoundedCornerShape(12.dp),
 ) {
     IconButton(
         onClick = onClick,
         modifier = modifier
             .size(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(shape)
             .background(container),
         enabled = enabled,
     ) {

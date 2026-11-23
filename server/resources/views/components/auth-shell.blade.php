@@ -138,6 +138,7 @@
                     {{ __('Volver al inicio') }}
                 </a>
                 <div class="mt-3 flex flex-wrap items-center justify-center gap-3">
+                    <a href="{{ route('app.download', ['v' => '3']) }}" class="hover:text-on-surface hover:underline" download>{{ __('Descargar Android') }}</a>
                     <a href="{{ route('legal.privacy') }}" class="hover:text-on-surface hover:underline">{{ __('Privacidad') }}</a>
                     <a href="{{ route('legal.terms') }}" class="hover:text-on-surface hover:underline">{{ __('Términos') }}</a>
                 </div>

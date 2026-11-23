@@ -72,8 +72,28 @@
         </a>
     </p>
 
+    <p class="mt-3 text-center text-[14px] text-on-surface-variant">
+        {{ __('Si acabas de crear tu cuenta, revisa tu correo para confirmarla.') }}
+    </p>
+
     <div class="mt-6 flex items-start gap-3 rounded-2xl bg-accent-soft p-4 text-sm leading-relaxed text-on-surface-variant">
         <x-icon name="bolt" class="mt-0.5 text-[20px] text-accent-deep" />
         <p>{{ __('Al desbloquear tu bóveda, tus pases y boletos aparecen primero.') }}</p>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-primary/15 bg-primary-fixed/40 p-4">
+        <div class="flex items-start gap-3">
+            <span class="mp-icon-tile">
+                <x-icon name="android" />
+            </span>
+            <div class="min-w-0 flex-1">
+                <p class="font-semibold text-primary">{{ __('Lleva My Pass en tu Android') }}</p>
+                <p class="mt-1 text-sm leading-relaxed text-on-surface-variant">{{ __('Descarga la app y vincula tu bóveda con un código de un solo uso.') }}</p>
+                <a href="{{ route('app.download', ['v' => '3']) }}" class="mp-btn mp-btn-secondary mt-3 w-full" download>
+                    <x-icon name="download" class="text-[19px]" />
+                    {{ __('Descargar APK') }}
+                </a>
+            </div>
+        </div>
     </div>
 </x-auth-shell>

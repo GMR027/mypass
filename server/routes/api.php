@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\KeyController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PairingController;
+use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\ShareController;
 use App\Http\Controllers\Api\V1\ShareRequestController;
 use App\Http\Controllers\Api\V1\TwoFactorController;
@@ -17,7 +18,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/health', fn () => response()->json([
         'status' => 'ok',
         'app' => 'mypass',
-        'version' => '0.2.0',
+        'version' => '0.3.0',
         'time' => now()->toIso8601String(),
     ]));
 
@@ -30,9 +31,15 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/two-factor/email', [TwoFactorController::class, 'sendEmail'])
         ->middleware('throttle:3,1');
 
+    Route::get('/avatars/{user:public_id}', [ProfileController::class, 'showAvatar'])
+        ->middleware('throttle:60,1')
+        ->name('api.avatars.show');
+
     Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
+        Route::delete('/me/avatar', [ProfileController::class, 'destroyAvatar']);
 
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);

@@ -143,6 +143,7 @@ class TwoFactorController extends Controller
             'id' => $user->public_id,
             'name' => $user->name,
             'email' => $user->email,
+            'avatar_url' => $user->avatar_url,
             'locale' => $user->locale,
             'simple_mode' => $user->simple_mode,
             'has_two_factor' => $user->two_factor_secret !== null,

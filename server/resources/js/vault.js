@@ -1,6 +1,8 @@
 import sodium from 'libsodium-wrappers-sumo';
 import { WalletApp } from './passes';
 import { PassGenerator } from './pass-generator';
+import { CredentialsApp, isCredentialItem } from './credentials';
+import { MedicalApp, isMedicalItem } from './medical';
 
 const t = (key) => window.mypassT ? window.mypassT(key) : key;
 const tf = (key, values) => window.mypassTF ? window.mypassTF(key, values) : key;
@@ -119,6 +121,8 @@ const HEADER_SIZE = 4 + 1 + 4 + 8 + 16;
 let masterKey = null;
 let wallet = null;
 let passGenerator = null;
+let credentials = null;
+let medical = null;
 let items = [];
 let keysCache = null;
 let pairingTimer = null;
@@ -1224,14 +1228,28 @@ async function loadShares() {
             const info = el('div', 'flex items-start gap-3');
 
             const tile = el('span', share.mode === 'transfer' ? 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary-fixed text-on-secondary-fixed' : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
-            tile.appendChild(icon(share.item_type === 'ticket' ? 'confirmation_number' : 'description', 'text-[24px]'));
+            tile.appendChild(icon(
+                share.item_type === 'ticket'
+                    ? 'confirmation_number'
+                    : share.item_type === 'medical_card'
+                        ? 'medical_services'
+                        : 'description',
+                'text-[24px]',
+            ));
 
             const text = el('div');
             const titleRow = el('div', 'flex flex-wrap items-center gap-2');
             titleRow.appendChild(el(
                 'p',
                 'font-semibold text-on-surface',
-                tf(share.item_type === 'ticket' ? ':sender te envió un boleto' : ':sender te envió un documento', { sender: share.sender }),
+                tf(
+                    share.item_type === 'ticket'
+                        ? ':sender te envió un boleto'
+                        : share.item_type === 'medical_card'
+                            ? ':sender te envió un carnet médico'
+                            : ':sender te envió un documento',
+                    { sender: share.sender },
+                ),
             ));
             titleRow.appendChild(el('span', share.mode === 'transfer' ? 'mp-badge mp-badge-warning' : 'mp-badge mp-badge-neutral', share.mode === 'transfer' ? t('Transferencia') : t('Copia')));
             if (share.expires_at) {
@@ -1710,6 +1728,8 @@ async function loadItems() {
 
     renderItems();
     wallet?.setItems(items);
+    credentials?.setItems(items);
+    medical?.setItems(items);
 }
 
 function expiryDate(value) {
@@ -1732,7 +1752,7 @@ function renderExpiryBanner() {
 
     const now = new Date();
     const upcoming = items
-        .filter((item) => !item.metadata?.pass && item.expires_at && item.state !== 'transferred')
+        .filter((item) => !item.metadata?.pass && !isCredentialItem(item) && item.expires_at && item.state !== 'transferred')
         .map((item) => ({ item, date: expiryDate(item.expires_at) }))
         .filter(({ date }) => !Number.isNaN(date.getTime()))
         .filter(({ date }) => date.getTime() - now.getTime() <= 30 * 24 * 60 * 60 * 1000)
@@ -1752,10 +1772,13 @@ function renderExpiryBanner() {
     }
 }
 
-function typeLabel(type) {    return {
+function typeLabel(type) {
+    return {
         document: t('Documento'),
         ticket: t('Boleto o pase'),
         card: t('Tarjeta'),
+        credential: t('Credencial'),
+        medical_card: t('Carnet médico'),
         other: t('Otro'),
     }[type] ?? type;
 }
@@ -1765,12 +1788,14 @@ function typeIcon(type) {
         document: 'badge',
         ticket: 'confirmation_number',
         card: 'credit_card',
+        credential: 'key',
+        medical_card: 'medical_services',
         other: 'description',
     }[type] ?? 'description';
 }
 
 function renderItems() {
-    const documentItems = items.filter((item) => !item.metadata?.pass);
+    const documentItems = items.filter((item) => !item.metadata?.pass && !isCredentialItem(item) && !isMedicalItem(item));
     const query = currentSearch.trim().toLowerCase();
     const filteredItems = documentItems.filter((item) => {
         if (currentFilter !== 'all' && item.type !== currentFilter) {
@@ -2234,6 +2259,8 @@ function lock(reason = '') {
     itemList.replaceChildren();
     wallet?.reset();
     passGenerator?.reset();
+    credentials?.reset();
+    medical?.reset();
     setVaultStatus(false);
     unlocked.hidden = true;
     locked.hidden = false;
@@ -2279,7 +2306,7 @@ function lock(reason = '') {
 
 function initialTab() {
     const tab = new URLSearchParams(window.location.search).get('tab');
-    return ['docs', 'pases', 'generador', 'family', 'devices'].includes(tab) ? tab : 'pases';
+    return ['docs', 'pases', 'generador', 'credentials', 'medical', 'family', 'devices'].includes(tab) ? tab : 'pases';
 }
 
 function setVaultStatus(open) {
@@ -2293,7 +2320,7 @@ function updateNavState(tab) {
     const desktopTab = tab === 'generador' ? 'pases' : tab;
     const bottomTab = tab === 'generador'
         ? 'pases'
-        : (['docs', 'family', 'devices'].includes(tab) ? 'docs' : tab);
+        : (['docs', 'credentials', 'medical', 'family', 'devices'].includes(tab) ? 'docs' : tab);
 
     document.querySelectorAll('[data-vault-tab]').forEach((link) => {
         const isBottom = link.classList.contains('mp-bottom-link');
@@ -2316,7 +2343,7 @@ function switchTab(tab) {
         button.setAttribute('aria-selected', button.dataset.tab === selectedTab ? 'true' : 'false');
     });
 
-    for (const panel of ['docs', 'passes', 'generador', 'family', 'devices']) {
+    for (const panel of ['docs', 'passes', 'generador', 'credentials', 'medical', 'family', 'devices']) {
         const element = document.getElementById(`panel-${panel}`);
         if (element) {
             const panelKey = panel === 'passes' ? 'pases' : panel;
@@ -2326,6 +2353,10 @@ function switchTab(tab) {
 
     if (tab === 'pases') {
         wallet?.refresh();
+    } else if (tab === 'credentials') {
+        credentials?.render();
+    } else if (tab === 'medical') {
+        medical?.render();
     }
 
     updateNavState(tab);
@@ -2339,12 +2370,24 @@ function switchTab(tab) {
     }
 }
 
-async function savePass({ itemId, newId, version, type, metadata, file, blobId }) {
+async function saveVaultItem({
+    itemId,
+    newId,
+    version,
+    type,
+    metadata,
+    file,
+    blobId,
+    changedMessage = null,
+    saveMessage = null,
+}) {
     let finalBlobId = blobId ?? null;
 
     if (file) {
         const blob = await uploadFile(file);
         finalBlobId = blob.id;
+    } else if (blobId === undefined) {
+        finalBlobId = null;
     }
 
     const response = await fetch(itemId ? `${itemsUrl}/${itemId}` : itemsUrl, {
@@ -2367,14 +2410,22 @@ async function savePass({ itemId, newId, version, type, metadata, file, blobId }
 
     if (!response.ok) {
         if (response.status === 409) {
-            throw new Error(t('El pase cambió en otro dispositivo. Vuelve a cargarlo.'));
+            throw new Error(changedMessage || t('El elemento cambió en otro dispositivo. Vuelve a cargarlo.'));
         }
-        throw new Error(t('No se pudo guardar el pase.'));
+        throw new Error(saveMessage || t('No se pudo guardar el elemento.'));
     }
 
     const data = (await response.json()).data;
     await loadItems();
     return data;
+}
+
+async function savePass(payload) {
+    return saveVaultItem({
+        ...payload,
+        changedMessage: t('El pase cambió en otro dispositivo. Vuelve a cargarlo.'),
+        saveMessage: t('No se pudo guardar el pase.'),
+    });
 }
 
 async function init() {
@@ -2412,6 +2463,30 @@ if (app) {
         getItems: () => items,
         openShare: (item) => openShareModal(item),
         toast: (message) => showToast(message),
+    });
+
+    credentials = new CredentialsApp({
+        saveItem: (payload) => saveVaultItem({
+            ...payload,
+            changedMessage: t('La credencial cambió en otro dispositivo. Vuelve a cargarla.'),
+            saveMessage: t('No se pudo guardar la credencial.'),
+        }),
+        toast: (message) => showToast(message),
+        downloadItem: (item, button) => downloadItem(item, button),
+        deleteItem: (item, button) => deleteItem(item, button),
+    });
+
+    medical = new MedicalApp({
+        saveItem: (payload) => saveVaultItem({
+            ...payload,
+            changedMessage: t('El carnet cambió en otro dispositivo. Vuelve a cargarlo.'),
+            saveMessage: t('No se pudo guardar el carnet médico.'),
+        }),
+        toast: (message) => showToast(message),
+        canShare: () => acceptedContacts.length > 0,
+        openShare: (item) => openShareModal(item),
+        downloadItem: (item, button) => downloadItem(item, button),
+        deleteItem: (item, button) => deleteItem(item, button),
     });
 
     document.addEventListener('click', (event) => {

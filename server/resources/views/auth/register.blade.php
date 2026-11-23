@@ -116,8 +116,8 @@
     </p>
 
     <div class="mt-6 flex items-start gap-3 rounded-xl bg-surface-container-low p-4 text-sm leading-relaxed text-on-surface-variant">
-        <x-icon name="security" class="mt-0.5 text-[20px] text-primary" />
-        <p>{{ __('No requerimos tarjeta de crédito ni datos bancarios para comenzar.') }}</p>
+        <x-icon name="mark_email_read" class="mt-0.5 text-[20px] text-primary" />
+        <p>{{ __('Te enviaremos un correo para confirmar tu cuenta antes de abrir la bóveda.') }}</p>
     </div>
 
     <script nonce="{{ $cspNonce }}">

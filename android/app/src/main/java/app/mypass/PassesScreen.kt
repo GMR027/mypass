@@ -99,7 +99,9 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
         date != null && !date.isBefore(LocalDate.now()) &&
             !date.isAfter(LocalDate.now().plusDays(30))
     }
-    val firstName = state.email.substringBefore("@").ifBlank { stringResource(R.string.app_name) }
+    val firstName = state.name.substringBefore(" ").ifBlank {
+        state.email.substringBefore("@")
+    }.ifBlank { stringResource(R.string.app_name) }
     var presentingItem by remember { mutableStateOf<UiItem?>(null) }
     val todayLabel = remember {
         LocalDate.now()
@@ -112,7 +114,12 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        MpTopBar(state = state, onLock = viewModel::lock)
+        MpTopBar(
+            state = state,
+            onLock = viewModel::lock,
+            onSettings = viewModel::openSettings,
+            onLogout = viewModel::logout,
+        )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 28.dp),
@@ -211,6 +218,28 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                 )
             }
 
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    HomeVaultShortcut(
+                        title = stringResource(R.string.credentials),
+                        subtitle = stringResource(R.string.credentials_shortcut),
+                        icon = Icons.Filled.Lock,
+                        onClick = viewModel::openCredentials,
+                        modifier = Modifier.weight(1f),
+                    )
+                    HomeVaultShortcut(
+                        title = stringResource(R.string.medical),
+                        subtitle = stringResource(R.string.medical_shortcut),
+                        icon = Icons.Filled.Info,
+                        onClick = viewModel::openMedical,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
             item { VaultStatusCard(state) }
 
             if (expiring > 0) {
@@ -231,6 +260,43 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
+private fun HomeVaultShortcut(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    MpCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MpIconTile(icon = icon, size = 48)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun NextPassHero(
     item: UiItem,
     passCount: Int,
@@ -238,7 +304,7 @@ private fun NextPassHero(
     onOpenPasses: () -> Unit,
 ) {
     val pass = item.pass ?: return
-    val gradient = passGradient(pass)
+    val background = Modifier.passCardBackground(pass)
     val dateLabel = passDateLabel(item)
 
     Surface(
@@ -250,7 +316,7 @@ private fun NextPassHero(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(gradient),
+                .then(background),
         ) {
             Canvas(modifier = Modifier.matchParentSize()) {
                 drawCircle(
@@ -661,7 +727,12 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        MpTopBar(state = state, onLock = viewModel::lock)
+        MpTopBar(
+            state = state,
+            onLock = viewModel::lock,
+            onSettings = viewModel::openSettings,
+            onLogout = viewModel::logout,
+        )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
@@ -889,7 +960,7 @@ private fun PassDetailCard(
     val bitmap = remember(payload, pass.codeFormat) {
         Barcode.generate(payload, pass.codeFormat, 720)
     }
-    val gradient = passGradient(pass)
+    val background = Modifier.passCardBackground(pass)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -901,7 +972,7 @@ private fun PassDetailCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(gradient)
+                    .then(background)
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -1021,12 +1092,11 @@ internal fun PassCompactCard(
     onClick: () -> Unit,
 ) {
     val pass = item.pass ?: return
-    val gradient = passGradient(pass).let { brush ->
-        if (archived) {
-            Brush.linearGradient(listOf(MpColors.SurfaceHighest, MpColors.SurfaceHighest))
-        } else {
-            brush
-        }
+    val cardBackground = Modifier.passCardBackground(pass)
+    val background = if (archived) {
+        Modifier.background(Brush.linearGradient(listOf(MpColors.SurfaceHighest, MpColors.SurfaceHighest)))
+    } else {
+        cardBackground
     }
     Surface(
         modifier = Modifier
@@ -1039,7 +1109,7 @@ internal fun PassCompactCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(gradient)
+                .then(background)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -1083,6 +1153,7 @@ internal fun PassPreviewCard(draft: PassDraft) {
         themeColor = draft.themeColor,
         options = emptyMap(),
         logo = draft.logo,
+        appearance = draft.appearance,
     )
     val payload = draft.codePayload.ifBlank {
         val fields = JSONObject()
@@ -1113,7 +1184,7 @@ internal fun PassPreviewCard(draft: PassDraft) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(passGradient(pass))
+                    .passCardBackground(pass)
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -1556,7 +1627,7 @@ private fun passCategoryDrawable(category: String): Int = when (category) {
     else -> R.drawable.ic_document
 }
 
-private fun passGradient(pass: UiPass): Brush {
+internal fun passGradient(pass: UiPass): Brush {
     val base = runCatching { Color(AndroidColor.parseColor(pass.themeColor)) }
         .getOrElse {
             when (pass.category) {

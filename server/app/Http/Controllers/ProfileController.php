@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateAvatarRequest;
 use App\Services\AuditLogger;
+use App\Services\UserAvatarService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -18,7 +21,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, AuditLogger $audit): RedirectResponse
+    public function destroy(Request $request, AuditLogger $audit, UserAvatarService $avatars): RedirectResponse
     {
         $request->validate([
             'password' => ['required', 'string', 'current_password:web'],
@@ -31,6 +34,7 @@ class ProfileController extends Controller
         $audit->log($user, 'account_deleted');
         $user->tokens()->delete();
         Storage::disk('local')->deleteDirectory('vault/'.$user->id);
+        $avatars->removeDirectory($user);
 
         Auth::guard('web')->logout();
         $user->delete();
@@ -39,5 +43,21 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login')->with('status', __('Tu cuenta y tus datos se eliminaron.'));
+    }
+
+    public function updateAvatar(UpdateAvatarRequest $request, UserAvatarService $avatars): RedirectResponse
+    {
+        /** @var UploadedFile $avatar */
+        $avatar = $request->file('avatar');
+        $avatars->store($request->user(), $avatar);
+
+        return back()->with('status', __('Foto de perfil actualizada.'));
+    }
+
+    public function destroyAvatar(Request $request, UserAvatarService $avatars): RedirectResponse
+    {
+        $avatars->remove($request->user());
+
+        return back()->with('status', __('Foto de perfil eliminada.'));
     }
 }

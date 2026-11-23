@@ -8,10 +8,12 @@ use App\Http\Controllers\Api\V1\PairingController;
 use App\Http\Controllers\Api\V1\ShareController;
 use App\Http\Controllers\Api\V1\ShareRequestController;
 use App\Http\Controllers\Api\V1\VaultItemController;
+use App\Http\Controllers\AppDownloadController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SecurityController;
+use App\Models\VaultItem;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -22,10 +24,14 @@ Route::get('/', function () {
 
 Route::get('/language/{locale}', [LanguageController::class, 'switch'])->name('language.switch');
 
+Route::get('/downloads/mypass.apk', [AppDownloadController::class, 'android'])
+    ->middleware('throttle:60,1')
+    ->name('app.download');
+
 Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
 Route::view('/terms', 'legal.terms')->name('legal.terms');
 
-Route::middleware(['auth', 'email-2fa'])->group(function () {
+Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
     Route::get('/dashboard', function () {
         $user = auth()->user();
 
@@ -34,9 +40,23 @@ Route::middleware(['auth', 'email-2fa'])->group(function () {
             'twoFactorEnabled' => filled($user->two_factor_confirmed_at),
             'deviceCount' => $user->devices()->whereNull('revoked_at')->count(),
             'contactCount' => $user->contacts()->where('status', 'accepted')->count(),
-            'documentCount' => $user->items()->where('state', '!=', 'transferred')->whereNull('deleted_at')->count(),
+            'documentCount' => $user->items()
+                ->whereIn('type', VaultItem::DOCUMENT_TYPES)
+                ->where('state', '!=', 'transferred')
+                ->whereNull('deleted_at')
+                ->count(),
+            'credentialCount' => $user->items()
+                ->where('type', VaultItem::TYPE_CREDENTIAL)
+                ->where('state', '!=', 'transferred')
+                ->whereNull('deleted_at')
+                ->count(),
+            'medicalCount' => $user->items()
+                ->where('type', VaultItem::TYPE_MEDICAL_CARD)
+                ->where('state', '!=', 'transferred')
+                ->whereNull('deleted_at')
+                ->count(),
             'passCount' => $user->items()
-                ->whereIn('type', ['ticket', 'card'])
+                ->whereIn('type', VaultItem::PASS_TYPES)
                 ->where('state', '!=', 'transferred')
                 ->whereNull('deleted_at')
                 ->count(),
@@ -58,6 +78,8 @@ Route::middleware(['auth', 'email-2fa'])->group(function () {
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     Route::get('/settings/profile', [ProfileController::class, 'show'])->name('settings.profile');
+    Route::post('/settings/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('settings.profile.avatar.update');
+    Route::delete('/settings/profile/avatar', [ProfileController::class, 'destroyAvatar'])->name('settings.profile.avatar.destroy');
     Route::delete('/settings/account', [ProfileController::class, 'destroy'])->name('settings.account.destroy');
     Route::get('/settings/security', [SecurityController::class, 'show'])->name('settings.security');
     Route::get('/api/web/security', [SecurityController::class, 'status'])->name('web.security.status');

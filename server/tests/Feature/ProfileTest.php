@@ -68,6 +68,11 @@ class ProfileTest extends TestCase
         $user = User::factory()->create([
             'password' => 'CurrentPassword123!',
         ]);
+        $user->forceFill([
+            'avatar_path' => 'avatars/'.$user->public_id.'/avatar.png',
+        ])->save();
+        $avatarPath = $user->avatar_path;
+        Storage::disk('local')->put($avatarPath, 'avatar');
         Storage::disk('local')->put('vault/'.$user->id.'/document.bin', 'ciphertext');
 
         $this->actingAs($user)
@@ -79,6 +84,7 @@ class ProfileTest extends TestCase
         $this->assertGuest();
         $this->assertDatabaseMissing('users', ['id' => $user->id]);
         Storage::disk('local')->assertMissing('vault/'.$user->id.'/document.bin');
+        Storage::disk('local')->assertMissing($avatarPath);
     }
 
     public function test_account_is_not_deleted_with_a_wrong_password(): void

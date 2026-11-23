@@ -3,10 +3,12 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\TestCase;
 
@@ -22,8 +24,10 @@ class AuthTest extends TestCase
             ->assertJsonPath('app', 'mypass');
     }
 
-    public function test_user_can_register_and_receive_token(): void
+    public function test_user_can_register_and_receives_verification_email(): void
     {
+        Notification::fake();
+
         $response = $this->postJson('/api/v1/auth/register', [
             'name' => 'Edgar',
             'email' => 'edgar@example.com',
@@ -37,10 +41,30 @@ class AuthTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('user.email', 'edgar@example.com')
             ->assertJsonPath('user.locale', 'es-MX')
-            ->assertJsonStructure(['user' => ['id', 'name', 'email'], 'token']);
+            ->assertJsonPath('user.email_verified', false)
+            ->assertJsonPath('email_verified', false)
+            ->assertJsonMissingPath('token');
 
-        $this->assertDatabaseHas('users', ['email' => 'edgar@example.com']);
-        $this->assertNotNull(User::first()->public_id);
+        $user = User::where('email', 'edgar@example.com')->firstOrFail();
+
+        $this->assertNotNull($user->public_id);
+        $this->assertNull($user->email_verified_at);
+        Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    public function test_unverified_user_cannot_login(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'email' => 'unverified@example.com',
+            'password' => 'Password12345!',
+        ]);
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'unverified@example.com',
+            'password' => 'Password12345!',
+            'device_name' => 'Tablet',
+        ])->assertForbidden()
+            ->assertJsonPath('email_unverified', true);
     }
 
     public function test_user_can_login_and_logout_with_token(): void

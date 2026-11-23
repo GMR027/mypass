@@ -1,3 +1,5 @@
+import { applyAppearance, normalizeAppearance } from './pass-appearance';
+
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
 const locale = () => (window.mypassLocale === 'en' ? 'en-US' : 'es-MX');
@@ -183,6 +185,7 @@ function passFromItem(item) {
         notes: Array.isArray(raw?.notes) ? raw.notes.filter(Boolean) : [],
         code: raw?.code || null,
         themeColor: raw?.themeColor || (raw?.theme ? THEME_COLORS[raw.theme] : null),
+        appearance: normalizeAppearance(raw?.appearance),
         options: raw?.options || {},
         item,
     };
@@ -279,6 +282,7 @@ function createPassCardElement(item, options = {}) {
     node.dataset.category = pass.category;
     node.dataset.passId = item.id;
     node.style.setProperty('--pass-color', themeColor(pass));
+    applyAppearance(node, pass.appearance);
     if (interactive) {
         node.setAttribute('aria-pressed', selected ? 'true' : 'false');
     }

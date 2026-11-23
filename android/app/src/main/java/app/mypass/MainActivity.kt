@@ -24,11 +24,14 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -60,6 +63,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -84,6 +88,8 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -121,6 +127,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -128,6 +138,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.biometric.BiometricPrompt
@@ -177,12 +188,19 @@ class MainActivity : FragmentActivity() {
                                 state.screen == Screen.Scan ||
                                 state.screen == Screen.Settings ||
                                 state.screen == Screen.Passes ||
-                                state.screen == Screen.PassEditor,
+                                state.screen == Screen.PassEditor ||
+                                state.screen == Screen.Credentials ||
+                                state.screen == Screen.CredentialEditor ||
+                                state.screen == Screen.Medical ||
+                                state.screen == Screen.MedicalEditor,
                         ) {
                             when (state.screen) {
                                 Screen.Viewer -> viewModel.closeViewer()
                                 Screen.Scan -> viewModel.backFromScan()
                                 Screen.PassEditor -> viewModel.discardPassDraft()
+                                Screen.CredentialEditor -> viewModel.discardCredentialDraft()
+                                Screen.MedicalEditor -> viewModel.discardMedicalDraft()
+                                Screen.Credentials, Screen.Medical -> viewModel.backToVault()
                                 else -> viewModel.backToHome()
                             }
                         }
@@ -214,10 +232,17 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
         }
     }
 
-    val showBottomBar = state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Settings)
+    val showBottomBar = state.screen in setOf(
+        Screen.Home,
+        Screen.Vault,
+        Screen.Passes,
+        Screen.Credentials,
+        Screen.Medical,
+        Screen.Settings,
+    )
 
     LaunchedEffect(state.status, state.screen) {
-        if (state.status != null && state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Settings)) {
+        if (state.status != null && state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Credentials, Screen.Medical, Screen.Settings)) {
             delay(3500)
             viewModel.clearStatus()
         }
@@ -254,6 +279,10 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
                     )
                     Screen.Passes -> PassesScreen(state = state, viewModel = viewModel)
                     Screen.PassEditor -> PassEditorScreen(state = state, viewModel = viewModel)
+                    Screen.Credentials -> CredentialsScreen(state = state, viewModel = viewModel)
+                    Screen.CredentialEditor -> CredentialEditorScreen(state = state, viewModel = viewModel)
+                    Screen.Medical -> MedicalScreen(state = state, viewModel = viewModel)
+                    Screen.MedicalEditor -> MedicalEditorScreen(state = state, viewModel = viewModel)
                     Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
                     Screen.Scan -> ScannerScreen(state = state, viewModel = viewModel)
                     Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
@@ -953,7 +982,9 @@ private fun VaultScreen(
         }
     }
 
-    val vaultItems = remember(state.items) { state.items.filter { it.pass == null } }
+    val vaultItems = remember(state.items) {
+        state.items.filter { it.pass == null && it.credential == null && it.medical == null }
+    }
     val visibleItems = remember(vaultItems, search, filter) {
         val query = search.trim()
         vaultItems.filter { item ->
@@ -1011,7 +1042,12 @@ private fun VaultScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        MpTopBar(state = state, onLock = viewModel::lock)
+        MpTopBar(
+            state = state,
+            onLock = viewModel::lock,
+            onSettings = viewModel::openSettings,
+            onLogout = viewModel::logout,
+        )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = if (state.simpleMode) 560.dp else 300.dp),
             modifier = Modifier.fillMaxSize(),
@@ -1021,35 +1057,20 @@ private fun VaultScreen(
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    VaultSectionTabs(
+                        current = "documents",
+                        onDocuments = {},
+                        onCredentials = viewModel::openCredentials,
+                        onMedical = viewModel::openMedical,
+                    )
                     VaultStatusCard(state)
                     MpStatusBanner(state.status, state.error)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        MpButton(
-                            text = stringResource(R.string.add),
-                            onClick = onAdd,
-                            icon = Icons.Filled.Add,
-                            enabled = !state.busy,
-                            modifier = Modifier.weight(1f),
-                        )
-                        MpButton(
-                            text = stringResource(R.string.scan),
-                            onClick = viewModel::openScanner,
-                            variant = MpButtonVariant.Secondary,
-                            enabled = !state.busy,
-                            modifier = Modifier.weight(1f),
-                        )
-                        MpButton(
-                            text = stringResource(R.string.sync),
-                            onClick = viewModel::sync,
-                            variant = MpButtonVariant.Quiet,
-                            icon = Icons.Filled.Refresh,
-                            enabled = !state.busy,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    VaultActions(
+                        busy = state.busy,
+                        onAdd = onAdd,
+                        onScan = viewModel::openScanner,
+                        onSync = viewModel::sync,
+                    )
                 }
             }
 
@@ -1124,6 +1145,87 @@ private fun VaultScreen(
 }
 
 @Composable
+private fun VaultActions(
+    busy: Boolean,
+    onAdd: () -> Unit,
+    onScan: () -> Unit,
+    onSync: () -> Unit,
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val stacked = maxWidth < 600.dp
+        val compactPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)
+
+        if (stacked) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MpButton(
+                    text = stringResource(R.string.add_document),
+                    onClick = onAdd,
+                    icon = Icons.Filled.Add,
+                    enabled = !busy,
+                    fillWidth = true,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    MpButton(
+                        text = stringResource(R.string.scan),
+                        onClick = onScan,
+                        variant = MpButtonVariant.Secondary,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = compactPadding,
+                    )
+                    MpButton(
+                        text = stringResource(R.string.sync),
+                        onClick = onSync,
+                        variant = MpButtonVariant.Quiet,
+                        icon = Icons.Filled.Refresh,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = compactPadding,
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                MpButton(
+                    text = stringResource(R.string.add),
+                    onClick = onAdd,
+                    icon = Icons.Filled.Add,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = compactPadding,
+                )
+                MpButton(
+                    text = stringResource(R.string.scan),
+                    onClick = onScan,
+                    variant = MpButtonVariant.Secondary,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = compactPadding,
+                )
+                MpButton(
+                    text = stringResource(R.string.sync),
+                    onClick = onSync,
+                    variant = MpButtonVariant.Quiet,
+                    icon = Icons.Filled.Refresh,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = compactPadding,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 internal fun VaultStatusCard(state: UiState) {
     MpCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -1132,12 +1234,15 @@ internal fun VaultStatusCard(state: UiState) {
         ) {
             MpIconTile(icon = Icons.Filled.Lock, size = 56)
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(stringResource(R.string.vault), style = MaterialTheme.typography.headlineSmall)
-                    MpBadge(stringResource(R.string.vault_open_badge), MpBadgeTone.Primary)
+                    MpBadge(
+                        text = stringResource(R.string.vault_open_badge),
+                        tone = MpBadgeTone.Primary,
+                    )
                 }
                 Text(
                     text = state.email,
@@ -1273,7 +1378,7 @@ private fun DocumentCard(
 private fun ItemTypeIcon(type: String, size: Int = 46) {
     val painter = when (type) {
         "ticket" -> painterResource(R.drawable.ic_ticket)
-        "card" -> painterResource(R.drawable.ic_card)
+        "card", "medical_card" -> painterResource(R.drawable.ic_card)
         else -> painterResource(R.drawable.ic_document)
     }
     MpIconTile(painter = painter, size = size)
@@ -1283,6 +1388,8 @@ private fun ItemTypeIcon(type: String, size: Int = 46) {
 private fun typeLabel(type: String): String = when (type) {
     "ticket" -> stringResource(R.string.ticket)
     "card" -> stringResource(R.string.card)
+    "credential" -> stringResource(R.string.credentials)
+    "medical_card" -> stringResource(R.string.medical_card)
     "other" -> stringResource(R.string.other)
     else -> stringResource(R.string.document)
 }
@@ -1604,7 +1711,11 @@ private fun ShareCard(share: UiShare, onAccept: () -> Unit, onDecline: () -> Uni
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(
-                            if (share.itemType == "ticket") R.string.share_received_ticket else R.string.share_received_document,
+                            when (share.itemType) {
+                                "ticket" -> R.string.share_received_ticket
+                                "medical_card" -> R.string.share_received_medical
+                                else -> R.string.share_received_document
+                            },
                             share.sender,
                         ),
                         style = MaterialTheme.typography.titleSmall,
@@ -1684,6 +1795,15 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
     val currentLanguage = LocalConfiguration.current.locales[0]?.language.orEmpty()
     val biometricAvailable = activity != null && BiometricUnlock.isAvailable(context)
     var showPinDialog by remember { mutableStateOf(false) }
+    val avatarPhoto = rememberAvatarBitmap(state.avatarPath, state.avatarVersion)
+    val hasAvatar = state.avatarUrl.isNotBlank() || state.avatarPath != null
+    val avatarPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.uploadAvatar(uri)
+        }
+    }
 
     if (showPinDialog) {
         ChangePinDialog(
@@ -1696,7 +1816,12 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        MpTopBar(state = state, onLock = viewModel::lock)
+        MpTopBar(
+            state = state,
+            onLock = viewModel::lock,
+            onSettings = viewModel::openSettings,
+            onLogout = viewModel::logout,
+        )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
@@ -1714,6 +1839,83 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
             }
 
             item { MpStatusBanner(state.status, state.error) }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Box(modifier = Modifier.size(76.dp)) {
+                                MpAvatar(
+                                    name = state.name.ifBlank { state.email }.ifBlank { "M" },
+                                    size = 76,
+                                    containerColor = MpColors.Primary,
+                                    contentColor = MpColors.OnPrimary,
+                                    textStyle = MaterialTheme.typography.headlineMedium,
+                                    photo = avatarPhoto,
+                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(28.dp),
+                                    shape = CircleShape,
+                                    color = MpColors.Primary,
+                                    border = BorderStroke(2.dp, Color.White),
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_photo_camera),
+                                            contentDescription = null,
+                                            tint = MpColors.OnPrimary,
+                                            modifier = Modifier.size(15.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.profile_photo_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.profile_photo_help),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MpColors.OnSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        MpButton(
+                            text = stringResource(
+                                if (hasAvatar) R.string.change_photo else R.string.upload_photo,
+                            ),
+                            onClick = { avatarPicker.launch("image/*") },
+                            variant = MpButtonVariant.Secondary,
+                            icon = Icons.Filled.Add,
+                            enabled = !state.busy,
+                            fillWidth = true,
+                        )
+
+                        if (hasAvatar) {
+                            MpButton(
+                                text = stringResource(R.string.remove_photo),
+                                onClick = viewModel::deleteAvatar,
+                                variant = MpButtonVariant.Quiet,
+                                enabled = !state.busy,
+                                fillWidth = true,
+                            )
+                        }
+                    }
+                }
+            }
 
             item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
@@ -1948,7 +2150,37 @@ private fun ChangePinDialog(
 }
 
 @Composable
-internal fun MpTopBar(state: UiState, onLock: () -> Unit) {
+private fun rememberAvatarBitmap(path: String?, version: Long): Bitmap? =
+    remember(path, version) {
+        path?.let { filePath ->
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(filePath, bounds)
+                val longestEdge = maxOf(bounds.outWidth, bounds.outHeight)
+                var sampleSize = 1
+                while (longestEdge / sampleSize > 512) {
+                    sampleSize *= 2
+                }
+                BitmapFactory.decodeFile(
+                    filePath,
+                    BitmapFactory.Options().apply { inSampleSize = sampleSize },
+                )
+            }.getOrNull()
+        }
+    }
+
+@Composable
+internal fun MpTopBar(
+    state: UiState,
+    onLock: () -> Unit,
+    onSettings: () -> Unit,
+    onLogout: () -> Unit,
+) {
+    var accountMenuOpen by remember { mutableStateOf(false) }
+    val accountLabel = state.name.ifBlank { state.email }.ifBlank { "M" }
+    val accountMenuLabel = stringResource(R.string.account_menu)
+    val avatarPhoto = rememberAvatarBitmap(state.avatarPath, state.avatarVersion)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1959,37 +2191,211 @@ internal fun MpTopBar(state: UiState, onLock: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MpLogo()
-            Spacer(modifier = Modifier.width(4.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End,
-            ) {
-                Text(
-                    text = stringResource(R.string.vault_open_badge),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MpColors.Primary,
-                )
-                Text(
-                    text = state.email,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            TopBarBrand(modifier = Modifier.weight(1f))
             MpIconButton(
                 icon = Icons.Filled.Lock,
                 contentDescription = stringResource(R.string.lock),
                 onClick = onLock,
-                container = MpColors.SurfaceLow,
+                container = MpColors.PrimaryFixed,
                 tint = MpColors.Primary,
+                shape = CircleShape,
             )
-            MpAvatar(name = state.email.ifBlank { "M" }, size = 40)
+            Box {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .clickable { accountMenuOpen = true }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = accountMenuLabel
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MpAvatar(
+                        name = accountLabel,
+                        size = 44,
+                        containerColor = MpColors.Primary,
+                        contentColor = MpColors.OnPrimary,
+                        photo = avatarPhoto,
+                    )
+                }
+                AccountMenu(
+                    expanded = accountMenuOpen,
+                    state = state,
+                    photo = avatarPhoto,
+                    onDismiss = { accountMenuOpen = false },
+                    onSettings = {
+                        accountMenuOpen = false
+                        onSettings()
+                    },
+                    onLogout = {
+                        accountMenuOpen = false
+                        onLogout()
+                    },
+                )
+            }
         }
         MpDivider()
+    }
+}
+
+@Composable
+private fun TopBarBrand(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MpColors.PrimaryFixed),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.mypass_wallet),
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+        Text(
+            text = "My Pass",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.6).sp,
+            color = MpColors.Primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun AccountMenu(
+    expanded: Boolean,
+    state: UiState,
+    photo: Bitmap?,
+    onDismiss: () -> Unit,
+    onSettings: () -> Unit,
+    onLogout: () -> Unit,
+) {
+    val hasName = state.name.isNotBlank()
+    val fallbackTitle = stringResource(R.string.account_title)
+    val title = state.name.ifBlank { state.email }.ifBlank { fallbackTitle }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        offset = DpOffset(x = 0.dp, y = 6.dp),
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White,
+        tonalElevation = 0.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, MpColors.Border.copy(alpha = 0.9f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(min = 280.dp, max = 340.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            MpAvatar(
+                name = state.name.ifBlank { state.email }.ifBlank { "M" },
+                size = 56,
+                containerColor = MpColors.Primary,
+                contentColor = MpColors.OnPrimary,
+                textStyle = MaterialTheme.typography.headlineSmall,
+                photo = photo,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MpColors.OnSurface,
+                    maxLines = if (hasName) 1 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (hasName && state.email.isNotBlank()) {
+                    Text(
+                        text = state.email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MpColors.OnSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                MpBadge(
+                    text = stringResource(R.string.vault_open_badge),
+                    tone = MpBadgeTone.Primary,
+                    showDot = true,
+                )
+            }
+        }
+        MpDivider()
+        DropdownMenuItem(
+            modifier = Modifier.heightIn(min = 64.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            text = {
+                Text(
+                    text = stringResource(R.string.settings),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MpColors.OnSurface,
+                )
+            },
+            leadingIcon = {
+                MpIconTile(
+                    icon = Icons.Filled.Settings,
+                    size = 42,
+                    background = MpColors.PrimaryFixed,
+                    tint = MpColors.Primary,
+                )
+            },
+            trailingIcon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MpColors.OnSurfaceVariant,
+                )
+            },
+            onClick = onSettings,
+        )
+        MpDivider()
+        DropdownMenuItem(
+            modifier = Modifier.heightIn(min = 64.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            text = {
+                Text(
+                    text = stringResource(R.string.account_sign_out),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MpColors.Error,
+                )
+            },
+            leadingIcon = {
+                MpIconTile(
+                    icon = Icons.Filled.ExitToApp,
+                    size = 42,
+                    background = MpColors.ErrorContainer,
+                    tint = MpColors.OnErrorContainer,
+                )
+            },
+            trailingIcon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MpColors.Error,
+                )
+            },
+            onClick = onLogout,
+        )
     }
 }
 
@@ -2045,8 +2451,12 @@ private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
                 colors = bottomBarColors(),
             )
             NavigationBarItem(
-                selected = screen == Screen.Vault,
-                onClick = { if (screen != Screen.Vault) viewModel.backToVault() },
+                selected = screen == Screen.Vault || screen == Screen.Credentials || screen == Screen.Medical,
+                onClick = {
+                    if (screen != Screen.Vault && screen != Screen.Credentials && screen != Screen.Medical) {
+                        viewModel.backToVault()
+                    }
+                },
                 icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                 label = { Text(stringResource(R.string.vault)) },
                 colors = bottomBarColors(),
@@ -2144,7 +2554,7 @@ internal fun ShareDialog(
     val summaryPainter = painterResource(
         when (item.type) {
             "ticket" -> R.drawable.ic_ticket
-            "card" -> R.drawable.ic_card
+            "card", "medical_card" -> R.drawable.ic_card
             else -> R.drawable.ic_document
         },
     )

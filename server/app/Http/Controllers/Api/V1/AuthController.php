@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\TwoFactorChallenge;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -32,11 +33,12 @@ class AuthController extends Controller
             'is_admin' => User::query()->count() === 0,
         ]);
 
-        $token = $user->createToken($data['device_name'] ?? 'web')->plainTextToken;
+        event(new Registered($user));
 
         return response()->json([
             'user' => $this->userPayload($user),
-            'token' => $token,
+            'message' => __('Te enviamos un enlace de confirmación a :email.', ['email' => $user->email]),
+            'email_verified' => false,
         ], 201);
     }
 
@@ -54,6 +56,13 @@ class AuthController extends Controller
             return response()->json([
                 'message' => __('Las credenciales no son correctas.'),
             ], 422);
+        }
+
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => __('Confirma tu correo antes de entrar. Revisa el enlace que enviamos a :email.', ['email' => $user->email]),
+                'email_unverified' => true,
+            ], 403);
         }
 
         if ($twoFactorChallenge->requiresVerification($user)) {
@@ -90,10 +99,12 @@ class AuthController extends Controller
             'id' => $user->public_id,
             'name' => $user->name,
             'email' => $user->email,
+            'avatar_url' => $user->avatar_url,
             'locale' => $user->locale,
             'simple_mode' => $user->simple_mode,
             'has_two_factor' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at !== null,
             'has_email_two_factor' => $user->email_two_factor_enabled,
+            'email_verified' => $user->hasVerifiedEmail(),
         ];
     }
 }

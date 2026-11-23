@@ -1,0 +1,240 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mypass
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mypass
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mypass
+  template:
+    metadata:
+      labels:
+        app: mypass
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        fsGroup: 33
+      initContainers:
+        - name: preparar-volumenes
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              mkdir -p \
+                /var/www/html/storage/logs \
+                /var/www/html/storage/framework/cache/data \
+                /var/www/html/storage/framework/sessions \
+                /var/www/html/storage/framework/views \
+                /var/www/html/storage/app/private/vault \
+                /var/www/html/storage/app/public
+              chown -R www-data:www-data /var/www/html/storage
+              chmod -R ug+rwX /var/www/html/storage
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+        - name: esperar-mysql
+          image: {{ .Values.mysql.image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MYSQL_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: MYSQL_ROOT_PASSWORD
+          command:
+            - sh
+            - -c
+            - |
+              i=0
+              until mysqladmin ping -h mypass-mysql -uroot --silent 2>/dev/null; do
+                i=$((i + 1))
+                if [ "$i" -ge 90 ]; then
+                  echo "MySQL no respondió a tiempo." >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+        - name: migrar
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["php", "artisan", "migrate", "--force", "--no-interaction"]
+          env:
+            - name: APP_ENV
+              value: {{ .Values.app.env | quote }}
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: APP_KEY
+            - name: APP_URL
+              value: {{ .Values.app.url | quote }}
+            - name: DB_CONNECTION
+              value: mysql
+            - name: DB_HOST
+              value: mypass-mysql
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_DATABASE
+              value: {{ .Values.mysql.database | quote }}
+            - name: DB_USERNAME
+              value: {{ .Values.mysql.user | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: DB_PASSWORD
+            - name: DB_CHARSET
+              value: utf8mb4
+            - name: DB_COLLATION
+              value: utf8mb4_unicode_ci
+            - name: CACHE_STORE
+              value: array
+            - name: SESSION_DRIVER
+              value: array
+            - name: QUEUE_CONNECTION
+              value: sync
+            - name: LOG_CHANNEL
+              value: stderr
+            - name: LOG_LEVEL
+              value: {{ .Values.app.logLevel | quote }}
+          securityContext:
+            runAsUser: 33
+            runAsGroup: 33
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+      containers:
+        - name: mypass
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: APP_NAME
+              value: {{ .Values.app.name | quote }}
+            - name: APP_ENV
+              value: {{ .Values.app.env | quote }}
+            - name: APP_DEBUG
+              value: {{ .Values.app.debug | quote }}
+            - name: APP_URL
+              value: {{ .Values.app.url | quote }}
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: APP_KEY
+            - name: APP_LOCALE
+              value: {{ .Values.app.locale | quote }}
+            - name: APP_FALLBACK_LOCALE
+              value: {{ .Values.app.fallbackLocale | quote }}
+            - name: APP_MAINTENANCE_DRIVER
+              value: file
+            - name: BCRYPT_ROUNDS
+              value: "12"
+            - name: DB_CONNECTION
+              value: mysql
+            - name: DB_HOST
+              value: mypass-mysql
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_DATABASE
+              value: {{ .Values.mysql.database | quote }}
+            - name: DB_USERNAME
+              value: {{ .Values.mysql.user | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: DB_PASSWORD
+            - name: DB_CHARSET
+              value: utf8mb4
+            - name: DB_COLLATION
+              value: utf8mb4_unicode_ci
+            - name: SESSION_DRIVER
+              value: database
+            - name: SESSION_LIFETIME
+              value: "120"
+            - name: SESSION_ENCRYPT
+              value: "false"
+            - name: SESSION_SECURE_COOKIE
+              value: "true"
+            - name: SESSION_SAME_SITE
+              value: lax
+            - name: SESSION_PATH
+              value: /
+            - name: CACHE_STORE
+              value: database
+            - name: QUEUE_CONNECTION
+              value: database
+            - name: FILESYSTEM_DISK
+              value: local
+            - name: BROADCAST_CONNECTION
+              value: log
+            - name: LOG_CHANNEL
+              value: {{ .Values.app.logChannel | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.app.logLevel | quote }}
+            - name: LOG_DAILY_DAYS
+              value: {{ .Values.app.logDailyDays | quote }}
+            - name: MAIL_MAILER
+              value: {{ ternary "smtp" "log" .Values.mail.enabled | quote }}
+            {{- if .Values.mail.enabled }}
+            - name: MAIL_HOST
+              value: {{ .Values.mail.host | quote }}
+            - name: MAIL_PORT
+              value: {{ .Values.mail.port | quote }}
+            - name: MAIL_USERNAME
+              value: {{ .Values.mail.username | quote }}
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: MAIL_PASSWORD
+            - name: MAIL_SCHEME
+              value: {{ .Values.mail.scheme | quote }}
+            {{- end }}
+            - name: MAIL_FROM_ADDRESS
+              value: {{ .Values.mail.fromAddress | quote }}
+            - name: MAIL_FROM_NAME
+              value: {{ .Values.mail.fromName | quote }}
+            - name: MAIL_TIMEOUT
+              value: {{ .Values.mail.timeout | quote }}
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            {{- toYaml .Values.resources.app | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /up
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: mypass-storage

@@ -1,0 +1,85 @@
+# ===========================================================================
+# values.yaml — valores por defecto del chart mypass
+#
+# Los secretos reales van en values.local.yaml (NO versionado):
+#
+#   helm upgrade --install mypass ./helm/mypass \
+#     -n mypass --create-namespace \
+#     -f helm/mypass/values.yaml \
+#     -f helm/mypass/values.local.yaml
+#
+# El script deploy.sh automatiza build, push, migraciones y despliegue.
+# ===========================================================================
+
+replicaCount: 1
+
+image:
+  repository: gmr27/mypass
+  tag: "1"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+app:
+  name: "My Pass"
+  env: production
+  debug: "false"
+  url: https://mypass.iguzman.com.mx
+  host: mypass.iguzman.com.mx
+  locale: es-MX
+  fallbackLocale: en
+  logChannel: daily
+  logLevel: warning
+  logDailyDays: "14"
+
+mysql:
+  image: mysql:8.0
+  database: mypass
+  user: mypass
+  storage: 5Gi
+  storageClassName: microk8s-hostpath
+
+persistence:
+  storage:
+    size: 5Gi
+    storageClassName: microk8s-hostpath
+
+# Correo SMTP (IONOS). La contraseña va en values.local.yaml como mail.password.
+mail:
+  enabled: true
+  host: smtp.ionos.com
+  port: 587
+  scheme: smtp
+  username: donotreply@iguzman.com.mx
+  fromAddress: donotreply@iguzman.com.mx
+  fromName: "My Pass"
+  timeout: 30
+
+# Credenciales — SOBRESCRIBIR en values.local.yaml
+secrets:
+  dbPassword: CAMBIAR-EN-VALUES-LOCAL
+  mysqlRootPassword: CAMBIAR-EN-VALUES-LOCAL
+  appKey: CAMBIAR-EN-VALUES-LOCAL
+
+resources:
+  app:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  mysql:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  className: public
+  clusterIssuer: letsencrypt-prod
+  tlsSecret: mypass-cert
+  proxyBodySize: 128m
+  proxyTimeout: "300"

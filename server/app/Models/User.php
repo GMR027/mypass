@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -14,9 +16,9 @@ use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'locale', 'simple_mode', 'is_admin', 'settings', 'email_two_factor_enabled'])]
-#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
-class User extends Authenticatable
+#[Fillable(['name', 'email', 'password', 'locale', 'simple_mode', 'is_admin', 'settings', 'email_two_factor_enabled', 'avatar_path'])]
+#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'avatar_path'])]
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
@@ -42,6 +44,19 @@ class User extends Authenticatable
             'settings' => 'array',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    protected function avatarUrl(): Attribute
+    {
+        return Attribute::get(function (): ?string {
+            if (blank($this->avatar_path)) {
+                return null;
+            }
+
+            $token = substr(md5((string) $this->avatar_path), 0, 12);
+
+            return route('api.avatars.show', ['user' => $this->public_id]).'?v='.$token;
+        });
     }
 
     public function devices(): HasMany

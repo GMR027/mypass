@@ -31,7 +31,7 @@ class VaultItemController extends Controller
     {
         $data = $request->validate([
             'id' => ['sometimes', 'uuid'],
-            'type' => ['required', Rule::in(['ticket', 'document', 'card', 'other'])],
+            'type' => ['required', Rule::in(VaultItem::TYPES)],
             'encrypted_metadata' => ['required', 'string'],
             'blob_id' => ['nullable', 'uuid'],
             'expires_at' => ['nullable', 'date'],
@@ -64,7 +64,7 @@ class VaultItemController extends Controller
         $item = $request->user()->items()->findOrFail($item);
 
         $data = $request->validate([
-            'type' => ['sometimes', Rule::in(['ticket', 'document', 'card', 'other'])],
+            'type' => ['sometimes', Rule::in(VaultItem::TYPES)],
             'encrypted_metadata' => ['sometimes', 'string'],
             'blob_id' => ['sometimes', 'nullable', 'uuid'],
             'expires_at' => ['sometimes', 'nullable', 'date'],

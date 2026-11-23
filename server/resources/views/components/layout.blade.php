@@ -93,9 +93,13 @@
                     </a>
 
                     <a href="{{ route('settings.profile') }}"
-                       class="ml-0.5 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-base font-bold uppercase text-on-primary ring-4 ring-primary-fixed/60 transition-transform hover:scale-105"
+                       class="ml-0.5 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-primary text-base font-bold uppercase text-on-primary ring-4 ring-primary-fixed/60 transition-transform hover:scale-105"
                        aria-label="{{ __('Abrir mi perfil') }}">
-                        {{ mb_substr($user->name ?: $user->email, 0, 1) }}
+                        @if ($user->avatar_url)
+                            <img src="{{ $user->avatar_url }}" alt="" class="h-full w-full object-cover">
+                        @else
+                            {{ mb_substr($user->name ?: $user->email, 0, 1) }}
+                        @endif
                     </a>
                 </div>
             @else

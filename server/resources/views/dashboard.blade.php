@@ -6,10 +6,21 @@
         $greeting = $hour < 12 ? __('Buenos días') : ($hour < 19 ? __('Buenas tardes') : __('Buenas noches'));
     @endphp
 
+    @if (request()->boolean('verified'))
+        <div class="mp-alert mp-alert-success mb-5" role="status">
+            <x-icon name="mark_email_read" class="mt-0.5 text-[22px]" />
+            <p class="font-semibold">{{ __('Correo confirmado. Ya puedes usar tu bóveda.') }}</p>
+        </div>
+    @endif
+
     <div class="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div class="flex items-center gap-4">
-            <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-xl font-bold uppercase text-on-primary ring-4 ring-primary-fixed/60" aria-hidden="true">
-                {{ mb_substr($user->name ?: $user->email, 0, 1) }}
+            <span class="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-primary text-xl font-bold uppercase text-on-primary ring-4 ring-primary-fixed/60" aria-hidden="true">
+                @if ($user->avatar_url)
+                    <img src="{{ $user->avatar_url }}" alt="" class="h-full w-full object-cover">
+                @else
+                    {{ mb_substr($user->name ?: $user->email, 0, 1) }}
+                @endif
             </span>
             <div>
                 <p class="mp-eyebrow">{{ __('Mi bóveda') }}</p>
@@ -105,7 +116,7 @@
         </div>
     @endif
 
-    <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <a href="{{ route('vault', ['tab' => 'pases']) }}" class="mp-stat-card group transition-all hover:-translate-y-0.5 hover:shadow-lift">
             <div class="flex items-center justify-between">
                 <span class="mp-quick-tile__icon"><x-icon name="wallet" class="text-[21px]" /></span>
@@ -113,6 +124,22 @@
             </div>
             <p class="mt-3 text-[26px] font-bold leading-none tracking-tight text-on-surface">{{ $passCount }}</p>
             <p class="mt-1 text-[13px] font-semibold text-on-surface-variant">{{ __('Pases y boletos') }}</p>
+        </a>
+        <a href="{{ route('vault', ['tab' => 'credentials']) }}" class="mp-stat-card group transition-all hover:-translate-y-0.5 hover:shadow-lift">
+            <div class="flex items-center justify-between">
+                <span class="mp-quick-tile__icon"><x-icon name="key" class="text-[21px]" /></span>
+                <x-icon name="arrow_forward" class="text-[18px] text-outline transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p class="mt-3 text-[26px] font-bold leading-none tracking-tight text-on-surface">{{ $credentialCount }}</p>
+            <p class="mt-1 text-[13px] font-semibold text-on-surface-variant">{{ __('Credenciales de cuentas') }}</p>
+        </a>
+        <a href="{{ route('vault', ['tab' => 'medical']) }}" class="mp-stat-card group transition-all hover:-translate-y-0.5 hover:shadow-lift">
+            <div class="flex items-center justify-between">
+                <span class="mp-quick-tile__icon"><x-icon name="medical_services" class="text-[21px]" /></span>
+                <x-icon name="arrow_forward" class="text-[18px] text-outline transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p class="mt-3 text-[26px] font-bold leading-none tracking-tight text-on-surface">{{ $medicalCount }}</p>
+            <p class="mt-1 text-[13px] font-semibold text-on-surface-variant">{{ __('Carnets médicos') }}</p>
         </a>
         <a href="{{ route('vault', ['tab' => 'docs']) }}" class="mp-stat-card group transition-all hover:-translate-y-0.5 hover:shadow-lift">
             <div class="flex items-center justify-between">
@@ -137,6 +164,20 @@
             </div>
             <p class="mt-3 text-[26px] font-bold leading-none tracking-tight text-on-surface">{{ $deviceCount }}</p>
             <p class="mt-1 text-[13px] font-semibold text-on-surface-variant">{{ __('Dispositivos conectados') }}</p>
+        </a>
+    </div>
+
+    <div class="mt-5 flex flex-col items-start justify-between gap-3 rounded-2xl border border-primary/15 bg-primary-fixed/40 p-4 sm:flex-row sm:items-center">
+        <div class="flex items-center gap-3">
+            <span class="mp-icon-tile"><x-icon name="android" /></span>
+            <div>
+                <p class="font-semibold text-primary">{{ __('Lleva My Pass en tu Android') }}</p>
+                <p class="mp-body-sm mt-1">{{ __('Descarga la APK y vincula este dispositivo con un código de un solo uso.') }}</p>
+            </div>
+        </div>
+        <a href="{{ route('app.download', ['v' => '3']) }}" class="mp-btn mp-btn-secondary shrink-0" download>
+            <x-icon name="download" class="text-[19px]" />
+            {{ __('Descargar APK') }}
         </a>
     </div>
 

@@ -13,6 +13,37 @@ class VaultItem extends Model
 {
     use HasFactory, HasVersion4Uuids, SoftDeletes;
 
+    public const TYPE_DOCUMENT = 'document';
+
+    public const TYPE_TICKET = 'ticket';
+
+    public const TYPE_CARD = 'card';
+
+    public const TYPE_CREDENTIAL = 'credential';
+
+    public const TYPE_MEDICAL_CARD = 'medical_card';
+
+    public const TYPE_OTHER = 'other';
+
+    public const TYPES = [
+        self::TYPE_DOCUMENT,
+        self::TYPE_TICKET,
+        self::TYPE_CARD,
+        self::TYPE_CREDENTIAL,
+        self::TYPE_MEDICAL_CARD,
+        self::TYPE_OTHER,
+    ];
+
+    public const PASS_TYPES = [
+        self::TYPE_TICKET,
+        self::TYPE_CARD,
+    ];
+
+    public const DOCUMENT_TYPES = [
+        self::TYPE_DOCUMENT,
+        self::TYPE_OTHER,
+    ];
+
     protected $table = 'items';
 
     protected $fillable = [

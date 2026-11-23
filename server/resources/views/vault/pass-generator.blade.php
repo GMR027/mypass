@@ -136,12 +136,15 @@
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary">03</span>
                         <div>
                             <h3 class="mp-title-sm">{{ __('Personalización visual') }}</h3>
-                            <p class="text-sm text-on-surface-variant">{{ __('Color, logo y formato del código.') }}</p>
+                            <p class="text-sm text-on-surface-variant">{{ __('Color, textura, imagen, logo y formato del código.') }}</p>
                         </div>
                     </div>
 
                     <div class="mt-4">
-                        <p class="mp-label">{{ __('Color de la tarjeta') }}</p>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="mp-label">{{ __('Color de la tarjeta') }}</p>
+                            <span id="generator-color-value" class="font-mono text-[13px] font-semibold text-on-surface-variant">#0c2340</span>
+                        </div>
                         <div id="generator-themes" class="flex flex-wrap items-center gap-2">
                             @foreach ([
                                 'midnight' => '#0c2340',
@@ -162,6 +165,95 @@
                                 <input id="generator-color" type="color" value="#0c2340"
                                        class="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0">
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 border-t border-outline-variant/50 pt-5">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                                <p class="mp-label">{{ __('Textura de la tarjeta') }}</p>
+                                <p class="text-sm text-on-surface-variant">{{ __('Añade un patrón al color. Puedes combinarlo con una imagen.') }}</p>
+                            </div>
+                            <button id="generator-appearance-reset" type="button" class="mp-btn mp-btn-quiet mp-btn-sm shrink-0">
+                                <x-icon name="restart_alt" class="text-[18px]" />
+                                {{ __('Restablecer fondo') }}
+                            </button>
+                        </div>
+                        <div id="generator-textures" class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4"></div>
+                        <div id="generator-texture-controls" class="mt-3 grid gap-3 rounded-xl bg-surface-container/60 p-3 sm:grid-cols-2" hidden>
+                            <div>
+                                <label for="generator-texture-size" class="mp-label">{{ __('Tamaño de la textura') }}</label>
+                                <select id="generator-texture-size" class="mp-select">
+                                    <option value="sm">{{ __('Pequeña') }}</option>
+                                    <option value="md">{{ __('Mediana') }}</option>
+                                    <option value="lg">{{ __('Grande') }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="generator-texture-repeat" class="mp-label">{{ __('Repetición') }}</label>
+                                <select id="generator-texture-repeat" class="mp-select">
+                                    <option value="repeat">{{ __('Repetir') }}</option>
+                                    <option value="repeat-x">{{ __('Horizontal') }}</option>
+                                    <option value="repeat-y">{{ __('Vertical') }}</option>
+                                    <option value="no-repeat">{{ __('Sin repetir') }}</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="generator-texture-opacity" class="mp-label">{{ __('Opacidad de la textura') }}</label>
+                                <div class="flex items-center gap-3">
+                                    <input id="generator-texture-opacity" type="range" min="0" max="100" step="5" value="100" class="h-2 flex-1 cursor-pointer accent-primary">
+                                    <output id="generator-texture-opacity-value" class="min-w-10 text-right text-sm font-semibold tabular-nums text-on-surface-variant" for="generator-texture-opacity">100%</output>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 rounded-2xl border border-outline-variant/50 bg-surface-container-low p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="mp-label">{{ __('Imagen de fondo') }}</p>
+                                <p class="text-sm text-on-surface-variant">{{ __('La imagen se muestra sobre la textura y se guarda cifrada dentro del pase.') }}</p>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-2">
+                                <label class="mp-btn mp-btn-quiet mp-btn-sm cursor-pointer">
+                                    <x-icon name="add_photo_alternate" class="text-[19px]" />
+                                    {{ __('Elegir imagen') }}
+                                    <input id="generator-background-image" type="file" accept="image/*" class="sr-only">
+                                </label>
+                                <button id="generator-background-clear" type="button" class="mp-btn mp-btn-quiet mp-btn-sm" hidden aria-label="{{ __('Quitar imagen de fondo') }}">
+                                    <x-icon name="delete" class="text-[19px]" />
+                                </button>
+                                <img id="generator-background-preview" alt="" class="h-14 w-14 rounded-xl border border-black/10 object-cover" width="64" height="64" hidden>
+                            </div>
+                        </div>
+                        <div id="generator-background-controls" class="mt-3 grid gap-3 sm:grid-cols-2" hidden>
+                            <div>
+                                <label for="generator-background-size" class="mp-label">{{ __('Tamaño de la imagen') }}</label>
+                                <select id="generator-background-size" class="mp-select">
+                                    <option value="cover">{{ __('Cubrir') }}</option>
+                                    <option value="contain">{{ __('Contener') }}</option>
+                                    <option value="50%">50%</option>
+                                    <option value="100%">100%</option>
+                                    <option value="200%">200%</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="generator-background-repeat" class="mp-label">{{ __('Repetición') }}</label>
+                                <select id="generator-background-repeat" class="mp-select">
+                                    <option value="no-repeat">{{ __('Sin repetir') }}</option>
+                                    <option value="repeat">{{ __('Repetir') }}</option>
+                                    <option value="repeat-x">{{ __('Horizontal') }}</option>
+                                    <option value="repeat-y">{{ __('Vertical') }}</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="generator-background-shade" class="mp-label">{{ __('Oscurecer imagen') }}</label>
+                                <div class="flex items-center gap-3">
+                                    <input id="generator-background-shade" type="range" min="0" max="70" step="5" value="30" class="h-2 flex-1 cursor-pointer accent-primary">
+                                    <output id="generator-background-shade-value" class="min-w-10 text-right text-sm font-semibold tabular-nums text-on-surface-variant" for="generator-background-shade">30%</output>
+                                </div>
+                                <p class="mt-1 text-[13px] leading-snug text-on-surface-variant">{{ __('Mejora el contraste del texto sobre la imagen.') }}</p>
+                            </div>
                         </div>
                     </div>
 

@@ -21,6 +21,11 @@ server/storage/*.key
 server/.env
 server/.env.testing
 
+# Despliegue
+.deploy-tag
+helm/mypass/values.local.yaml
+mypass-*.sql
+
 # Editores
 .idea/
 .vscode/

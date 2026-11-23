@@ -1,10 +1,13 @@
 package app.mypass
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,12 +31,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,10 +55,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.io.ByteArrayOutputStream
 import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 private data class PassFieldDefinition(
     val key: String,
@@ -69,6 +79,9 @@ private val themeColors = listOf(
     "amber" to "#9a3412",
 )
 
+private const val MAX_BACKGROUND_FILE_BYTES = 15 * 1024 * 1024
+private const val MAX_BACKGROUND_EDGE_PX = 1600
+
 @Composable
 fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
     val source = state.passDraft ?: return
@@ -83,6 +96,8 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
     var codeFormat by remember(source) { mutableStateOf(source.codeFormat) }
     var themeColor by remember(source) { mutableStateOf(source.themeColor) }
     var logo by remember(source) { mutableStateOf(source.logo) }
+    var appearance by remember(source) { mutableStateOf(source.appearance) }
+    var backgroundError by remember(source) { mutableStateOf<Int?>(null) }
     var options by remember(source) { mutableStateOf(source.options) }
     var attachSource by remember(source) { mutableStateOf(source.attachSource) }
     val context = LocalContext.current
@@ -119,6 +134,20 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
         }
     }
 
+    val backgroundPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            val dataUrl = encodeBackgroundImage(context, uri)
+            if (dataUrl == null) {
+                backgroundError = R.string.pass_background_invalid
+            } else {
+                appearance = appearance.copy(image = dataUrl)
+                backgroundError = null
+            }
+        }
+    }
+
     val draft = source.copy(
         category = category,
         title = title,
@@ -130,6 +159,7 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
         codeFormat = codeFormat,
         themeColor = themeColor,
         logo = logo,
+        appearance = appearance,
         options = options,
         attachSource = attachSource,
     )
@@ -403,6 +433,263 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
 
             item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.pass_background),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.pass_background_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+
+                        Text(
+                            text = stringResource(R.string.pass_texture),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        val previewColor = runCatching {
+                            Color(android.graphics.Color.parseColor(themeColor))
+                        }.getOrDefault(MpColors.Primary)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            TextureSwatch(
+                                texture = null,
+                                baseColor = previewColor,
+                                selected = appearance.texture == PASS_TEXTURE_NONE,
+                                onClick = { appearance = appearance.copy(texture = PASS_TEXTURE_NONE) },
+                            )
+                            PASS_TEXTURE_SPECS.forEach { spec ->
+                                TextureSwatch(
+                                    texture = spec,
+                                    baseColor = previewColor,
+                                    selected = appearance.texture == spec.id,
+                                    onClick = { appearance = appearance.copy(texture = spec.id) },
+                                )
+                            }
+                        }
+
+                        if (appearance.texture != PASS_TEXTURE_NONE) {
+                            Text(
+                                text = stringResource(R.string.pass_texture_size),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                listOf(
+                                    "sm" to R.string.pass_texture_size_small,
+                                    "md" to R.string.pass_texture_size_medium,
+                                    "lg" to R.string.pass_texture_size_large,
+                                ).forEach { (value, label) ->
+                                    MpFilterChip(
+                                        text = stringResource(label),
+                                        selected = appearance.textureSize == value,
+                                        onClick = { appearance = appearance.copy(textureSize = value) },
+                                    )
+                                }
+                            }
+                            Text(
+                                text = stringResource(R.string.pass_repeat),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                repeatOptions().forEach { (value, label) ->
+                                    MpFilterChip(
+                                        text = stringResource(label),
+                                        selected = appearance.textureRepeat == value,
+                                        onClick = { appearance = appearance.copy(textureRepeat = value) },
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "${stringResource(R.string.pass_texture_opacity)} · ${appearance.textureOpacity}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            Slider(
+                                value = appearance.textureOpacity.toFloat(),
+                                onValueChange = {
+                                    appearance = appearance.copy(textureOpacity = it.roundToInt())
+                                },
+                                valueRange = 0f..100f,
+                                steps = 19,
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MpColors.OutlineVariant.copy(alpha = 0.6f)),
+                        )
+
+                        Text(
+                            text = stringResource(R.string.pass_background_image),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.pass_background_image_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        val backgroundBitmap = remember(appearance.image) {
+                            appearance.image?.let(::decodeDataUrl)
+                        }
+                        val backgroundImage = remember(backgroundBitmap) {
+                            backgroundBitmap?.asImageBitmap()
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (backgroundImage != null) {
+                                Image(
+                                    bitmap = backgroundImage,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MpColors.SurfaceLow),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MpColors.SurfaceLow),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = null,
+                                        tint = MpColors.Primary,
+                                    )
+                                }
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                MpButton(
+                                    text = stringResource(R.string.pass_choose_image),
+                                    onClick = { backgroundPicker.launch("image/*") },
+                                    variant = MpButtonVariant.Secondary,
+                                    fillWidth = true,
+                                )
+                                if (backgroundImage != null) {
+                                    MpButton(
+                                        text = stringResource(R.string.pass_remove_image),
+                                        onClick = {
+                                            appearance = appearance.copy(image = null)
+                                            backgroundError = null
+                                        },
+                                        variant = MpButtonVariant.Quiet,
+                                        fillWidth = true,
+                                    )
+                                }
+                            }
+                        }
+
+                        if (backgroundImage != null) {
+                            Text(
+                                text = stringResource(R.string.pass_image_size),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                listOf(
+                                    "cover" to R.string.pass_image_size_cover,
+                                    "contain" to R.string.pass_image_size_contain,
+                                    "50%" to R.string.pass_image_size_half,
+                                    "100%" to R.string.pass_image_size_full,
+                                    "200%" to R.string.pass_image_size_double,
+                                ).forEach { (value, label) ->
+                                    MpFilterChip(
+                                        text = stringResource(label),
+                                        selected = appearance.imageSize == value,
+                                        onClick = { appearance = appearance.copy(imageSize = value) },
+                                    )
+                                }
+                            }
+                            Text(
+                                text = stringResource(R.string.pass_repeat),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                repeatOptions().forEach { (value, label) ->
+                                    MpFilterChip(
+                                        text = stringResource(label),
+                                        selected = appearance.imageRepeat == value,
+                                        onClick = { appearance = appearance.copy(imageRepeat = value) },
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "${stringResource(R.string.pass_darken_image)} · ${appearance.imageShade}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            Slider(
+                                value = appearance.imageShade.toFloat(),
+                                onValueChange = {
+                                    appearance = appearance.copy(imageShade = it.roundToInt())
+                                },
+                                valueRange = 0f..PASS_IMAGE_SHADE_MAX.toFloat(),
+                                steps = 13,
+                            )
+                        }
+
+                        backgroundError?.let { messageRes ->
+                            Text(
+                                text = stringResource(messageRes),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.Error,
+                            )
+                        }
+
+                        MpButton(
+                            text = stringResource(R.string.pass_background_reset),
+                            onClick = {
+                                appearance = PassAppearance()
+                                backgroundError = null
+                            },
+                            variant = MpButtonVariant.Quiet,
+                            fillWidth = true,
+                        )
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
                             text = stringResource(R.string.pass_options),
@@ -611,4 +898,147 @@ private fun defaultTheme(category: String): String = when (category) {
     "id" -> "#18181b"
     "membership" -> "#9a3412"
     else -> "#0c2340"
+}
+
+@Composable
+private fun TextureSwatch(
+    texture: PassTextureSpec?,
+    baseColor: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.width(70.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(58.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(baseColor)
+                .border(
+                    width = if (selected) 3.dp else 1.dp,
+                    color = if (selected) MpColors.Primary else MpColors.OutlineVariant,
+                    shape = RoundedCornerShape(16.dp),
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (texture != null) {
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawPassTexture(
+                        PassAppearance(
+                            texture = texture.id,
+                            textureSize = "sm",
+                            textureRepeat = "repeat",
+                        ),
+                    )
+                }
+            } else {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.55f),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(3.dp)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(MpColors.Primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
+            }
+        }
+        Text(
+            text = if (texture != null) {
+                stringResource(texture.labelRes)
+            } else {
+                stringResource(R.string.pass_texture_none)
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) MpColors.Primary else MpColors.OnSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+private fun repeatOptions(): List<Pair<String, Int>> {
+    return listOf(
+        "repeat" to R.string.pass_repeat_all,
+        "repeat-x" to R.string.pass_repeat_horizontal,
+        "repeat-y" to R.string.pass_repeat_vertical,
+        "no-repeat" to R.string.pass_repeat_none,
+    )
+}
+
+private fun encodeBackgroundImage(context: Context, uri: Uri): String? {
+    val bytes = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    }.getOrNull() ?: return null
+
+    if (bytes.size > MAX_BACKGROUND_FILE_BYTES) {
+        return null
+    }
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        return null
+    }
+
+    var sampleSize = 1
+    while (max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= MAX_BACKGROUND_EDGE_PX) {
+        sampleSize *= 2
+    }
+
+    val decoded = BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize },
+    ) ?: return null
+
+    try {
+        for ((maxEdge, quality) in listOf(1600 to 82, 1000 to 74)) {
+            val scale = min(1f, maxEdge.toFloat() / max(decoded.width, decoded.height))
+            val width = max(1, (decoded.width * scale).toInt())
+            val height = max(1, (decoded.height * scale).toInt())
+            val scaled = if (scale < 1f) {
+                Bitmap.createScaledBitmap(decoded, width, height, true)
+            } else {
+                decoded
+            }
+            val output = ByteArrayOutputStream()
+            val compressed = scaled.compress(Bitmap.CompressFormat.WEBP_LOSSY, quality, output)
+            if (scaled !== decoded) {
+                scaled.recycle()
+            }
+            if (!compressed) {
+                continue
+            }
+            val dataUrl = "data:image/webp;base64," +
+                Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            if (dataUrl.length <= MAX_BACKGROUND_DATA_URL) {
+                return dataUrl
+            }
+        }
+        return null
+    } finally {
+        decoded.recycle()
+    }
 }

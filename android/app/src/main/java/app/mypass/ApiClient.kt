@@ -23,6 +23,78 @@ object ApiClient {
         return JSONObject(response)
     }
 
+    fun me(token: String): JSONObject {
+        val response = request("GET", "/me", token, null, null)
+        return JSONObject(response).getJSONObject("user")
+    }
+
+    fun uploadAvatar(token: String, bytes: ByteArray): JSONObject {
+        val boundary = "mypass-${UUID.randomUUID()}"
+        val output = ByteArrayOutputStream()
+
+        fun write(value: String) = output.write(value.toByteArray(Charsets.UTF_8))
+
+        write("--$boundary\r\n")
+        write("Content-Disposition: form-data; name=\"avatar\"; filename=\"avatar.webp\"\r\n")
+        write("Content-Type: image/webp\r\n\r\n")
+        output.write(bytes)
+        write("\r\n--$boundary--\r\n")
+
+        val response = request(
+            "POST",
+            "/me/avatar",
+            token,
+            output.toByteArray(),
+            "multipart/form-data; boundary=$boundary",
+        )
+        return JSONObject(response)
+    }
+
+    fun deleteAvatar(token: String) {
+        request("DELETE", "/me/avatar", token, null, null)
+    }
+
+    fun downloadUrl(url: String, maxBytes: Int = 5 * 1024 * 1024): ByteArray {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 60_000
+        connection.setRequestProperty("Accept", "image/*")
+
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                throw ApiException(status, "No se pudo descargar la foto de perfil.")
+            }
+
+            if (connection.contentLengthLong > maxBytes) {
+                throw ApiException(413, "La foto de perfil es demasiado grande.")
+            }
+
+            return connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8 * 1024)
+                var total = 0
+
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) {
+                        break
+                    }
+                    total += read
+                    if (total > maxBytes) {
+                        throw ApiException(413, "La foto de perfil es demasiado grande.")
+                    }
+                    output.write(buffer, 0, read)
+                }
+
+                output.toByteArray()
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun verifyTwoFactor(challengeToken: String, code: String, method: String): JSONObject {
         val body = JSONObject()
             .put("challenge_token", challengeToken)
@@ -226,11 +298,16 @@ object ApiClient {
         encryptedMetadata: String,
         expiresAt: String?,
         version: Int,
+        blobId: String? = null,
+        updateBlob: Boolean = false,
     ) {
         val body = JSONObject()
             .put("encrypted_metadata", encryptedMetadata)
             .put("expires_at", expiresAt ?: JSONObject.NULL)
             .put("version", version)
+        if (updateBlob) {
+            body.put("blob_id", blobId ?: JSONObject.NULL)
+        }
         request("PUT", "/items/$id", token, body.toString().toByteArray(), "application/json")
     }
 

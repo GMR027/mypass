@@ -226,6 +226,14 @@
                     <x-icon name="wallet" class="text-[22px]" />
                     {{ __('Pases') }}
                 </button>
+                <button id="tab-btn-credentials" type="button" role="tab" aria-selected="false" aria-controls="panel-credentials" data-tab="credentials" class="mp-tab">
+                    <x-icon name="key" class="text-[22px]" />
+                    {{ __('Credenciales') }}
+                </button>
+                <button id="tab-btn-medical" type="button" role="tab" aria-selected="false" aria-controls="panel-medical" data-tab="medical" class="mp-tab">
+                    <x-icon name="medical_services" class="text-[22px]" />
+                    {{ __('Salud') }}
+                </button>
                 <button id="tab-btn-family" type="button" role="tab" aria-selected="false" aria-controls="panel-family" data-tab="family" class="mp-tab">
                     <x-icon name="groups" class="text-[22px]" />
                     {{ __('Familia') }}
@@ -296,6 +304,8 @@
 
                 @include('vault.passes-panel')
                 @include('vault.pass-generator')
+                @include('vault.credentials-panel')
+                @include('vault.medical-panel')
 
                 <section id="panel-family" role="tabpanel" aria-labelledby="tab-btn-family" hidden>
                     <div class="space-y-5">
@@ -413,6 +423,13 @@
                                 <x-icon name="qr_code_2" class="text-[21px]" />
                                 {{ __('Generar código') }}
                             </button>
+
+                            <p class="mp-hint mt-3">
+                                {{ __('¿Aún no tienes la app?') }}
+                                <a href="{{ route('app.download', ['v' => '3']) }}" class="font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary" download>
+                                    {{ __('Descargar APK para Android') }}
+                                </a>
+                            </p>
 
                             <div id="pairing-code-box" class="mt-5 rounded-2xl border border-outline-variant/60 bg-surface-container-low p-5" hidden>
                                 <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
