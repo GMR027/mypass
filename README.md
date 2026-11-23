@@ -82,13 +82,18 @@ cd server
 cp .env.example .env
 composer install
 php artisan key:generate
+# Crea la base `mypass` y su usuario en MySQL, o ajusta DB_* en .env.
 php artisan migrate
+npm install
+npm run build
 PORT=38021 ./serve-local.sh
 ```
 
 `serve-local.sh` usa el servidor integrado de PHP con un límite de subida de 128 MB.
 Para desarrollo normal también sirve `php artisan serve`, pero PHP limita las subidas a 2 MB
 si no se configura `upload_max_filesize` y `post_max_size`.
+
+En el clúster no uses `serve-local.sh`: publica `server/public` detrás de Nginx o Apache con HTTPS y ejecuta `php artisan optimize` tras el despliegue.
 
 Las credenciales locales están en `server/.env` y no se versionan.
 
