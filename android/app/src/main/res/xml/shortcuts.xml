@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:icon="@drawable/ic_notification"
+        android:shortcutShortLabel="@string/shortcut_search_short"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="app.mypass.action.SEARCH"
+            android:targetPackage="app.mypass"
+            android:targetClass="app.mypass.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="scan"
+        android:enabled="true"
+        android:icon="@drawable/ic_document"
+        android:shortcutShortLabel="@string/shortcut_scan_short"
+        android:shortcutLongLabel="@string/shortcut_scan_long">
+        <intent
+            android:action="app.mypass.action.SCAN"
+            android:targetPackage="app.mypass"
+            android:targetClass="app.mypass.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="new_pass"
+        android:enabled="true"
+        android:icon="@drawable/ic_ticket"
+        android:shortcutShortLabel="@string/shortcut_new_pass_short"
+        android:shortcutLongLabel="@string/shortcut_new_pass_long">
+        <intent
+            android:action="app.mypass.action.NEW_PASS"
+            android:targetPackage="app.mypass"
+            android:targetClass="app.mypass.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="credentials"
+        android:enabled="true"
+        android:icon="@drawable/ic_card"
+        android:shortcutShortLabel="@string/shortcut_credentials_short"
+        android:shortcutLongLabel="@string/shortcut_credentials_long">
+        <intent
+            android:action="app.mypass.action.CREDENTIALS"
+            android:targetPackage="app.mypass"
+            android:targetClass="app.mypass.MainActivity" />
+    </shortcut>
+</shortcuts>

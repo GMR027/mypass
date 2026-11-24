@@ -274,12 +274,21 @@ object PassParser {
         labeledValue(lines, listOf("VENUE", "RECINTO", "LOCATION", "UBICACION", "LUGAR"))?.let {
             fields["location"] = it
         }
+        labeledValue(lines, listOf("ADDRESS", "DIRECCION", "CALLE", "STREET"))?.let {
+            fields["address"] = it
+        }
+        findCoordinates(text)?.let { fields["coordinates"] = it }
         labeledValue(lines, listOf("GATE", "PUERTA", "ACCESS", "ACCESO"))?.let { fields["gate"] = it }
         labeledValue(lines, listOf("SECTION", "SECCION"))?.let { fields["section"] = it }
         labeledValue(lines, listOf("ROW", "FILA"))?.let { fields["row"] = it }
         labeledValue(lines, listOf("SEAT", "ASIENTO", "PLAZA"))?.let { fields["seat"] = it }
         labeledValue(lines, listOf("PLATFORM", "ANDEN", "VIA"))?.let { fields["platform"] = it }
-        labeledValue(lines, listOf("TERMINAL", "TERM", "STATION", "ESTACION"))?.let { fields["terminal"] = it }
+        labeledValue(lines, listOf("TERMINAL", "TERM", "STATION", "ESTACION"))?.let {
+            fields["terminal"] = it
+            if (category == "transit") {
+                fields["location"] = it
+            }
+        }
         labeledValue(lines, listOf("CARRIAGE", "COCHE", "VAGON"))?.let { fields["carriage"] = it }
         labeledValue(lines, listOf("ROUTE", "RUTA", "LINEA", "LINE"))?.let { fields["route"] = it }
         labeledValue(lines, listOf("BOARDING", "EMBARQUE", "ABORDAJE", "INICIO DE ABORDAJE"))
@@ -370,6 +379,19 @@ object PassParser {
     fun parseTime(value: String): String? {
         val match = Regex("\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b").find(value) ?: return null
         return "${match.groupValues[1].padStart(2, '0')}:${match.groupValues[2]}"
+    }
+
+    private fun findCoordinates(text: String): String? {
+        val match = Regex("[?&]q=(-?\\d{1,3}(?:\\.\\d+)?),(-?\\d{1,3}(?:\\.\\d+)?)").find(text)
+            ?: Regex("@(-?\\d{1,3}(?:\\.\\d+)?),(-?\\d{1,3}(?:\\.\\d+)?)").find(text)
+            ?: Regex("\\b(-?\\d{1,3}\\.\\d{3,})\\s*[,;]\\s*(-?\\d{1,3}\\.\\d{3,})\\b").find(text)
+            ?: return null
+        val lat = match.groupValues[1].toDoubleOrNull() ?: return null
+        val lng = match.groupValues[2].toDoubleOrNull() ?: return null
+        if (lat !in -90.0..90.0 || lng !in -180.0..180.0) {
+            return null
+        }
+        return "$lat,$lng"
     }
 
     private fun labeledValue(lines: List<String>, labels: List<String>): String? {

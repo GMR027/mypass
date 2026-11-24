@@ -32,6 +32,9 @@ Route::get('/downloads/mypass.apk', [AppDownloadController::class, 'android'])
 Route::view('/privacy', 'legal.privacy')->name('legal.privacy');
 Route::view('/terms', 'legal.terms')->name('legal.terms');
 
+Route::match(['get', 'post'], '/share-target', fn () => redirect('/vault?share=error'))
+    ->name('share.target');
+
 Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
     Route::get('/dashboard', function () {
         $user = auth()->user();
@@ -104,6 +107,8 @@ Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
     Route::get('/api/web/items/{item}', [VaultItemController::class, 'show'])->name('web.items.show');
     Route::patch('/api/web/items/{item}', [VaultItemController::class, 'update'])->name('web.items.update');
     Route::delete('/api/web/items/{item}', [VaultItemController::class, 'destroy'])->name('web.items.destroy');
+    Route::post('/api/web/items/{item}/restore', [VaultItemController::class, 'restore'])->name('web.items.restore');
+    Route::delete('/api/web/items/{item}/force', [VaultItemController::class, 'forceDestroy'])->name('web.items.force-destroy');
 
     Route::post('/api/web/blobs', [BlobController::class, 'store'])->name('web.blobs.store');
     Route::get('/api/web/blobs/{blob}', [BlobController::class, 'show'])->name('web.blobs.show');

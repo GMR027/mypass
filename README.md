@@ -44,7 +44,7 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
   - aviso de documentos por vencer;
   - página de inicio pública;
   - interfaz completa en español e inglés, con selector de idioma.
-- Pruebas de API y de navegador pasando (94 pruebas, 442 aserciones).
+- Pruebas de API y de navegador pasando (97 pruebas, 467 aserciones).
 - App Android en Kotlin + Compose, instalada en la tablet de pruebas.
 - Billetera de pases con pestañas Documentos, Pases, Familia y Dispositivos.
 - Generador de pases con OCR local (Tesseract.js), PDF.js, ZXing y códigos QR/PDF417/Aztec/Code 128.
@@ -57,6 +57,12 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
 - Pases de vuelo y transporte con terminal, puerta e inicio/cierre de abordaje, además de OCR para esos campos.
 - Credenciales con logo, banner o fondo, tipos de cuenta personalizados y grupos definidos por el usuario.
 - Android: fechas de pases con selector del sistema, recuperación de la bóveda por correo desde el celular y notificaciones con el ícono de la app.
+- Pases de evento y transporte con ubicación y enlaces a Google Maps u otras apps, avisos de check-in y calendario.
+- Importación de TOTP escaneando el código QR, papelera de 30 días con Deshacer, búsqueda global y recientes.
+- Recordatorios locales de medicamentos y citas médicas, con alarmas exactas cuando el sistema lo permite.
+- Compartir archivos desde el menú de Android directamente a My Pass y atajos de la app para buscar, escanear o crear un pase.
+- Copia de seguridad cifrada completa, compatible entre web y Android.
+- Web instalable como PWA con share target para recibir archivos compartidos.
 - Tablet: Xiaomi Pad 6, Android 13 (API 33), sin biometría fuerte.
 
 ## Requisitos locales
@@ -166,8 +172,8 @@ Ese valor queda dentro de `BuildConfig.API_BASE_URL` y no necesita `adb reverse`
 La versión de la app vive en `android/version.properties`:
 
 ```properties
-versionCode=13
-versionName=0.6.1
+versionCode=14
+versionName=0.7.0
 minSupportedVersionCode=0
 ```
 

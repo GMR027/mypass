@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // y las cookies Secure no se comportan correctamente.
         $middleware->trustProxies(at: '*');
         $middleware->encryptCookies(except: ['mypass_easy']);
+        $middleware->validateCsrfTokens(except: ['share-target']);
 
         $middleware->alias([
             'email-2fa' => EnsureEmailTwoFactorVerified::class,

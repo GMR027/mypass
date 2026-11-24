@@ -267,6 +267,33 @@ private fun MedicalCard(
                     ).filter { it.isNotBlank() }.joinToString(" · "),
                 )
             }
+            val scheduledMeds = medical.medicationSchedule.filter { it.name.isNotBlank() }
+            if (scheduledMeds.isNotEmpty()) {
+                MedicalStat(
+                    label = stringResource(R.string.medications_schedule_title),
+                    value = scheduledMeds.joinToString(" · ") { medication ->
+                        listOf(
+                            medication.name,
+                            medication.dose,
+                            medication.times.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "(", postfix = ")"),
+                        ).filter { !it.isNullOrBlank() }.joinToString(" ")
+                    },
+                )
+            }
+            val nextAppointment = medical.appointments
+                .filter { it.title.isNotBlank() && it.date.isNotBlank() }
+                .minByOrNull { "${it.date} ${it.time}" }
+            if (nextAppointment != null) {
+                MedicalStat(
+                    label = stringResource(R.string.next_appointment),
+                    value = listOf(
+                        nextAppointment.title,
+                        nextAppointment.date,
+                        nextAppointment.time,
+                        nextAppointment.location,
+                    ).filter { it.isNotBlank() }.joinToString(" · "),
+                )
+            }
             if (contact != null) {
                 MedicalStat(
                     label = stringResource(R.string.emergency_contact),
@@ -353,6 +380,160 @@ private fun MedicalAction(text: String, onClick: () -> Unit, primary: Boolean = 
     }
 }
 
+private fun parseMedicationTimes(value: String): List<String> {
+    return value.split(',', ';', ' ')
+        .map { it.trim().take(5) }
+        .filter { it.matches(Regex("^\\d{1,2}:\\d{2}$")) }
+        .map { it.padStart(5, '0') }
+        .distinct()
+}
+
+@Composable
+private fun MedicationRow(
+    medication: UiMedication,
+    onChange: (UiMedication) -> Unit,
+    onRemove: () -> Unit,
+) {
+    var timesText by remember(medication.id) {
+        mutableStateOf(medication.times.joinToString(", "))
+    }
+
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.medication),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRemove) {
+                    Text(stringResource(R.string.remove), color = MpColors.Error)
+                }
+            }
+            MpTextField(
+                value = medication.name,
+                onValueChange = { onChange(medication.copy(name = it)) },
+                label = stringResource(R.string.medication),
+                placeholder = stringResource(R.string.medication_placeholder),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MpTextField(
+                    value = medication.dose,
+                    onValueChange = { onChange(medication.copy(dose = it)) },
+                    label = stringResource(R.string.dose),
+                    placeholder = stringResource(R.string.dose_placeholder),
+                    modifier = Modifier.weight(1f),
+                )
+                MpTextField(
+                    value = timesText,
+                    onValueChange = {
+                        timesText = it
+                        onChange(medication.copy(times = parseMedicationTimes(it)))
+                    },
+                    label = stringResource(R.string.medication_times),
+                    placeholder = "08:00, 20:00",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MpDateField(
+                    value = medication.startDate,
+                    onValueChange = { onChange(medication.copy(startDate = it)) },
+                    label = stringResource(R.string.medication_start),
+                    modifier = Modifier.weight(1f),
+                )
+                MpDateField(
+                    value = medication.endDate,
+                    onValueChange = { onChange(medication.copy(endDate = it)) },
+                    label = stringResource(R.string.medication_end),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppointmentRow(
+    appointment: UiAppointment,
+    onChange: (UiAppointment) -> Unit,
+    onRemove: () -> Unit,
+) {
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.appointment),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRemove) {
+                    Text(stringResource(R.string.remove), color = MpColors.Error)
+                }
+            }
+            MpTextField(
+                value = appointment.title,
+                onValueChange = { onChange(appointment.copy(title = it)) },
+                label = stringResource(R.string.appointment_title),
+                placeholder = stringResource(R.string.appointment_placeholder),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MpDateField(
+                    value = appointment.date,
+                    onValueChange = { onChange(appointment.copy(date = it)) },
+                    label = stringResource(R.string.date),
+                    modifier = Modifier.weight(1f),
+                )
+                MpTimeField(
+                    value = appointment.time,
+                    onValueChange = { onChange(appointment.copy(time = it)) },
+                    label = stringResource(R.string.time),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            MpTextField(
+                value = appointment.location,
+                onValueChange = { onChange(appointment.copy(location = it)) },
+                label = stringResource(R.string.appointment_location),
+                placeholder = stringResource(R.string.appointment_location_placeholder),
+            )
+            MpTextField(
+                value = appointment.notes,
+                onValueChange = { onChange(appointment.copy(notes = it)) },
+                label = stringResource(R.string.notes),
+            )
+            Text(
+                text = stringResource(R.string.appointment_reminder),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    1440 to stringResource(R.string.reminder_one_day),
+                    120 to stringResource(R.string.reminder_two_hours),
+                    30 to stringResource(R.string.reminder_thirty_minutes),
+                ).forEach { (minutes, label) ->
+                    MpFilterChip(
+                        text = label,
+                        selected = appointment.reminderMinutes == minutes,
+                        onClick = { onChange(appointment.copy(reminderMinutes = minutes)) },
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
     val source = state.medicalDraft ?: return
@@ -362,7 +543,8 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
     var bloodType by remember(source) { mutableStateOf(source.bloodType) }
     var allergies by remember(source) { mutableStateOf(source.allergies) }
     var conditions by remember(source) { mutableStateOf(source.conditions) }
-    var medications by remember(source) { mutableStateOf(source.medications) }
+    var medicationSchedule by remember(source) { mutableStateOf(source.medicationSchedule) }
+    var appointments by remember(source) { mutableStateOf(source.appointments) }
     var contactName by remember(source) { mutableStateOf(source.contactName) }
     var contactRelation by remember(source) { mutableStateOf(source.contactRelation) }
     var contactPhone by remember(source) { mutableStateOf(source.contactPhone) }
@@ -397,7 +579,9 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
         bloodType = bloodType,
         allergies = allergies,
         conditions = conditions,
-        medications = medications,
+        medications = medicationSchedule.map { it.name }.joinToString(", "),
+        medicationSchedule = medicationSchedule,
+        appointments = appointments,
         contactName = contactName,
         contactRelation = contactRelation,
         contactPhone = contactPhone,
@@ -468,7 +652,90 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
                         )
                         MpTextField(allergies, { allergies = it }, stringResource(R.string.allergies_hint))
                         MpTextField(conditions, { conditions = it }, stringResource(R.string.conditions_hint))
-                        MpTextField(medications, { medications = it }, stringResource(R.string.medications_hint))
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.medications_schedule_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.medications_schedule_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        medicationSchedule.forEachIndexed { index, medication ->
+                            MedicationRow(
+                                medication = medication,
+                                onChange = { updated ->
+                                    medicationSchedule = medicationSchedule.toMutableList().also {
+                                        it[index] = updated
+                                    }
+                                },
+                                onRemove = {
+                                    medicationSchedule = medicationSchedule.filterIndexed { itemIndex, _ ->
+                                        itemIndex != index
+                                    }
+                                },
+                            )
+                        }
+                        MpButton(
+                            text = stringResource(R.string.add_medication),
+                            onClick = {
+                                medicationSchedule = medicationSchedule + UiMedication(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                )
+                            },
+                            variant = MpButtonVariant.Secondary,
+                            fillWidth = true,
+                            icon = Icons.Filled.Add,
+                        )
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.appointments_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.appointments_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        appointments.forEachIndexed { index, appointment ->
+                            AppointmentRow(
+                                appointment = appointment,
+                                onChange = { updated ->
+                                    appointments = appointments.toMutableList().also {
+                                        it[index] = updated
+                                    }
+                                },
+                                onRemove = {
+                                    appointments = appointments.filterIndexed { itemIndex, _ ->
+                                        itemIndex != index
+                                    }
+                                },
+                            )
+                        }
+                        MpButton(
+                            text = stringResource(R.string.add_appointment),
+                            onClick = {
+                                appointments = appointments + UiAppointment(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                )
+                            },
+                            variant = MpButtonVariant.Secondary,
+                            fillWidth = true,
+                            icon = Icons.Filled.Add,
+                        )
                     }
                 }
             }

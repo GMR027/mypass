@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -149,6 +150,33 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
             }
 
             item { MpStatusBanner(state.status, state.error) }
+
+            item {
+                MpCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.openSearch() },
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        MpIconTile(icon = Icons.Filled.Search, size = 44)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.search_vault),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.search_vault_placeholder),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
 
             if (nextPass != null) {
                 item {
@@ -608,6 +636,14 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     val selected = allPasses.firstOrNull { it.id == selectedId } ?: active.firstOrNull()
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
 
+    LaunchedEffect(state.focusItemId) {
+        state.focusItemId?.let { id ->
+            filter = "all"
+            selectedId = id
+            viewModel.clearFocusItem()
+        }
+    }
+
     LaunchedEffect(allPasses.size, filter, selectedId) {
         val current = allPasses.firstOrNull { it.id == selectedId }
         val matchesFilter = filter == "all" || current?.pass?.category == filter
@@ -790,7 +826,10 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                     items(others, key = { it.id }) { item ->
                         PassCompactCard(
                             item = item,
-                            onClick = { selectedId = item.id },
+                            onClick = {
+                                selectedId = item.id
+                                viewModel.recordRecentItem(item.id)
+                            },
                         )
                     }
                 } else if (filtered.isEmpty()) {
@@ -816,6 +855,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                             archived = true,
                             onClick = {
                                 selectedId = item.id
+                                viewModel.recordRecentItem(item.id)
                             },
                         )
                     }
@@ -890,6 +930,7 @@ private fun PassDetailCard(
     onDelete: () -> Unit,
 ) {
     val pass = item.pass ?: return
+    val context = LocalContext.current
     val payload = remember(item.id, pass.codePayload) { passPayload(item, pass) }
     val bitmap = remember(payload, pass.codeFormat) {
         Barcode.generate(payload, pass.codeFormat, 720)
@@ -986,6 +1027,32 @@ private fun PassDetailCard(
                     },
                     fillWidth = true,
                 )
+                if (PassLocation.query(pass) != null) {
+                    MpButton(
+                        text = stringResource(R.string.how_to_get_there),
+                        onClick = { PassLocation.open(context, pass) },
+                        variant = MpButtonVariant.Secondary,
+                        icon = Icons.Filled.Place,
+                        fillWidth = true,
+                    )
+                }
+                if (PassCalendar.canAdd(pass)) {
+                    MpButton(
+                        text = stringResource(R.string.add_to_calendar),
+                        onClick = {
+                            if (!PassCalendar.add(context, item, pass)) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    context.getString(R.string.calendar_not_available),
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
+                        variant = MpButtonVariant.Secondary,
+                        icon = Icons.Filled.DateRange,
+                        fillWidth = true,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MpButton(
                         text = stringResource(R.string.share),

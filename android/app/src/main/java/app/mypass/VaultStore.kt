@@ -8,6 +8,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.io.File
+import org.json.JSONArray
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
@@ -26,6 +27,8 @@ data class LocalItem(
     val localPath: String?,
     val pendingUpload: Boolean,
     val updatedAt: String,
+    val deletedAt: String? = null,
+    val pendingAction: String? = null,
 )
 
 class VaultStore(context: Context) {
@@ -147,6 +150,29 @@ class VaultStore(context: Context) {
         prefs.edit().putBoolean(KEY_EASY_MODE, enabled).apply()
     }
 
+    fun recentItemIds(): List<String> {
+        val raw = prefs.getString(KEY_RECENT_ITEMS, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    array.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    fun recordRecentItem(id: String) {
+        val next = (listOf(id) + recentItemIds().filter { it != id }).take(12)
+        val array = JSONArray()
+        next.forEach(array::put)
+        prefs.edit().putString(KEY_RECENT_ITEMS, array.toString()).apply()
+    }
+
+    fun clearRecentItems() {
+        prefs.edit().remove(KEY_RECENT_ITEMS).apply()
+    }
+
     fun ageGroup(): String = prefs.getString(KEY_AGE_GROUP, "unknown").orEmpty()
 
     fun setAgeGroup(group: String) {
@@ -199,6 +225,8 @@ class VaultStore(context: Context) {
             put("local_path", item.localPath)
             put("pending_upload", if (item.pendingUpload) 1 else 0)
             put("updated_at", item.updatedAt)
+            put("deleted_at", item.deletedAt)
+            put("pending_action", item.pendingAction)
         }
         db.writableDatabase.insertWithOnConflict("items", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
@@ -206,7 +234,7 @@ class VaultStore(context: Context) {
     fun allItems(): List<LocalItem> {
         val items = mutableListOf<LocalItem>()
         db.readableDatabase.rawQuery(
-            "SELECT id, type, state, encrypted_metadata, blob_id, version, expires_at, local_path, pending_upload, updated_at " +
+            "SELECT id, type, state, encrypted_metadata, blob_id, version, expires_at, local_path, pending_upload, updated_at, deleted_at, pending_action " +
                 "FROM items WHERE state != 'deleted' ORDER BY updated_at DESC",
             null,
         ).use { cursor ->
@@ -223,6 +251,8 @@ class VaultStore(context: Context) {
                         localPath = cursor.getString(7),
                         pendingUpload = cursor.getInt(8) == 1,
                         updatedAt = cursor.getString(9),
+                        deletedAt = cursor.getString(10),
+                        pendingAction = cursor.getString(11),
                     ),
                 )
             }
@@ -232,7 +262,7 @@ class VaultStore(context: Context) {
 
     fun findItem(id: String): LocalItem? {
         db.readableDatabase.rawQuery(
-            "SELECT id, type, state, encrypted_metadata, blob_id, version, expires_at, local_path, pending_upload, updated_at " +
+            "SELECT id, type, state, encrypted_metadata, blob_id, version, expires_at, local_path, pending_upload, updated_at, deleted_at, pending_action " +
                 "FROM items WHERE id = ? LIMIT 1",
             arrayOf(id),
         ).use { cursor ->
@@ -251,6 +281,8 @@ class VaultStore(context: Context) {
                 localPath = cursor.getString(7),
                 pendingUpload = cursor.getInt(8) == 1,
                 updatedAt = cursor.getString(9),
+                deletedAt = cursor.getString(10),
+                pendingAction = cursor.getString(11),
             )
         }
     }
@@ -261,7 +293,38 @@ class VaultStore(context: Context) {
         db.writableDatabase.delete("items", "id = ?", arrayOf(id))
     }
 
-    fun pendingItems(): List<LocalItem> = allItems().filter { it.pendingUpload }
+    fun trashItem(id: String, pending: Boolean): LocalItem? {
+        val item = findItem(id) ?: return null
+        val updated = item.copy(
+            state = "trashed",
+            deletedAt = now(),
+            pendingAction = if (pending) "delete" else null,
+            updatedAt = now(),
+        )
+        upsert(updated)
+        return updated
+    }
+
+    fun restoreItem(id: String, pending: Boolean): LocalItem? {
+        val item = findItem(id) ?: return null
+        val updated = item.copy(
+            state = "active",
+            deletedAt = null,
+            pendingAction = if (pending) "restore" else null,
+            updatedAt = now(),
+        )
+        upsert(updated)
+        return updated
+    }
+
+    fun clearPendingAction(id: String) {
+        val item = findItem(id) ?: return
+        upsert(item.copy(pendingAction = null))
+    }
+
+    fun pendingActions(): List<LocalItem> = allItems().filter { it.pendingAction != null }
+
+    fun pendingItems(): List<LocalItem> = allItems().filter { it.pendingUpload && it.state != "trashed" }
 
     fun markUploaded(id: String, blobId: String?) {
         val item = findItem(id) ?: return
@@ -271,14 +334,16 @@ class VaultStore(context: Context) {
     fun markSyncedFromServer(
         id: String,
         type: String,
+        state: String,
         encryptedMetadata: String,
         blobId: String?,
         version: Int,
         expiresAt: String?,
+        deletedAt: String?,
         localPath: String?,
     ) {
         val existing = findItem(id)
-        if (existing?.pendingUpload == true) {
+        if (existing?.pendingUpload == true || existing?.pendingAction != null) {
             return
         }
 
@@ -286,7 +351,7 @@ class VaultStore(context: Context) {
             LocalItem(
                 id = id,
                 type = type,
-                state = "active",
+                state = state,
                 encryptedMetadata = encryptedMetadata,
                 blobId = blobId,
                 version = version,
@@ -294,8 +359,19 @@ class VaultStore(context: Context) {
                 localPath = localPath ?: existing?.localPath,
                 pendingUpload = false,
                 updatedAt = now(),
+                deletedAt = deletedAt,
+                pendingAction = null,
             ),
         )
+    }
+
+    fun removeMissingFromServer(serverIds: Set<String>) {
+        for (item in allItems()) {
+            if (item.pendingUpload || item.pendingAction != null || item.id in serverIds) {
+                continue
+            }
+            deleteItem(item.id)
+        }
     }
 
     fun clearAll() {
@@ -317,6 +393,7 @@ class VaultStore(context: Context) {
         const val KEY_EASY_MODE = "easy_mode"
         const val KEY_AGE_GROUP = "age_group"
         const val KEY_BIRTH_DATE = "birth_date"
+        const val KEY_RECENT_ITEMS = "recent_items"
         const val KEY_EMAIL = "email"
         const val KEY_NAME = "name"
         const val KEY_AVATAR_URL = "avatar_url"
@@ -330,7 +407,7 @@ class VaultStore(context: Context) {
     }
 }
 
-private class VaultDatabase(context: Context) : SQLiteOpenHelper(context, "mypass.db", null, 1) {
+private class VaultDatabase(context: Context) : SQLiteOpenHelper(context, "mypass.db", null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -344,7 +421,9 @@ private class VaultDatabase(context: Context) : SQLiteOpenHelper(context, "mypas
                 expires_at TEXT,
                 local_path TEXT,
                 pending_upload INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT,
+                pending_action TEXT
             )
             """.trimIndent(),
         )
@@ -352,8 +431,10 @@ private class VaultDatabase(context: Context) : SQLiteOpenHelper(context, "mypas
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS items")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE items ADD COLUMN deleted_at TEXT")
+            db.execSQL("ALTER TABLE items ADD COLUMN pending_action TEXT")
+        }
     }
 }
 

@@ -242,4 +242,94 @@ class VaultTest extends TestCase
 
         $this->assertNotNull($device->fresh()->revoked_at);
     }
+
+    public function test_trashed_items_can_be_listed_restored_and_permanently_deleted(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $this->actingAs($user, 'sanctum');
+
+        $upload = $this->postJson('/api/v1/blobs', [
+            'file' => UploadedFile::fake()->createWithContent('secret.bin', 'ciphertext'),
+        ])->assertCreated();
+        $blobId = $upload->json('data.id');
+
+        $item = $this->postJson('/api/v1/items', [
+            'type' => 'document',
+            'encrypted_metadata' => base64_encode('documento'),
+            'blob_id' => $blobId,
+        ])->assertCreated();
+        $itemId = $item->json('data.id');
+
+        $this->deleteJson("/api/v1/items/{$itemId}")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'trashed');
+
+        $this->getJson('/api/v1/items')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson('/api/v1/items?trashed=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.state', 'trashed')
+            ->assertJsonPath('data.0.id', $itemId);
+
+        $this->postJson("/api/v1/items/{$itemId}/restore")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'active')
+            ->assertJsonPath('data.version', 2);
+
+        $this->getJson('/api/v1/items')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->deleteJson("/api/v1/items/{$itemId}")->assertOk();
+        $this->deleteJson("/api/v1/items/{$itemId}/force")
+            ->assertOk()
+            ->assertJsonPath('message', 'Documento eliminado definitivamente.');
+
+        $this->assertDatabaseMissing('items', ['id' => $itemId]);
+        $this->assertDatabaseMissing('blobs', ['id' => $blobId]);
+    }
+
+    public function test_user_cannot_restore_another_users_trashed_item(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $item = $owner->items()->create([
+            'type' => 'document',
+            'encrypted_metadata' => base64_encode('documento'),
+        ]);
+        $item->delete();
+
+        $this->actingAs($other, 'sanctum')
+            ->postJson("/api/v1/items/{$item->id}/restore")
+            ->assertNotFound();
+
+        $this->actingAs($other, 'sanctum')
+            ->deleteJson("/api/v1/items/{$item->id}/force")
+            ->assertNotFound();
+    }
+
+    public function test_trash_older_than_thirty_days_is_purged_when_listing(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $item = $user->items()->create([
+            'type' => 'document',
+            'encrypted_metadata' => base64_encode('documento'),
+        ]);
+        $item->delete();
+        $item->forceFill(['deleted_at' => now()->subDays(31)])->save();
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/items?trashed=1')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->assertDatabaseMissing('items', ['id' => $item->id]);
+    }
 }

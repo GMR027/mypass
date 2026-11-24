@@ -1315,6 +1315,12 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                             placeholder = "JBSWY3DPEHPK3PXP u otpauth://...",
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
                         )
+                        MpButton(
+                            text = stringResource(R.string.scan_totp_qr),
+                            onClick = viewModel::openTotpScanner,
+                            variant = MpButtonVariant.Secondary,
+                            fillWidth = true,
+                        )
                         Text(
                             text = stringResource(R.string.totp_hint),
                             style = MaterialTheme.typography.bodySmall,

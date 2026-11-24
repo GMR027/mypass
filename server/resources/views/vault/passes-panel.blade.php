@@ -188,6 +188,14 @@
                             <x-icon name="qr_code_2" class="text-[21px]" />
                             {{ __('Presentar código') }}
                         </button>
+                        <button id="pass-map" type="button" class="mp-btn mp-btn-secondary w-full" hidden>
+                            <x-icon name="map" class="text-[20px]" />
+                            {{ __('Cómo llegar') }}
+                        </button>
+                        <button id="pass-calendar" type="button" class="mp-btn mp-btn-secondary w-full" hidden>
+                            <x-icon name="calendar_month" class="text-[20px]" />
+                            {{ __('Agregar al calendario') }}
+                        </button>
                         <div class="grid grid-cols-2 gap-2">
                             <button id="pass-share" type="button" class="mp-btn mp-btn-quiet mp-btn-sm whitespace-nowrap text-[13px]">
                                 <x-icon name="share" class="text-[18px]" />

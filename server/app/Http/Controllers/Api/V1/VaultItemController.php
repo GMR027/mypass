@@ -8,6 +8,7 @@ use App\Models\VaultItem;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class VaultItemController extends Controller
@@ -16,11 +17,26 @@ class VaultItemController extends Controller
     {
         $data = $request->validate([
             'state' => ['sometimes', Rule::in(['active', 'transferred', 'received', 'trashed'])],
+            'trashed' => ['sometimes', 'boolean'],
         ]);
 
-        $items = $request->user()->items()
-            ->when($data['state'] ?? null, fn ($query, $state) => $query->where('state', $state))
-            ->orderByDesc('updated_at')
+        $onlyTrashed = (bool) ($data['trashed'] ?? false)
+            || ($data['state'] ?? null) === 'trashed';
+
+        if ($onlyTrashed) {
+            $this->purgeExpiredTrash($request);
+        }
+
+        $query = $request->user()->items();
+
+        if ($onlyTrashed) {
+            $query->onlyTrashed();
+        } elseif (isset($data['state'])) {
+            $query->where('state', $data['state']);
+        }
+
+        $items = $query
+            ->orderByDesc($onlyTrashed ? 'deleted_at' : 'updated_at')
             ->get()
             ->map(fn (VaultItem $item) => $this->payload($item));
 
@@ -100,7 +116,84 @@ class VaultItemController extends Controller
         ]);
         $item->delete();
 
-        return response()->json(['message' => __('Documento movido a la papelera.')]);
+        return response()->json([
+            'message' => __('Documento movido a la papelera.'),
+            'data' => $this->payload($item->fresh() ?? $item),
+        ]);
+    }
+
+    public function restore(Request $request, string $item, AuditLogger $audit): JsonResponse
+    {
+        $item = $request->user()->items()->onlyTrashed()->findOrFail($item);
+
+        $item->restore();
+        $item->forceFill([
+            'version' => $item->version + 1,
+            'updated_at' => now(),
+        ])->save();
+
+        $audit->log($request->user(), 'item_restored', [
+            'item_id' => $item->id,
+            'type' => $item->type,
+        ]);
+
+        return response()->json(['data' => $this->payload($item->fresh() ?? $item)]);
+    }
+
+    public function forceDestroy(Request $request, string $item, AuditLogger $audit): JsonResponse
+    {
+        $item = $request->user()->items()->onlyTrashed()->findOrFail($item);
+        $blobId = $item->blob_id;
+        $type = $item->type;
+        $id = $item->id;
+
+        $item->forceDelete();
+        $this->deleteBlobIfUnused($request->user()->id, $blobId);
+
+        $audit->log($request->user(), 'item_purged', [
+            'item_id' => $id,
+            'type' => $type,
+        ]);
+
+        return response()->json(['message' => __('Documento eliminado definitivamente.')]);
+    }
+
+    private function purgeExpiredTrash(Request $request): void
+    {
+        $expired = $request->user()->items()
+            ->onlyTrashed()
+            ->where('deleted_at', '<=', now()->subDays(30))
+            ->get();
+
+        foreach ($expired as $item) {
+            $blobId = $item->blob_id;
+            $item->forceDelete();
+            $this->deleteBlobIfUnused($request->user()->id, $blobId);
+        }
+    }
+
+    private function deleteBlobIfUnused(int $userId, ?string $blobId): void
+    {
+        if ($blobId === null) {
+            return;
+        }
+
+        $referenced = VaultItem::withTrashed()
+            ->where('user_id', $userId)
+            ->where('blob_id', $blobId)
+            ->exists();
+
+        if ($referenced) {
+            return;
+        }
+
+        $blob = Blob::where('user_id', $userId)->find($blobId);
+        if ($blob === null) {
+            return;
+        }
+
+        Storage::disk('local')->delete($blob->path);
+        $blob->delete();
     }
 
     private function assertBlobBelongsToUser(Request $request, ?string $blobId): void
@@ -122,11 +215,12 @@ class VaultItemController extends Controller
         return [
             'id' => $item->id,
             'type' => $item->type,
-            'state' => $item->state,
+            'state' => $item->trashed() ? 'trashed' : $item->state,
             'encrypted_metadata' => $item->encrypted_metadata,
             'blob_id' => $item->blob_id,
             'version' => $item->version,
             'expires_at' => $item->expires_at?->toIso8601String(),
+            'deleted_at' => $item->deleted_at?->toIso8601String(),
             'transferred_to' => $item->transferredTo?->public_id,
             'transferred_at' => $item->transferred_at?->toIso8601String(),
             'updated_at' => $item->updated_at?->toIso8601String(),

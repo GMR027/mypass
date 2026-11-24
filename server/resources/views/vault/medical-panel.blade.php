@@ -113,9 +113,31 @@
                        placeholder="{{ __('asma, diabetes…') }}" autocomplete="off">
             </div>
             <div class="sm:col-span-2">
-                <label for="medical-medications" class="mp-label">{{ __('Medicamentos actuales') }}</label>
-                <input id="medical-medications" type="text" maxlength="500" class="mp-input"
-                       placeholder="{{ __('salbutamol, metformina…') }}" autocomplete="off">
+                <div class="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <p class="mp-label">{{ __('Medicamentos y horarios') }}</p>
+                        <p class="mp-hint">{{ __('Agrega la hora para recibir un recordatorio. Ejemplo: 08:00 y 20:00.') }}</p>
+                    </div>
+                    <button id="medical-medication-add" type="button" class="mp-btn mp-btn-secondary mp-btn-sm">
+                        <x-icon name="add" class="text-[18px]" />
+                        {{ __('Agregar medicamento') }}
+                    </button>
+                </div>
+                <div id="medical-medications-list" class="mt-3 space-y-3"></div>
+            </div>
+
+            <div class="sm:col-span-2">
+                <div class="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <p class="mp-label">{{ __('Citas médicas') }}</p>
+                        <p class="mp-hint">{{ __('Se guardan cifradas y se pueden agregar a tu calendario.') }}</p>
+                    </div>
+                    <button id="medical-appointment-add" type="button" class="mp-btn mp-btn-secondary mp-btn-sm">
+                        <x-icon name="add" class="text-[18px]" />
+                        {{ __('Agregar cita') }}
+                    </button>
+                </div>
+                <div id="medical-appointments-list" class="mt-3 space-y-3"></div>
             </div>
 
             <div class="sm:col-span-2">

@@ -63,7 +63,13 @@ fun ScannerScreen(state: UiState, viewModel: MainViewModel) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         SubScreenHeader(
-            title = stringResource(if (state.scanForPass) R.string.scan_pass else R.string.scan_title),
+            title = stringResource(
+                when {
+                    state.scanForTotp -> R.string.scan_totp_title
+                    state.scanForPass -> R.string.scan_pass
+                    else -> R.string.scan_title
+                },
+            ),
             onBack = viewModel::backFromScan,
         )
         Column(
@@ -99,6 +105,7 @@ fun ScannerScreen(state: UiState, viewModel: MainViewModel) {
                         .fillMaxWidth()
                         .weight(1f),
                     forPass = state.scanForPass,
+                    forTotp = state.scanForTotp,
                     onCaptured = viewModel::addScan,
                     onError = { message -> viewModel.showError(message) },
                 )
@@ -111,6 +118,7 @@ fun ScannerScreen(state: UiState, viewModel: MainViewModel) {
 private fun CameraCapture(
     modifier: Modifier = Modifier,
     forPass: Boolean = false,
+    forTotp: Boolean = false,
     onCaptured: (File) -> Unit,
     onError: (String) -> Unit,
 ) {
@@ -180,7 +188,7 @@ private fun CameraCapture(
                     ),
             )
             Text(
-                text = stringResource(R.string.scanner_hint),
+                text = stringResource(if (forTotp) R.string.scanner_totp_hint else R.string.scanner_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White,
                 modifier = Modifier

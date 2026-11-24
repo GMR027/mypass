@@ -1,3 +1,9 @@
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+        // La PWA es opcional; la aplicación funciona sin service worker.
+    });
+}
+
 if (document.body?.dataset.easy) {
     document.cookie = `mypass_easy=${document.body.dataset.easy}; Max-Age=31536000; Path=/; SameSite=Lax`;
 }

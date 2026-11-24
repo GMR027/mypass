@@ -1,8 +1,9 @@
 import sodium from 'libsodium-wrappers-sumo';
+import { unzipSync, zipSync } from 'fflate';
 import { WalletApp } from './passes';
 import { PassGenerator } from './pass-generator';
-import { CredentialsApp, isCredentialItem } from './credentials';
-import { MedicalApp, isMedicalItem } from './medical';
+import { CredentialsApp, credentialFromItem, isCredentialItem } from './credentials';
+import { MedicalApp, medicalFromItem, isMedicalItem } from './medical';
 
 const t = (key) => window.mypassT ? window.mypassT(key) : key;
 const tf = (key, values) => window.mypassTF ? window.mypassTF(key, values) : key;
@@ -107,6 +108,31 @@ const confirmAccept = document.getElementById('confirm-accept');
 const confirmCancel = document.getElementById('confirm-cancel');
 const toast = document.getElementById('vault-toast');
 const pairingCopy = document.getElementById('pairing-copy');
+const sharePending = document.getElementById('share-pending');
+const sharePendingText = document.getElementById('share-pending-text');
+const backupOpen = document.getElementById('backup-open');
+const backupModal = document.getElementById('backup-modal');
+const backupClose = document.getElementById('backup-close');
+const backupPassphrase = document.getElementById('backup-passphrase');
+const backupPassphraseConfirm = document.getElementById('backup-passphrase-confirm');
+const backupExportButton = document.getElementById('backup-export');
+const backupFile = document.getElementById('backup-file');
+const backupRestorePassphrase = document.getElementById('backup-restore-passphrase');
+const backupImportButton = document.getElementById('backup-import');
+const backupStatus = document.getElementById('backup-status');
+const backupError = document.getElementById('backup-error');
+const searchOpen = document.getElementById('vault-search-open');
+const searchModal = document.getElementById('vault-search-modal');
+const searchClose = document.getElementById('vault-search-close');
+const searchInput = document.getElementById('vault-search-input');
+const searchStatus = document.getElementById('vault-search-status');
+const searchResults = document.getElementById('vault-search-results');
+const trashOpen = document.getElementById('trash-open');
+const trashModal = document.getElementById('trash-modal');
+const trashClose = document.getElementById('trash-close');
+const trashList = document.getElementById('trash-list');
+const trashEmpty = document.getElementById('trash-empty');
+const trashError = document.getElementById('trash-error');
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 const keysUrl = app?.dataset.keysUrl;
@@ -153,7 +179,11 @@ let editingItem = null;
 let outgoingShares = [];
 let currentFilter = 'all';
 let currentSearch = '';
+let searchIndex = [];
+let pendingSharedFiles = [];
+let shareRequestInFlight = false;
 let toastTimer = null;
+const recentKey = 'mypass.recentItems.v1';
 let lastActivityAt = Date.now();
 let hiddenAt = null;
 const autoLockKey = 'mypass.autoLockMinutes';
@@ -190,17 +220,28 @@ function icon(name, className = '') {
     return node;
 }
 
-function showToast(message) {
+function showToast(message, action = null) {
     if (!toast) {
         return;
     }
 
-    toast.textContent = message;
+    toast.replaceChildren(el('span', 'min-w-0 flex-1', message));
+    if (action?.label && typeof action.onClick === 'function') {
+        const button = el('button', 'mp-toast__action', action.label);
+        button.type = 'button';
+        button.addEventListener('click', () => {
+            toast.hidden = true;
+            clearTimeout(toastTimer);
+            action.onClick();
+        });
+        toast.appendChild(button);
+    }
+
     toast.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
         toast.hidden = true;
-    }, 3500);
+    }, action ? 9000 : 3500);
 }
 
 function setButtonText(button, text) {
@@ -491,6 +532,10 @@ function makeNonce(prefix, counter) {
 }
 
 function encryptFile(bytes) {
+    return encryptFileWithKey(bytes, masterKey);
+}
+
+function encryptFileWithKey(bytes, key) {
     const prefix = sodium.randombytes_buf(16);
     const header = new Uint8Array(HEADER_SIZE);
     const view = new DataView(header.buffer);
@@ -511,7 +556,7 @@ function encryptFile(bytes) {
             header,
             null,
             nonce,
-            masterKey,
+            key,
         );
         const length = new Uint8Array(4);
         writeUint32(new DataView(length.buffer), 0, ciphertext.length);
@@ -531,6 +576,10 @@ function encryptFile(bytes) {
 }
 
 function decryptFile(bytes) {
+    return decryptFileWithKey(bytes, masterKey);
+}
+
+function decryptFileWithKey(bytes, key) {
     if (bytes.length < HEADER_SIZE) {
         throw new Error(t('El archivo está incompleto.'));
     }
@@ -579,7 +628,7 @@ function decryptFile(bytes) {
             ciphertext,
             header,
             nonce,
-            masterKey,
+            key,
         );
         parts.push(chunk);
         written += chunk.length;
@@ -602,6 +651,205 @@ function decryptFile(bytes) {
     }
 
     return output;
+}
+
+const BACKUP_MAGIC = new Uint8Array([0x4d, 0x59, 0x50, 0x42]); // MYPB
+const BACKUP_HEADER_SIZE = 30;
+const BACKUP_VERSION = 1;
+const BACKUP_KDF_ARGON2ID = 1;
+const MAX_BACKUP_BYTES = 1024 * 1024 * 1024;
+
+function concatBytes(parts) {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+        output.set(part, offset);
+        offset += part.length;
+    }
+    return output;
+}
+
+function encryptBackup(passphrase, plaintext) {
+    const salt = sodium.randombytes_buf(16);
+    const ops = sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE;
+    const mem = sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE;
+    const key = sodium.crypto_pwhash(
+        32,
+        sodium.from_string(passphrase),
+        salt,
+        ops,
+        mem,
+        sodium.crypto_pwhash_ALG_ARGON2ID13,
+    );
+
+    try {
+        const header = new Uint8Array(BACKUP_HEADER_SIZE);
+        const view = new DataView(header.buffer);
+        header.set(BACKUP_MAGIC, 0);
+        header[4] = BACKUP_VERSION;
+        header[5] = BACKUP_KDF_ARGON2ID;
+        writeUint32(view, 6, ops);
+        writeUint32(view, 10, mem);
+        header.set(salt, 14);
+        return concatBytes([header, encryptFileWithKey(plaintext, key)]);
+    } finally {
+        sodium.memzero(key);
+    }
+}
+
+function decryptBackup(passphrase, container) {
+    if (container.length <= BACKUP_HEADER_SIZE) {
+        throw new Error(t('La copia de seguridad está incompleta.'));
+    }
+    const header = container.slice(0, BACKUP_HEADER_SIZE);
+    if (!header.slice(0, 4).every((value, index) => value === BACKUP_MAGIC[index])) {
+        throw new Error(t('El archivo no es una copia de My Pass.'));
+    }
+    if (header[4] !== BACKUP_VERSION || header[5] !== BACKUP_KDF_ARGON2ID) {
+        throw new Error(t('La versión de la copia no es compatible.'));
+    }
+
+    const view = new DataView(header.buffer);
+    const ops = readUint32(view, 6);
+    const mem = readUint32(view, 10);
+    if (ops < 1 || ops > 20 || mem < 8 * 1024 * 1024 || mem > 1024 * 1024 * 1024) {
+        throw new Error(t('Los parámetros de la copia no son válidos.'));
+    }
+    const salt = header.slice(14, 30);
+    const key = sodium.crypto_pwhash(
+        32,
+        sodium.from_string(passphrase),
+        salt,
+        ops,
+        mem,
+        sodium.crypto_pwhash_ALG_ARGON2ID13,
+    );
+
+    try {
+        return decryptFileWithKey(container.slice(BACKUP_HEADER_SIZE), key);
+    } finally {
+        sodium.memzero(key);
+    }
+}
+
+function downloadBytes(bytes, filename, type = 'application/octet-stream') {
+    const blob = new Blob([bytes], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function exportBackup(passphrase) {
+    const entries = {};
+    const manifestItems = [];
+    const source = items.filter((item) => item.state === 'active' || item.state === 'received');
+
+    for (const item of source) {
+        const manifestItem = {
+            type: item.type,
+            expires_at: item.expires_at || null,
+            metadata: item.metadata || {},
+        };
+
+        if (item.blob_id) {
+            const response = await fetch(`${blobBase}/${item.blob_id}`, {
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                throw new Error(t('No se pudo descargar uno de los archivos.'));
+            }
+            const plaintext = decryptFile(new Uint8Array(await response.arrayBuffer()));
+            const entryName = `files/${item.id}.bin`;
+            entries[entryName] = plaintext;
+            manifestItem.file = {
+                entry: entryName,
+                name: item.metadata?.original_name || t('Documento'),
+                mime: item.metadata?.mime || 'application/octet-stream',
+                size: plaintext.length,
+            };
+        }
+        manifestItems.push(manifestItem);
+    }
+
+    const manifest = {
+        format: 1,
+        app: 'My Pass',
+        created_at: new Date().toISOString(),
+        items: manifestItems,
+    };
+    entries['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest));
+    const zip = zipSync(entries, { level: 0 });
+    const container = encryptBackup(passphrase, zip);
+    const today = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+    downloadBytes(container, `mypass-backup-${today}.mypassbackup`);
+    return manifestItems.length;
+}
+
+async function importBackup(file, passphrase) {
+    if (file.size > MAX_BACKUP_BYTES) {
+        throw new Error(t('La copia es demasiado grande para este dispositivo.'));
+    }
+
+    const container = new Uint8Array(await file.arrayBuffer());
+    const zip = decryptBackup(passphrase, container);
+    const entries = unzipSync(zip);
+    const manifestBytes = entries['manifest.json'];
+    if (!manifestBytes) {
+        throw new Error(t('La copia no tiene un manifiesto válido.'));
+    }
+
+    const manifest = JSON.parse(new TextDecoder().decode(manifestBytes));
+    const sourceItems = Array.isArray(manifest.items) ? manifest.items : [];
+    let imported = 0;
+    let failed = 0;
+
+    for (const entry of sourceItems) {
+        try {
+            const metadata = entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+            let blobId = null;
+            const fileInfo = entry?.file;
+            if (fileInfo?.entry) {
+                const plaintext = entries[fileInfo.entry];
+                if (!plaintext) {
+                    throw new Error(t('Falta un archivo de la copia.'));
+                }
+                const uploaded = await uploadEncryptedBytes(encryptFile(plaintext));
+                blobId = uploaded.id;
+                metadata.original_name = fileInfo.name || metadata.original_name || t('Documento');
+                metadata.mime = fileInfo.mime || metadata.mime || 'application/octet-stream';
+                metadata.size = plaintext.length;
+            }
+
+            const response = await fetch(itemsUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    type: typeof entry.type === 'string' ? entry.type : 'document',
+                    encrypted_metadata: encryptJson(metadata),
+                    blob_id: blobId,
+                    expires_at: entry.expires_at || null,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(t('No se pudo guardar uno de los elementos.'));
+            }
+            imported += 1;
+        } catch {
+            failed += 1;
+        }
+    }
+
+    await loadItems();
+    return { imported, failed };
 }
 
 async function fetchKeys() {
@@ -664,6 +912,7 @@ async function finishUnlock(keys, candidateKey) {
     if (startingTab === 'generador') {
         passGenerator?.open('flight');
     }
+    await confirmAndSaveSharedFiles();
 }
 
 async function unlock(event) {
@@ -2002,6 +2251,251 @@ async function loadItems() {
     wallet?.setItems(items);
     credentials?.setItems(items);
     medical?.setItems(items);
+    buildSearchIndex();
+    if (searchModal?.open) {
+        renderSearch(searchInput?.value || '');
+    }
+}
+
+function normalizeSearch(value) {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+}
+
+function itemSection(item) {
+    if (isCredentialItem(item)) {
+        return 'credential';
+    }
+    if (isMedicalItem(item)) {
+        return 'medical';
+    }
+    if (item.metadata?.pass) {
+        return 'pass';
+    }
+    return 'document';
+}
+
+function sectionLabel(section) {
+    return {
+        pass: t('Pase'),
+        credential: t('Credencial'),
+        medical: t('Salud'),
+        document: t('Documento'),
+    }[section] || t('Documento');
+}
+
+function sectionIcon(section) {
+    return {
+        pass: 'wallet',
+        credential: 'key',
+        medical: 'medical_services',
+        document: 'folder',
+    }[section] || 'folder';
+}
+
+function searchSubtitle(item, section) {
+    if (section === 'pass') {
+        const pass = item.metadata?.pass || {};
+        return [pass.issuer, pass.holder, pass.fields?.origin && pass.fields?.destination
+            ? `${pass.fields.origin} → ${pass.fields.destination}`
+            : null].filter(Boolean).join(' · ');
+    }
+    if (section === 'credential') {
+        const credential = credentialFromItem(item);
+        return [credential.username, credential.url].filter(Boolean).join(' · ');
+    }
+    if (section === 'medical') {
+        const medical = medicalFromItem(item);
+        return [medical.holder, medical.insurance?.provider].filter(Boolean).join(' · ');
+    }
+    const expiry = item.expires_at
+        ? new Date(item.expires_at).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' })
+        : null;
+    return [item.metadata?.original_name, expiry]
+        .filter(Boolean)
+        .join(' · ');
+}
+
+function buildSearchIndex() {
+    searchIndex = items.filter((item) => item.state !== 'transferred').map((item) => {
+        const section = itemSection(item);
+        const values = [
+            item.metadata?.title,
+            item.metadata?.original_name,
+            item.metadata?.ocr_text,
+        ];
+
+        if (section === 'pass') {
+            const pass = item.metadata?.pass || {};
+            values.push(pass.issuer, pass.holder, ...(pass.notes || []));
+            values.push(...Object.values(pass.fields || {}));
+        } else if (section === 'credential') {
+            const credential = credentialFromItem(item);
+            values.push(
+                credential.username,
+                credential.url,
+                credential.notes,
+                credential.categoryLabel,
+                ...(credential.tags || []),
+            );
+        } else if (section === 'medical') {
+            const medical = medicalFromItem(item);
+            values.push(
+                medical.holder,
+                medical.insurance?.provider,
+                medical.insurance?.policyNumber,
+                medical.doctor?.name,
+                ...(medical.allergies || []),
+                ...(medical.conditions || []),
+                ...(medical.medications || []),
+                ...(medical.medicationSchedule || []).map((entry) => `${entry.name} ${entry.dose}`),
+                ...(medical.appointments || []).map((entry) => `${entry.title} ${entry.location}`),
+            );
+        }
+
+        return {
+            item,
+            section,
+            text: normalizeSearch(values.filter(Boolean).join(' ')),
+        };
+    });
+}
+
+function recentIds() {
+    try {
+        const value = JSON.parse(localStorage.getItem(recentKey) || '[]');
+        return Array.isArray(value) ? value.filter((id) => typeof id === 'string').slice(0, 12) : [];
+    } catch {
+        return [];
+    }
+}
+
+function recordRecent(id) {
+    if (!id) {
+        return;
+    }
+    const next = [id, ...recentIds().filter((value) => value !== id)].slice(0, 12);
+    try {
+        localStorage.setItem(recentKey, JSON.stringify(next));
+    } catch {
+        // El almacenamiento local puede estar deshabilitado; no es crítico.
+    }
+}
+
+function searchResultButton(entry) {
+    const button = el('button', 'mp-card flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-surface-container');
+    button.type = 'button';
+    const tile = el('span', 'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-container-high text-primary');
+    tile.appendChild(icon(sectionIcon(entry.section), 'text-[22px]'));
+    const copy = el('span', 'min-w-0 flex-1');
+    copy.appendChild(el('span', 'block text-[12px] font-bold uppercase tracking-wide text-primary', sectionLabel(entry.section)));
+    copy.appendChild(el('span', 'mt-0.5 block truncate font-semibold text-on-surface', entry.item.metadata?.title || t('Sin título')));
+    const subtitle = searchSubtitle(entry.item, entry.section);
+    if (subtitle) {
+        copy.appendChild(el('span', 'mt-0.5 block truncate text-sm text-on-surface-variant', subtitle));
+    }
+    button.append(tile, copy);
+    button.addEventListener('click', () => openSearchResult(entry));
+    return button;
+}
+
+function renderSearch(query) {
+    if (!searchResults) {
+        return;
+    }
+
+    searchResults.replaceChildren();
+    const normalized = normalizeSearch(query);
+    let entries = [];
+
+    if (!normalized) {
+        const ids = recentIds();
+        entries = ids
+            .map((id) => searchIndex.find((entry) => entry.item.id === id))
+            .filter(Boolean);
+        if (searchStatus) {
+            searchStatus.textContent = entries.length
+                ? t('Recientes')
+                : t('Escribe para buscar en toda tu bóveda.');
+        }
+        if (entries.length === 0) {
+            return;
+        }
+    } else {
+        entries = searchIndex
+            .filter((entry) => entry.text.includes(normalized))
+            .sort((a, b) => {
+                const aTitle = normalizeSearch(a.item.metadata?.title || '');
+                const bTitle = normalizeSearch(b.item.metadata?.title || '');
+                const aStarts = aTitle.startsWith(normalized) ? 0 : 1;
+                const bStarts = bTitle.startsWith(normalized) ? 0 : 1;
+                return aStarts - bStarts || aTitle.localeCompare(bTitle);
+            })
+            .slice(0, 40);
+        if (searchStatus) {
+            searchStatus.textContent = entries.length === 1
+                ? t('1 resultado')
+                : tf(':count resultados', { count: entries.length });
+        }
+    }
+
+    if (entries.length === 0) {
+        searchResults.appendChild(el('p', 'mp-empty', t('No encontramos nada con esa búsqueda.')));
+        return;
+    }
+
+    for (const entry of entries) {
+        searchResults.appendChild(searchResultButton(entry));
+    }
+}
+
+function openSearch() {
+    if (!searchModal) {
+        return;
+    }
+    renderSearch('');
+    openDialog(searchModal);
+    setTimeout(() => searchInput?.focus(), 50);
+}
+
+function closeSearch() {
+    closeDialog(searchModal);
+}
+
+function openSearchResult(entry) {
+    closeSearch();
+    recordRecent(entry.item.id);
+
+    if (entry.section === 'pass') {
+        switchTab('pases');
+        wallet?.select(entry.item.id);
+        setTimeout(() => wallet?.inspector?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    } else if (entry.section === 'credential') {
+        switchTab('credentials');
+        credentials?.openEdit(entry.item);
+    } else if (entry.section === 'medical') {
+        switchTab('medical');
+        medical?.openEdit(entry.item);
+    } else {
+        switchTab('docs');
+        currentFilter = 'all';
+        currentSearch = '';
+        if (docSearch) {
+            docSearch.value = '';
+        }
+        renderItems();
+        setTimeout(() => {
+            const card = itemList?.querySelector(`[data-item-id="${CSS.escape(entry.item.id)}"]`);
+            if (card) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+                setTimeout(() => card.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2500);
+            }
+        }, 80);
+    }
 }
 
 function expiryDate(value) {
@@ -2115,6 +2609,7 @@ function renderItems() {
 
     for (const item of filteredItems) {
         const li = el('li', 'mp-card flex flex-col p-5');
+        li.dataset.itemId = item.id;
 
         const header = el('div', 'flex items-start gap-3');
         const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
@@ -2190,6 +2685,7 @@ async function viewItem(item, button) {
         return;
     }
 
+    recordRecent(item.id);
     button.disabled = true;
     button.textContent = t('Abriendo…');
 
@@ -2218,6 +2714,7 @@ async function viewItem(item, button) {
 
 function openEditItem(item) {
     editingItem = item;
+    recordRecent(item.id);
     hideError(editItemError);
     editItemName.value = item.metadata?.title || '';
     editItemExpires.value = item.expires_at ? item.expires_at.slice(0, 10) : '';
@@ -2344,11 +2841,294 @@ async function deleteItem(item, button) {
             throw new Error(t('No se pudo eliminar el documento.'));
         }
         await loadItems();
-        showToast(t('Documento eliminado.'));
+        showToast(t('Movido a la papelera.'), {
+            label: t('Deshacer'),
+            onClick: () => restoreTrashItem(item.id),
+        });
     } catch (error) {
         showError(vaultError, error.message || t('No se pudo eliminar el documento.'));
         button.disabled = false;
     }
+}
+
+function trashTypeLabel(item) {
+    if (isCredentialItem(item)) {
+        return t('Credencial');
+    }
+    if (isMedicalItem(item)) {
+        return t('Carnet médico');
+    }
+    if (item.type === 'ticket' || item.type === 'card' || item.metadata?.pass) {
+        return t('Pase');
+    }
+    return t('Documento');
+}
+
+function trashDateLabel(value) {
+    if (!value) {
+        return '';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+    return date.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+async function loadTrash() {
+    if (!trashList) {
+        return;
+    }
+
+    hideError(trashError);
+    trashList.replaceChildren();
+    if (trashEmpty) {
+        trashEmpty.hidden = true;
+    }
+
+    try {
+        const response = await fetch(`${itemsUrl}?trashed=1`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo cargar la papelera.'));
+        }
+
+        const body = await response.json();
+        const entries = (body.data ?? []).map((item) => {
+            let metadata = {};
+            try {
+                metadata = decryptJson(item.encrypted_metadata);
+            } catch {
+                metadata = { title: t('Documento ilegible') };
+            }
+            return { ...item, metadata };
+        });
+
+        if (entries.length === 0) {
+            if (trashEmpty) {
+                trashEmpty.hidden = false;
+            }
+            return;
+        }
+
+        for (const item of entries) {
+            const card = el('li', 'mp-card flex flex-col gap-3 p-4');
+            const head = el('div', 'flex items-start gap-3');
+            const tile = el('span', 'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-container-high text-primary');
+            tile.appendChild(icon('delete', 'text-[22px]'));
+            head.appendChild(tile);
+
+            const copy = el('div', 'min-w-0 flex-1');
+            copy.appendChild(el('p', 'font-semibold text-on-surface', item.metadata?.title || t('Documento ilegible')));
+            copy.appendChild(el('p', 'mt-1 text-sm text-on-surface-variant', `${trashTypeLabel(item)}${item.deleted_at ? ` · ${trashDateLabel(item.deleted_at)}` : ''}`));
+            head.appendChild(copy);
+            card.appendChild(head);
+
+            const actions = el('div', 'flex flex-wrap gap-2');
+            const restore = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Restaurar'));
+            restore.type = 'button';
+            restore.addEventListener('click', () => restoreTrashItem(item.id, restore));
+            const purge = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Eliminar para siempre'));
+            purge.type = 'button';
+            purge.addEventListener('click', () => purgeTrashItem(item, purge));
+            actions.append(restore, purge);
+            card.appendChild(actions);
+            trashList.appendChild(card);
+        }
+    } catch (error) {
+        showError(trashError, error.message || t('No se pudo cargar la papelera.'));
+    }
+}
+
+async function restoreTrashItem(id, button = null) {
+    if (button) {
+        button.disabled = true;
+    }
+    try {
+        const response = await fetch(`${itemsUrl}/${id}/restore`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo restaurar el elemento.'));
+        }
+        await loadItems();
+        if (trashModal?.open) {
+            await loadTrash();
+        }
+        showToast(t('Elemento restaurado.'));
+    } catch (error) {
+        showError(vaultError, error.message || t('No se pudo restaurar el elemento.'));
+        if (button) {
+            button.disabled = false;
+        }
+    }
+}
+
+async function purgeTrashItem(item, button) {
+    const confirmed = await confirmAction({
+        title: t('¿Eliminar para siempre?'),
+        message: t('Esta acción no se puede deshacer. El elemento y su archivo se borrarán de tu bóveda y del servidor.'),
+        acceptLabel: t('Eliminar para siempre'),
+    });
+    if (!confirmed) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${itemsUrl}/${item.id}/force`, {
+            method: 'DELETE',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo eliminar el elemento.'));
+        }
+        await loadTrash();
+        showToast(t('Elemento eliminado definitivamente.'));
+    } catch (error) {
+        showError(trashError, error.message || t('No se pudo eliminar el elemento.'));
+        button.disabled = false;
+    }
+}
+
+function openBackup() {
+    if (!backupModal || !masterKey) {
+        return;
+    }
+    hideError(backupError);
+    if (backupStatus) {
+        backupStatus.hidden = true;
+        backupStatus.textContent = '';
+    }
+    openDialog(backupModal);
+}
+
+function closeBackup() {
+    closeDialog(backupModal);
+}
+
+function setBackupBusy(busy) {
+    if (backupExportButton) {
+        backupExportButton.disabled = busy;
+    }
+    if (backupImportButton) {
+        backupImportButton.disabled = busy;
+    }
+}
+
+async function backupExportClick() {
+    hideError(backupError);
+    const passphrase = backupPassphrase?.value || '';
+    const confirmation = backupPassphraseConfirm?.value || '';
+    if (passphrase.length < 12) {
+        showError(backupError, t('Usa una frase de al menos 12 caracteres.'));
+        return;
+    }
+    if (passphrase !== confirmation) {
+        showError(backupError, t('Las frases no coinciden.'));
+        return;
+    }
+
+    setBackupBusy(true);
+    if (backupStatus) {
+        backupStatus.hidden = false;
+        backupStatus.textContent = t('Creando la copia cifrada…');
+    }
+    try {
+        const count = await exportBackup(passphrase);
+        if (backupStatus) {
+            backupStatus.textContent = count === 1
+                ? t('Copia creada con 1 elemento.')
+                : tf('Copia creada con :count elementos.', { count });
+        }
+        if (backupPassphrase) {
+            backupPassphrase.value = '';
+        }
+        if (backupPassphraseConfirm) {
+            backupPassphraseConfirm.value = '';
+        }
+    } catch (error) {
+        showError(backupError, error.message || t('No se pudo crear la copia.'));
+        if (backupStatus) {
+            backupStatus.hidden = true;
+        }
+    } finally {
+        setBackupBusy(false);
+    }
+}
+
+async function backupImportClick() {
+    hideError(backupError);
+    const file = backupFile?.files?.[0];
+    const passphrase = backupRestorePassphrase?.value || '';
+    if (!file) {
+        showError(backupError, t('Elige el archivo de la copia.'));
+        return;
+    }
+    if (!passphrase) {
+        showError(backupError, t('Escribe la frase de la copia.'));
+        return;
+    }
+
+    const confirmed = await confirmAction({
+        title: t('Restaurar una copia'),
+        message: t('Los elementos de la copia se agregarán a tu bóveda. No se borrará lo que ya tienes.'),
+        acceptLabel: t('Restaurar'),
+    });
+    if (!confirmed) {
+        return;
+    }
+
+    setBackupBusy(true);
+    if (backupStatus) {
+        backupStatus.hidden = false;
+        backupStatus.textContent = t('Restaurando la copia…');
+    }
+    try {
+        const result = await importBackup(file, passphrase);
+        await loadItems();
+        if (backupStatus) {
+            backupStatus.textContent = result.failed === 0
+                ? tf('Se restauraron :count elementos.', { count: result.imported })
+                : tf('Se restauraron :imported elementos; :failed no se pudieron leer.', result);
+        }
+        if (backupFile) {
+            backupFile.value = '';
+        }
+        if (backupRestorePassphrase) {
+            backupRestorePassphrase.value = '';
+        }
+    } catch (error) {
+        showError(backupError, error.message || t('No se pudo restaurar la copia. Revisa la frase y el archivo.'));
+        if (backupStatus) {
+            backupStatus.hidden = true;
+        }
+    } finally {
+        setBackupBusy(false);
+    }
+}
+
+function openTrash() {
+    if (!trashModal) {
+        return;
+    }
+    openDialog(trashModal);
+    void loadTrash();
+}
+
+function closeTrash() {
+    closeDialog(trashModal);
 }
 
 async function uploadEncryptedBytes(encrypted) {
@@ -2525,6 +3305,16 @@ function lock(reason = '') {
     closeDialog(editItemModal);
     closeDialog(manageAccessModal);
     closeDialog(confirmModal);
+    closeDialog(trashModal);
+    closeDialog(searchModal);
+    closeDialog(backupModal);
+    if (trashList) {
+        trashList.replaceChildren();
+    }
+    if (searchResults) {
+        searchResults.replaceChildren();
+    }
+    searchIndex = [];
     editingItem = null;
     if (toast) {
         toast.hidden = true;
@@ -2645,7 +3435,8 @@ function switchTab(tab) {
     if (window.innerWidth < 1024) {
         const anchor = document.getElementById('vault-app');
         if (anchor) {
-            const top = anchor.getBoundingClientRect().top + window.scrollY - 88;
+            const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 72;
+            const top = anchor.getBoundingClientRect().top + window.scrollY - headerHeight - 12;
             window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
         }
     }
@@ -2709,8 +3500,179 @@ async function savePass(payload) {
     });
 }
 
+function updateSharePendingBanner() {
+    if (!sharePending || !sharePendingText) {
+        return;
+    }
+
+    const count = pendingSharedFiles.length;
+    sharePending.hidden = count === 0 || Boolean(masterKey);
+    if (count === 0) {
+        return;
+    }
+
+    sharePendingText.textContent = count === 1
+        ? t('Tienes 1 archivo compartido. Se guardará cuando abras la bóveda.')
+        : tf('Tienes :count archivos compartidos. Se guardarán cuando abras la bóveda.', { count });
+}
+
+async function requestSharedFiles() {
+    if (shareRequestInFlight || !('serviceWorker' in navigator)) {
+        return;
+    }
+
+    shareRequestInFlight = true;
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const target = navigator.serviceWorker.controller || registration.active;
+        if (!target) {
+            return;
+        }
+
+        const files = await new Promise((resolve) => {
+            const channel = new MessageChannel();
+            const timer = setTimeout(() => resolve([]), 1800);
+            channel.port1.onmessage = (event) => {
+                clearTimeout(timer);
+                resolve(Array.isArray(event.data?.files) ? event.data.files : []);
+            };
+            target.postMessage({ type: 'mypass-share-request' }, [channel.port2]);
+        });
+
+        if (files.length > 0) {
+            await receiveSharedFiles(files);
+        } else if (new URLSearchParams(window.location.search).get('share') === '1') {
+            showToast(t('No se recibieron los archivos. Vuelve a compartirlos desde la otra app.'));
+        }
+    } catch {
+        // El share target solo funciona en HTTPS o localhost; el resto de la bóveda sigue igual.
+    } finally {
+        shareRequestInFlight = false;
+    }
+}
+
+async function receiveSharedFiles(files) {
+    pendingSharedFiles = files.slice(0, 20);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('share')) {
+        url.searchParams.delete('share');
+        window.history.replaceState({}, '', url.toString());
+    }
+    updateSharePendingBanner();
+
+    if (masterKey) {
+        await confirmAndSaveSharedFiles();
+    }
+}
+
+async function confirmAndSaveSharedFiles() {
+    if (!masterKey || pendingSharedFiles.length === 0) {
+        return;
+    }
+
+    const count = pendingSharedFiles.length;
+    const confirmed = await confirmAction({
+        title: t('Guardar archivos compartidos'),
+        message: count === 1
+            ? t('El archivo se cifrará en este navegador antes de guardarse en tu bóveda.')
+            : tf('Los :count archivos se cifrarán en este navegador antes de guardarse en tu bóveda.', { count }),
+        acceptLabel: t('Guardar'),
+    });
+
+    if (!confirmed) {
+        pendingSharedFiles = [];
+        updateSharePendingBanner();
+        return;
+    }
+
+    await saveSharedFilesWeb(pendingSharedFiles.splice(0));
+}
+
+async function saveSharedFilesWeb(files) {
+    if (files.length === 0) {
+        return;
+    }
+
+    let saved = 0;
+    let failed = 0;
+
+    for (const [index, file] of files.entries()) {
+        showToast(tf('Guardando :current de :total…', { current: index + 1, total: files.length }));
+        try {
+            if (file.size > 100 * 1024 * 1024) {
+                throw new Error(t('El archivo supera los 100 MB.'));
+            }
+            const blob = await uploadFile(file);
+            const title = file.name.replace(/\.[^.]+$/, '').trim() || t('Documento');
+            const metadata = {
+                title,
+                type: 'document',
+                original_name: file.name,
+                mime: file.type || 'application/octet-stream',
+                size: file.size,
+                expires_at: null,
+            };
+            const response = await fetch(itemsUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    type: 'document',
+                    encrypted_metadata: encryptJson(metadata),
+                    blob_id: blob.id,
+                    expires_at: null,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(t('No se pudo guardar el documento.'));
+            }
+            saved += 1;
+        } catch {
+            failed += 1;
+        }
+    }
+
+    await loadItems();
+    if (saved > 0 && failed === 0) {
+        showToast(saved === 1 ? t('Archivo guardado en tu bóveda.') : tf(':count archivos guardados en tu bóveda.', { count: saved }));
+    } else if (saved > 0) {
+        showToast(tf(':saved archivos guardados; :failed no se pudieron leer.', { saved, failed }));
+    } else {
+        showToast(t('No se pudieron guardar los archivos compartidos.'));
+    }
+}
+
+async function initShareTarget() {
+    if (!('serviceWorker' in navigator)) {
+        return;
+    }
+
+    try {
+        await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.type === 'mypass-share-ready') {
+                void requestSharedFiles();
+            }
+        });
+
+        const mode = new URLSearchParams(window.location.search).get('share');
+        if (mode === '1') {
+            void requestSharedFiles();
+        } else if (mode === 'error') {
+            showToast(t('No se pudieron leer los archivos compartidos.'));
+        }
+    } catch {
+        // La PWA es opcional; la bóveda funciona sin service worker.
+    }
+}
+
 async function init() {
     await sodium.ready;
+    void initShareTarget();
     await refreshTrustedDeviceCard();
 
     try {
@@ -2798,6 +3760,39 @@ if (app) {
     });
     addForm?.addEventListener('submit', addItem);
     lockButton?.addEventListener('click', () => lock());
+    backupOpen?.addEventListener('click', openBackup);
+    backupClose?.addEventListener('click', closeBackup);
+    backupExportButton?.addEventListener('click', backupExportClick);
+    backupImportButton?.addEventListener('click', backupImportClick);
+    backupModal?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        closeBackup();
+    });
+    searchOpen?.addEventListener('click', openSearch);
+    searchClose?.addEventListener('click', closeSearch);
+    searchInput?.addEventListener('input', () => renderSearch(searchInput.value));
+    searchModal?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        closeSearch();
+    });
+    document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            openSearch();
+        }
+    });
+    window.addEventListener('mypass:item-open', (event) => {
+        recordRecent(event.detail?.id);
+        if (searchModal?.open) {
+            renderSearch(searchInput?.value || '');
+        }
+    });
+    trashOpen?.addEventListener('click', openTrash);
+    trashClose?.addEventListener('click', closeTrash);
+    trashModal?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        closeTrash();
+    });
     document.addEventListener('pointerdown', markActivity, { passive: true });
     document.addEventListener('keydown', markActivity);
     document.addEventListener('wheel', markActivity, { passive: true });

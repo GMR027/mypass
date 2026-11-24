@@ -3,6 +3,7 @@ package app.mypass
 import com.goterl.lazysodium.LazySodiumAndroid
 import com.goterl.lazysodium.SodiumAndroid
 import com.goterl.lazysodium.interfaces.AEAD
+import com.sun.jna.NativeLong
 import com.goterl.lazysodium.interfaces.Box
 import com.goterl.lazysodium.interfaces.PwHash
 import java.io.ByteArrayOutputStream
@@ -33,19 +34,24 @@ object Crypto {
     }
 
     fun argon2id(password: String, salt: ByteArray): ByteArray {
+        return argon2id(password, salt, PIN_OPS, PIN_MEM)
+    }
+
+    fun argon2id(password: String, salt: ByteArray, opsLimit: Long, memLimit: Long): ByteArray {
         val output = ByteArray(32)
+        val passwordBytes = password.toByteArray(Charsets.UTF_8)
         val ok = sodium.cryptoPwHash(
             output,
             output.size,
-            password.toByteArray(Charsets.UTF_8),
-            password.toByteArray(Charsets.UTF_8).size,
+            passwordBytes,
+            passwordBytes.size,
             salt,
-            PwHash.OPSLIMIT_INTERACTIVE,
-            PwHash.MEMLIMIT_INTERACTIVE,
+            opsLimit,
+            NativeLong(memLimit),
             PwHash.Alg.PWHASH_ALG_ARGON2ID13,
         )
 
-        check(ok) { "No se pudo derivar la llave del PIN." }
+        check(ok) { "No se pudo derivar la llave." }
 
         return output
     }

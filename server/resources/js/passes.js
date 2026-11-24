@@ -1,4 +1,6 @@
 import { applyAppearance, normalizeAppearance } from './pass-appearance';
+import { passMapUrl } from './geo';
+import { downloadCalendar, passCalendar } from './calendar';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -632,6 +634,8 @@ class WalletApp {
         this.itemId = document.getElementById('pass-item-id');
         this.presentButton = document.getElementById('pass-present');
         this.shareButton = document.getElementById('pass-share');
+        this.mapButton = document.getElementById('pass-map');
+        this.calendarButton = document.getElementById('pass-calendar');
         this.copyButton = document.getElementById('pass-copy');
         this.downloadButton = document.getElementById('pass-download');
         this.printButton = document.getElementById('pass-print');
@@ -714,6 +718,8 @@ class WalletApp {
         this.quickPresent?.addEventListener('click', () => this.presentSelected());
         this.nextPresent?.addEventListener('click', () => this.presentNext());
         this.presentButton?.addEventListener('click', () => this.presentSelected());
+        this.mapButton?.addEventListener('click', () => this.openMap());
+        this.calendarButton?.addEventListener('click', () => this.addToCalendar());
         this.copyButton?.addEventListener('click', () => this.copySelected());
         this.downloadButton?.addEventListener('click', () => this.downloadSelected());
         this.printButton?.addEventListener('click', () => this.printSelected());
@@ -973,6 +979,12 @@ class WalletApp {
             this.printButton.disabled = true;
             this.shareButton.disabled = true;
             this.editButton.disabled = true;
+            if (this.mapButton) {
+                this.mapButton.hidden = true;
+            }
+            if (this.calendarButton) {
+                this.calendarButton.hidden = true;
+            }
             return;
         }
 
@@ -1007,6 +1019,15 @@ class WalletApp {
         this.editButton.disabled = false;
         this.shareButton.disabled = !shareAllowed;
         this.shareButton.title = shareAllowed ? '' : t('Agrega un contacto de confianza para compartir.');
+
+        if (this.mapButton) {
+            const url = passMapUrl(pass);
+            this.mapButton.hidden = !url;
+            this.mapButton.disabled = !url;
+        }
+        if (this.calendarButton) {
+            this.calendarButton.hidden = !passCalendar(item, pass);
+        }
 
         renderCodeInto(this.codeCanvas, payload, format, { scale: 4 });
     }
@@ -1048,6 +1069,7 @@ class WalletApp {
     select(id) {
         this.selectedId = id;
         this.refresh();
+        window.dispatchEvent(new CustomEvent('mypass:item-open', { detail: { id } }));
     }
 
     setView(view, persist = true) {
@@ -1135,6 +1157,27 @@ class WalletApp {
     closePresentation() {
         this.presentation?.close();
         this.releasePresentation();
+    }
+
+    openMap() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            return;
+        }
+        const url = passMapUrl(entry.pass);
+        if (url) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+    }
+
+    addToCalendar() {
+        const entry = this.selectedEntry();
+        if (!entry) {
+            return;
+        }
+        if (!downloadCalendar(entry.item, entry.pass)) {
+            this.options.toast?.(t('Este pase no tiene una fecha para el calendario.'));
+        }
     }
 
     async copySelected() {

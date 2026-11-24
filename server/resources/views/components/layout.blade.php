@@ -7,6 +7,8 @@
     <title>{{ $title ?? 'My Pass' }} · My Pass</title>
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon-32.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/favicon-180.png') }}">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#012d1d">
     <x-translations />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>

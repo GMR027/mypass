@@ -2,9 +2,11 @@ package app.mypass
 
 import android.app.LocaleManager
 import android.content.Intent
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -164,6 +166,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewModel.queueShortcut(intent?.action)
+        viewModel.queueOpenItem(intent?.getStringExtra("item_id"))
+        viewModel.addSharedUris(intent.sharedUris())
         if (!allowScreenCapture) {
             window.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
@@ -176,6 +181,55 @@ class MainActivity : FragmentActivity() {
         setContent {
             val state by viewModel.state.collectAsState()
             val baseDensity = LocalDensity.current
+
+            LaunchedEffect(state.screen, state.pendingShortcut) {
+                if (state.pendingShortcut != null && state.screen !in setOf(
+                        Screen.Loading,
+                        Screen.Login,
+                        Screen.Pair,
+                        Screen.PinSetup,
+                        Screen.TwoFactor,
+                        Screen.RecoverVault,
+                        Screen.Locked,
+                    )
+                ) {
+                    viewModel.consumeShortcut()
+                }
+            }
+
+            LaunchedEffect(state.screen, state.pendingOpenItemId, state.items) {
+                if (state.pendingOpenItemId != null &&
+                    state.items.any { it.id == state.pendingOpenItemId } &&
+                    state.screen !in setOf(
+                        Screen.Loading,
+                        Screen.Login,
+                        Screen.Pair,
+                        Screen.PinSetup,
+                        Screen.TwoFactor,
+                        Screen.RecoverVault,
+                        Screen.Locked,
+                    )
+                ) {
+                    viewModel.consumeOpenItem()
+                }
+            }
+
+            LaunchedEffect(state.screen, state.sharedFiles) {
+                if (state.sharedFiles.isNotEmpty() &&
+                    state.screen !in setOf(
+                        Screen.Loading,
+                        Screen.Login,
+                        Screen.Pair,
+                        Screen.PinSetup,
+                        Screen.TwoFactor,
+                        Screen.RecoverVault,
+                        Screen.Locked,
+                        Screen.ShareImport,
+                    )
+                ) {
+                    viewModel.openShareImport()
+                }
+            }
 
             MyPassTheme {
                 CompositionLocalProvider(
@@ -196,6 +250,10 @@ class MainActivity : FragmentActivity() {
                                 state.screen == Screen.CredentialEditor ||
                                 state.screen == Screen.Medical ||
                                 state.screen == Screen.MedicalEditor ||
+                                state.screen == Screen.Trash ||
+                                state.screen == Screen.Search ||
+                                state.screen == Screen.ShareImport ||
+                                state.screen == Screen.Backup ||
                                 state.screen == Screen.Notifications,
                         ) {
                             when (state.screen) {
@@ -206,6 +264,10 @@ class MainActivity : FragmentActivity() {
                                 Screen.MedicalEditor -> viewModel.discardMedicalDraft()
                                 Screen.Notifications -> viewModel.closeNotifications()
                                 Screen.Credentials, Screen.Medical -> viewModel.backToVault()
+                                Screen.Trash -> viewModel.openSettings()
+                                Screen.Search -> viewModel.closeSearch()
+                                Screen.ShareImport -> viewModel.discardSharedFiles()
+                                Screen.Backup -> viewModel.openSettings()
                                 else -> viewModel.backToHome()
                             }
                         }
@@ -214,6 +276,14 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.queueShortcut(intent.action)
+        viewModel.queueOpenItem(intent.getStringExtra("item_id"))
+        viewModel.addSharedUris(intent.sharedUris())
     }
 
     override fun onStart() {
@@ -295,6 +365,10 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
                     Screen.Medical -> MedicalScreen(state = state, viewModel = viewModel)
                     Screen.MedicalEditor -> MedicalEditorScreen(state = state, viewModel = viewModel)
                     Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
+                    Screen.Trash -> TrashScreen(state = state, viewModel = viewModel)
+                    Screen.Search -> SearchScreen(state = state, viewModel = viewModel)
+                    Screen.ShareImport -> ShareImportScreen(state = state, viewModel = viewModel)
+                    Screen.Backup -> BackupScreen(state = state, viewModel = viewModel)
                     Screen.Scan -> ScannerScreen(state = state, viewModel = viewModel)
                     Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
                     Screen.Notifications -> NotificationsScreen(state = state, viewModel = viewModel)
@@ -2138,6 +2212,90 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                 }
             }
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AgendaReminders.canScheduleExactAlarms(context)) {
+                item {
+                    MpCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                text = stringResource(R.string.exact_alarms_title),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.exact_alarms_help),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                            MpButton(
+                                text = stringResource(R.string.exact_alarms_open),
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                        .setData(Uri.parse("package:${context.packageName}"))
+                                    runCatching { context.startActivity(intent) }
+                                },
+                                variant = MpButtonVariant.Secondary,
+                                fillWidth = true,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        MpIconTile(icon = Icons.Filled.Lock, size = 46)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.backup_title), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = stringResource(R.string.backup_settings_help),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                        }
+                        MpButton(
+                            text = stringResource(R.string.backup_open),
+                            onClick = viewModel::openBackup,
+                            variant = MpButtonVariant.Quiet,
+                            compact = true,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        MpIconTile(icon = Icons.Filled.Delete, size = 46)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.trash_title), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = if (state.trashItems.isEmpty()) {
+                                    stringResource(R.string.trash_empty_body)
+                                } else {
+                                    stringResource(R.string.trash_settings_count, state.trashItems.size)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                        }
+                        MpButton(
+                            text = stringResource(R.string.trash_open),
+                            onClick = viewModel::openTrash,
+                            variant = MpButtonVariant.Quiet,
+                            compact = true,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
             item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -3093,5 +3251,32 @@ private fun PdfViewer(path: String) {
                 enabled = pageIndex < pageCount - 1,
             )
         }
+    }
+}
+
+private fun Intent?.sharedUris(): List<Uri> {
+    val value = this ?: return emptyList()
+    if (value.action != Intent.ACTION_SEND && value.action != Intent.ACTION_SEND_MULTIPLE) {
+        return emptyList()
+    }
+
+    val fromClip = value.clipData?.let { clip ->
+        buildList {
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index).uri?.let(::add)
+            }
+        }
+    }.orEmpty()
+
+    if (fromClip.isNotEmpty()) {
+        return fromClip
+    }
+
+    @Suppress("DEPRECATION")
+    val extra: Any? = value.getParcelableExtra(Intent.EXTRA_STREAM)
+    return when (extra) {
+        is Uri -> listOf(extra)
+        is ArrayList<*> -> extra.filterIsInstance<Uri>()
+        else -> emptyList()
     }
 }

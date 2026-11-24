@@ -109,6 +109,48 @@ function today() {
     return new Date().toISOString().slice(0, 10);
 }
 
+function parseTotpUri(value) {
+    const config = parseTotp(value);
+    if (!config) {
+        return null;
+    }
+
+    const text = String(value || '').trim();
+    if (!text.toLowerCase().startsWith('otpauth://')) {
+        return { config, issuer: '', account: '' };
+    }
+
+    try {
+        const url = new URL(text);
+        const label = decodeURIComponent(url.pathname.replace(/^\//, ''));
+        const labelIssuer = label.includes(':') ? label.split(':')[0].trim() : label.trim();
+        const labelAccount = label.includes(':') ? label.split(':').slice(1).join(':').trim() : '';
+        const issuer = (url.searchParams.get('issuer') || '').trim() || labelIssuer;
+        return {
+            config,
+            issuer,
+            account: labelAccount || (issuer ? '' : label.trim()),
+        };
+    } catch {
+        return { config, issuer: '', account: '' };
+    }
+}
+
+async function decodeQrImage(file) {
+    const { default: jsQR } = await import('jsqr');
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const result = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+    return result?.data || null;
+}
+
 function totpToUri(config) {
     if (!config?.secret) {
         return '';
@@ -259,6 +301,9 @@ export class CredentialsApp {
         this.generateButton = document.getElementById('credential-generate');
         this.urlInput = document.getElementById('credential-url');
         this.totpInput = document.getElementById('credential-totp');
+        this.totpScanButton = document.getElementById('credential-totp-scan');
+        this.totpQrInput = document.getElementById('credential-totp-qr');
+        this.totpScanStatus = document.getElementById('credential-totp-scan-status');
         this.tagsInput = document.getElementById('credential-tags');
         this.notesInput = document.getElementById('credential-notes');
         this.fileInput = document.getElementById('credential-file');
@@ -384,6 +429,11 @@ export class CredentialsApp {
             this.passwordInput.focus();
             this.passwordInput.select();
         });
+
+        this.totpScanButton?.addEventListener('click', () => {
+            this.totpQrInput?.click();
+        });
+        this.totpQrInput?.addEventListener('change', () => this.scanTotpQr());
 
         this.passwordInput?.addEventListener('input', () => this.updatePasswordStrength());
         this.passwordToggle?.addEventListener('click', () => {
@@ -652,6 +702,7 @@ export class CredentialsApp {
 
         const parsed = credentialFromItem(item);
         this.editing = item;
+        window.dispatchEvent(new CustomEvent('mypass:item-open', { detail: { id: item.id } }));
         this.baseMetadata = item.metadata ? { ...item.metadata } : {};
         this.existingBlobId = item.blob_id || null;
         this.clearAttachment = false;
@@ -712,6 +763,9 @@ export class CredentialsApp {
         this.closeCustomTypePanel();
         this.form?.reset();
         this.hideError();
+        if (this.totpScanStatus) {
+            this.totpScanStatus.textContent = '';
+        }
         this.renderFileState();
         this.renderAppearance();
     }
@@ -745,6 +799,49 @@ export class CredentialsApp {
         this.passwordStrength.textContent = this.passwordInput.value
             ? tf('Seguridad: :label', { label: t(strength.label) })
             : '';
+    }
+
+    async scanTotpQr() {
+        const file = this.totpQrInput?.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        if (this.totpScanStatus) {
+            this.totpScanStatus.textContent = t('Leyendo el código QR…');
+        }
+
+        try {
+            const payload = await decodeQrImage(file);
+            if (!payload) {
+                throw new Error(t('No se encontró un código QR en la imagen.'));
+            }
+            const parsed = parseTotpUri(payload);
+            if (!parsed) {
+                throw new Error(t('Ese QR no contiene una configuración TOTP válida.'));
+            }
+
+            this.totpInput.value = payload;
+            if (!this.titleInput.value.trim() && parsed.issuer) {
+                this.titleInput.value = parsed.issuer;
+            }
+            if (!this.usernameInput.value.trim() && parsed.account) {
+                this.usernameInput.value = parsed.account;
+            }
+            if (this.totpScanStatus) {
+                this.totpScanStatus.textContent = t('Código TOTP detectado.');
+            }
+            this.hideError();
+        } catch (error) {
+            if (this.totpScanStatus) {
+                this.totpScanStatus.textContent = '';
+            }
+            this.showError(error.message || t('No se pudo leer el código QR.'));
+        } finally {
+            if (this.totpQrInput) {
+                this.totpQrInput.value = '';
+            }
+        }
     }
 
     showError(message) {

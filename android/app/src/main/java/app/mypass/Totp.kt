@@ -12,18 +12,26 @@ data class TotpConfig(
     val period: Int = 30,
 )
 
+data class TotpUri(
+    val config: TotpConfig,
+    val issuer: String = "",
+    val account: String = "",
+)
+
 object Totp {
     private const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
-    fun parse(value: String): TotpConfig? {
+    fun parse(value: String): TotpConfig? = parseUri(value)?.config
+
+    fun parseUri(value: String): TotpUri? {
         val text = value.trim()
         if (text.isBlank()) {
             return null
         }
 
         if (!text.startsWith("otpauth://", ignoreCase = true)) {
-            val secret = normalize(text)
-            return if (secret != null) TotpConfig(secret = secret) else null
+            val secret = normalize(text) ?: return null
+            return TotpUri(TotpConfig(secret = secret))
         }
 
         return runCatching {
@@ -40,12 +48,25 @@ object Totp {
                     key to value
                 }
             val secret = normalize(params["secret"].orEmpty()) ?: return null
-            TotpConfig(
-                secret = secret,
-                algorithm = params["algorithm"].orEmpty().uppercase()
-                    .takeIf { it in setOf("SHA1", "SHA256", "SHA512") } ?: "SHA1",
-                digits = params["digits"]?.toIntOrNull()?.coerceIn(4, 10) ?: 6,
-                period = params["period"]?.toIntOrNull()?.coerceIn(10, 120) ?: 30,
+            val label = runCatching {
+                URLDecoder.decode(uri.path.orEmpty().removePrefix("/"), "UTF-8")
+            }.getOrDefault("")
+            val labelIssuer = label.substringBefore(":", "").trim()
+            val labelAccount = if (label.contains(':')) label.substringAfter(':').trim() else label.trim()
+            val issuer = params["issuer"].orEmpty().trim().ifBlank { labelIssuer }
+            val account = labelAccount.ifBlank {
+                if (issuer.isBlank()) label.trim() else ""
+            }
+            TotpUri(
+                config = TotpConfig(
+                    secret = secret,
+                    algorithm = params["algorithm"].orEmpty().uppercase()
+                        .takeIf { it in setOf("SHA1", "SHA256", "SHA512") } ?: "SHA1",
+                    digits = params["digits"]?.toIntOrNull()?.coerceIn(4, 10) ?: 6,
+                    period = params["period"]?.toIntOrNull()?.coerceIn(10, 120) ?: 30,
+                ),
+                issuer = issuer,
+                account = account,
             )
         }.getOrNull()
     }

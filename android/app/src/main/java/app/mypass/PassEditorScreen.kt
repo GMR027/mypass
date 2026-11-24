@@ -890,6 +890,8 @@ private fun fieldDefinitions(category: String): List<PassFieldDefinition> {
         )
         "event" -> listOf(
             PassFieldDefinition("location", stringResource(R.string.location), stringResource(R.string.stadium_placeholder)),
+            PassFieldDefinition("address", stringResource(R.string.address_optional), stringResource(R.string.address_placeholder)),
+            PassFieldDefinition("coordinates", stringResource(R.string.exact_location_optional), stringResource(R.string.coordinates_placeholder)),
             PassFieldDefinition("date", stringResource(R.string.event_date), "2026-11-28", isDate = true),
             PassFieldDefinition("time", stringResource(R.string.event_time), "20:30"),
             PassFieldDefinition("gate", stringResource(R.string.access_gate), "6"),
@@ -899,6 +901,9 @@ private fun fieldDefinitions(category: String): List<PassFieldDefinition> {
         )
         "transit" -> listOf(
             PassFieldDefinition("route", stringResource(R.string.route), "Madrid → Barcelona"),
+            PassFieldDefinition("location", stringResource(R.string.station_stop), stringResource(R.string.station_placeholder)),
+            PassFieldDefinition("address", stringResource(R.string.address_optional), stringResource(R.string.address_placeholder)),
+            PassFieldDefinition("coordinates", stringResource(R.string.exact_location_optional), stringResource(R.string.coordinates_placeholder)),
             PassFieldDefinition("date", stringResource(R.string.travel_date), "2026-11-28", isDate = true),
             PassFieldDefinition("time", stringResource(R.string.departure_time), "17:45", isTime = true),
             PassFieldDefinition("boarding_start", stringResource(R.string.boarding_start), "17:05", isTime = true),

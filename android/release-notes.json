@@ -1,14 +1,26 @@
 {
   "es": [
-    "Rueda de fecha rediseñada, con números grandes y un resumen claro para elegir tu cumpleaños.",
-    "Credenciales más cómodas en el teléfono: tarjetas adaptativas, editor a pantalla completa y botones que ya no se amontonan.",
-    "La pila de pases muestra solo el encabezado de los pases cerrados; toca uno para verlo completo.",
-    "Pestañas de la bóveda en una cuadrícula clara y editor de credenciales a pantalla completa en la web móvil."
+    "Guarda la ubicación de eventos y transportes y ábrela en Google Maps u otra app instalada.",
+    "Avisos de check-in y calendario para tus pases, con ubicación, asiento y puerta.",
+    "Importa códigos TOTP escaneando el QR con la cámara.",
+    "Papelera de 30 días con Deshacer para documentos, pases, credenciales y salud.",
+    "Búsqueda global y recientes en toda la bóveda, también desde el teléfono.",
+    "Recordatorios de medicamentos y citas médicas, con avisos puntuales si lo permites.",
+    "Guarda archivos compartidos desde otras apps directamente en My Pass.",
+    "Atajos de Android para buscar, escanear, crear un pase o abrir credenciales.",
+    "Copia de seguridad cifrada completa para cambiar de teléfono o recuperar tu bóveda.",
+    "La web se puede instalar como app y recibir archivos compartidos."
   ],
   "en": [
-    "Redesigned date wheel with large numbers and a clear summary for picking your birthday.",
-    "More comfortable credentials on phones: adaptive cards, a full-screen editor and buttons that no longer crowd together.",
-    "The pass stack shows only the header of closed passes; tap one to see it in full.",
-    "Vault tabs in a clear grid and a full-screen credential editor on mobile web."
+    "Save the location of events and transport passes and open it in Google Maps or another installed app.",
+    "Check-in and calendar reminders for your passes, with location, seat and gate.",
+    "Import TOTP codes by scanning the QR with the camera.",
+    "A 30-day trash with Undo for documents, passes, credentials and health.",
+    "Global search and recent items across the whole vault, also on your phone.",
+    "Medication and medical appointment reminders, with on-time alerts if you allow them.",
+    "Save files shared from other apps directly into My Pass.",
+    "Android shortcuts to search, scan, create a pass or open credentials.",
+    "A complete encrypted backup to change phones or recover your vault.",
+    "The web app can be installed and receive shared files."
   ]
 }

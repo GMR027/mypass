@@ -26,6 +26,17 @@ class TotpTest {
     }
 
     @Test
+    fun parsesIssuerAndAccountFromOtpauthUri() {
+        val parsed = Totp.parseUri(
+            "otpauth://totp/Google:persona@gmail.com?secret=JBSWY3DPEHPK3PXP&issuer=Google",
+        )
+
+        assertEquals("Google", parsed?.issuer)
+        assertEquals("persona@gmail.com", parsed?.account)
+        assertEquals("JBSWY3DPEHPK3PXP", parsed?.config?.secret)
+    }
+
+    @Test
     fun countsDownWithinThePeriod() {
         assertEquals(30, Totp.secondsLeft(30, 0L))
         assertEquals(1, Totp.secondsLeft(30, 29_000L))

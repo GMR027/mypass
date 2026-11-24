@@ -4,6 +4,7 @@ import {
     newUuid,
     splitList,
 } from './vault-secrets';
+import { downloadMedicalCalendar, medicalCalendar } from './calendar';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -58,6 +59,30 @@ export function medicalFromItem(item) {
         allergies: stringList(raw.allergies),
         conditions: stringList(raw.conditions),
         medications: stringList(raw.medications),
+        medicationSchedule: Array.isArray(raw.medication_schedule)
+            ? raw.medication_schedule.filter((entry) => entry && typeof entry === 'object').map((entry) => ({
+                id: typeof entry.id === 'string' ? entry.id : newUuid(),
+                name: typeof entry.name === 'string' ? entry.name : '',
+                dose: typeof entry.dose === 'string' ? entry.dose : '',
+                times: stringList(entry.times).map((time) => String(time).slice(0, 5)),
+                startDate: typeof entry.start_date === 'string' ? entry.start_date : '',
+                endDate: typeof entry.end_date === 'string' ? entry.end_date : '',
+                notes: typeof entry.notes === 'string' ? entry.notes : '',
+            }))
+            : [],
+        appointments: Array.isArray(raw.appointments)
+            ? raw.appointments.filter((entry) => entry && typeof entry === 'object').map((entry) => ({
+                id: typeof entry.id === 'string' ? entry.id : newUuid(),
+                title: typeof entry.title === 'string' ? entry.title : '',
+                date: typeof entry.date === 'string' ? entry.date : '',
+                time: typeof entry.time === 'string' ? entry.time : '',
+                location: typeof entry.location === 'string' ? entry.location : '',
+                notes: typeof entry.notes === 'string' ? entry.notes : '',
+                reminderMinutes: Number.isFinite(Number(entry.reminder_minutes))
+                    ? Math.max(0, Number(entry.reminder_minutes))
+                    : 1440,
+            }))
+            : [],
         emergencyContacts: Array.isArray(raw.emergency_contacts)
             ? raw.emergency_contacts.filter((contact) => contact && typeof contact === 'object').map((contact) => ({
                 name: typeof contact.name === 'string' ? contact.name : '',
@@ -123,7 +148,10 @@ export class MedicalApp {
         this.organInput = document.getElementById('medical-organ-donor');
         this.allergiesInput = document.getElementById('medical-allergies');
         this.conditionsInput = document.getElementById('medical-conditions');
-        this.medicationsInput = document.getElementById('medical-medications');
+        this.medicationsList = document.getElementById('medical-medications-list');
+        this.medicationAdd = document.getElementById('medical-medication-add');
+        this.appointmentsList = document.getElementById('medical-appointments-list');
+        this.appointmentAdd = document.getElementById('medical-appointment-add');
         this.contactName = document.getElementById('medical-contact-name');
         this.contactRelation = document.getElementById('medical-contact-relation');
         this.contactPhone = document.getElementById('medical-contact-phone');
@@ -160,6 +188,20 @@ export class MedicalApp {
         });
 
         this.form?.addEventListener('submit', (event) => this.save(event));
+        this.medicationAdd?.addEventListener('click', () => this.addMedicationRow());
+        this.appointmentAdd?.addEventListener('click', () => this.addAppointmentRow());
+        this.medicationsList?.addEventListener('click', (event) => {
+            const remove = event.target.closest('[data-med-remove]');
+            if (remove) {
+                remove.closest('[data-med-row]')?.remove();
+            }
+        });
+        this.appointmentsList?.addEventListener('click', (event) => {
+            const remove = event.target.closest('[data-appointment-remove]');
+            if (remove) {
+                remove.closest('[data-appointment-row]')?.remove();
+            }
+        });
 
         this.fileInput?.addEventListener('change', () => {
             if (this.fileInput.files?.length) {
@@ -194,6 +236,209 @@ export class MedicalApp {
         this.render();
     }
 
+    inputField(label, type, options = {}) {
+        const wrapper = el('label', 'block');
+        wrapper.appendChild(el('span', 'mp-hint block', label));
+        const input = document.createElement('input');
+        input.type = type;
+        input.className = 'mp-input mt-1';
+        input.autocomplete = 'off';
+        if (options.placeholder) {
+            input.placeholder = options.placeholder;
+        }
+        if (options.maxlength) {
+            input.maxLength = options.maxlength;
+        }
+        if (options.value) {
+            input.value = options.value;
+        }
+        wrapper.appendChild(input);
+        return { wrapper, input };
+    }
+
+    addMedicationRow(medication = {}) {
+        if (!this.medicationsList) {
+            return;
+        }
+
+        const row = el('div', 'rounded-xl border border-outline-variant/60 bg-surface-container-low p-3');
+        row.dataset.medRow = '';
+        row.dataset.medId = medication.id || newUuid();
+
+        const grid = el('div', 'grid gap-2 sm:grid-cols-2');
+        const name = this.inputField(t('Medicamento'), 'text', {
+            placeholder: t('Losartán'),
+            maxlength: 120,
+            value: medication.name || '',
+        });
+        const dose = this.inputField(t('Dosis'), 'text', {
+            placeholder: t('50 mg'),
+            maxlength: 80,
+            value: medication.dose || '',
+        });
+        const times = this.inputField(t('Horas (separadas por comas)'), 'text', {
+            placeholder: '08:00, 20:00',
+            maxlength: 120,
+            value: (medication.times || []).join(', '),
+        });
+        name.input.dataset.medName = '';
+        dose.input.dataset.medDose = '';
+        times.input.dataset.medTimes = '';
+        grid.append(name.wrapper, dose.wrapper, times.wrapper);
+
+        const dates = el('div', 'mt-2 grid gap-2 sm:grid-cols-2');
+        const start = this.inputField(t('Desde (opcional)'), 'date', { value: medication.startDate || '' });
+        const end = this.inputField(t('Hasta (opcional)'), 'date', { value: medication.endDate || '' });
+        start.input.dataset.medStart = '';
+        end.input.dataset.medEnd = '';
+        dates.append(start.wrapper, end.wrapper);
+
+        const footer = el('div', 'mt-2 flex justify-end');
+        const remove = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Quitar'));
+        remove.type = 'button';
+        remove.dataset.medRemove = '';
+        footer.appendChild(remove);
+
+        row.append(grid, dates, footer);
+        this.medicationsList.appendChild(row);
+
+        if (!medication.name) {
+            name.input.focus();
+        }
+    }
+
+    addAppointmentRow(appointment = {}) {
+        if (!this.appointmentsList) {
+            return;
+        }
+
+        const row = el('div', 'rounded-xl border border-outline-variant/60 bg-surface-container-low p-3');
+        row.dataset.appointmentRow = '';
+        row.dataset.appointmentId = appointment.id || newUuid();
+
+        const grid = el('div', 'grid gap-2 sm:grid-cols-2');
+        const title = this.inputField(t('Motivo o especialidad'), 'text', {
+            placeholder: t('Cardiólogo'),
+            maxlength: 120,
+            value: appointment.title || '',
+        });
+        const location = this.inputField(t('Lugar (opcional)'), 'text', {
+            placeholder: t('Consultorio, clínica…'),
+            maxlength: 180,
+            value: appointment.location || '',
+        });
+        title.input.dataset.appointmentTitle = '';
+        location.input.dataset.appointmentLocation = '';
+        grid.append(title.wrapper, location.wrapper);
+
+        const when = el('div', 'mt-2 grid gap-2 sm:grid-cols-2');
+        const date = this.inputField(t('Fecha'), 'date', { value: appointment.date || '' });
+        const time = this.inputField(t('Hora'), 'time', { value: appointment.time || '' });
+        date.input.dataset.appointmentDate = '';
+        time.input.dataset.appointmentTime = '';
+        when.append(date.wrapper, time.wrapper);
+
+        const options = el('div', 'mt-2 grid gap-2 sm:grid-cols-2');
+        const notes = this.inputField(t('Notas (opcional)'), 'text', {
+            placeholder: t('Llevar estudios…'),
+            maxlength: 240,
+            value: appointment.notes || '',
+        });
+        notes.input.dataset.appointmentNotes = '';
+        const reminderWrap = el('label', 'block');
+        reminderWrap.appendChild(el('span', 'mp-hint block', t('Avisarme')));
+        const reminder = document.createElement('select');
+        reminder.className = 'mp-select mt-1';
+        reminder.dataset.appointmentReminder = '';
+        for (const [value, label] of [
+            ['1440', t('1 día antes')],
+            ['120', t('2 horas antes')],
+            ['30', t('30 minutos antes')],
+        ]) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            option.selected = Number(appointment.reminderMinutes || 1440) === Number(value);
+            reminder.appendChild(option);
+        }
+        reminderWrap.appendChild(reminder);
+        options.append(notes.wrapper, reminderWrap);
+
+        const footer = el('div', 'mt-2 flex justify-end');
+        const remove = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Quitar'));
+        remove.type = 'button';
+        remove.dataset.appointmentRemove = '';
+        footer.appendChild(remove);
+
+        row.append(grid, when, options, footer);
+        this.appointmentsList.appendChild(row);
+
+        if (!appointment.title) {
+            title.input.focus();
+        }
+    }
+
+    readMedications() {
+        return Array.from(this.medicationsList?.querySelectorAll('[data-med-row]') || [])
+            .map((row) => {
+                const name = row.querySelector('[data-med-name]')?.value.trim() || '';
+                const times = (row.querySelector('[data-med-times]')?.value || '')
+                    .split(/[,\s;]+/)
+                    .map((value) => value.trim().slice(0, 5))
+                    .filter((value) => /^\d{1,2}:\d{2}$/.test(value))
+                    .map((value) => value.padStart(5, '0'));
+                return {
+                    id: row.dataset.medId || newUuid(),
+                    name,
+                    dose: row.querySelector('[data-med-dose]')?.value.trim() || '',
+                    times: [...new Set(times)],
+                    start_date: row.querySelector('[data-med-start]')?.value || '',
+                    end_date: row.querySelector('[data-med-end]')?.value || '',
+                };
+            })
+            .filter((entry) => entry.name);
+    }
+
+    readAppointments() {
+        return Array.from(this.appointmentsList?.querySelectorAll('[data-appointment-row]') || [])
+            .map((row) => ({
+                id: row.dataset.appointmentId || newUuid(),
+                title: row.querySelector('[data-appointment-title]')?.value.trim() || '',
+                date: row.querySelector('[data-appointment-date]')?.value || '',
+                time: row.querySelector('[data-appointment-time]')?.value.slice(0, 5) || '',
+                location: row.querySelector('[data-appointment-location]')?.value.trim() || '',
+                notes: row.querySelector('[data-appointment-notes]')?.value.trim() || '',
+                reminder_minutes: Number(row.querySelector('[data-appointment-reminder]')?.value || 1440),
+            }))
+            .filter((entry) => entry.title);
+    }
+
+    renderMedicationRows(schedule, legacy) {
+        if (!this.medicationsList) {
+            return;
+        }
+        this.medicationsList.replaceChildren();
+        const rows = Array.isArray(schedule) && schedule.length > 0
+            ? schedule
+            : (legacy || []).map((name) => ({ name }));
+        for (const medication of rows) {
+            this.addMedicationRow(medication);
+        }
+        if (rows.length === 0) {
+            this.addMedicationRow();
+        }
+    }
+
+    renderAppointmentRows(appointments) {
+        if (!this.appointmentsList) {
+            return;
+        }
+        this.appointmentsList.replaceChildren();
+        for (const appointment of appointments || []) {
+            this.addAppointmentRow(appointment);
+        }
+    }
+
     openNew() {
         if (!this.modal) {
             return;
@@ -209,6 +454,8 @@ export class MedicalApp {
         this.idInput.value = '';
         this.versionInput.value = '';
         this.blobInput.value = '';
+        this.renderMedicationRows([], []);
+        this.renderAppointmentRows([]);
         this.renderFileState();
         this.hideError();
         this.modal.showModal();
@@ -223,6 +470,7 @@ export class MedicalApp {
         const medical = medicalFromItem(item);
         const contact = medical.emergencyContacts[0] || { name: '', relation: '', phone: '' };
         this.editing = item;
+        window.dispatchEvent(new CustomEvent('mypass:item-open', { detail: { id: item.id } }));
         this.baseMetadata = item.metadata ? { ...item.metadata } : {};
         this.existingBlobId = item.blob_id || null;
         this.clearAttachment = false;
@@ -239,7 +487,8 @@ export class MedicalApp {
         this.organInput.checked = medical.organDonor;
         this.allergiesInput.value = medical.allergies.join(', ');
         this.conditionsInput.value = medical.conditions.join(', ');
-        this.medicationsInput.value = medical.medications.join(', ');
+        this.renderMedicationRows(medical.medicationSchedule, medical.medications);
+        this.renderAppointmentRows(medical.appointments);
         this.contactName.value = contact.name;
         this.contactRelation.value = contact.relation;
         this.contactPhone.value = contact.phone;
@@ -272,6 +521,8 @@ export class MedicalApp {
         this.clearAttachment = false;
         this.fileLabel = '';
         this.form?.reset();
+        this.medicationsList?.replaceChildren();
+        this.appointmentsList?.replaceChildren();
         this.hideError();
         this.renderFileState();
     }
@@ -321,6 +572,8 @@ export class MedicalApp {
         }
 
         const previous = this.editing ? medicalFromItem(this.editing) : null;
+        const medicationSchedule = this.readMedications();
+        const appointments = this.readAppointments();
         const contacts = previous?.emergencyContacts ? [...previous.emergencyContacts] : [];
         const primaryContact = {
             name: this.contactName.value.trim(),
@@ -345,7 +598,9 @@ export class MedicalApp {
                 blood_type: this.bloodInput.value,
                 allergies: splitList(this.allergiesInput.value),
                 conditions: splitList(this.conditionsInput.value),
-                medications: splitList(this.medicationsInput.value),
+                medications: medicationSchedule.map((entry) => entry.name),
+                medication_schedule: medicationSchedule,
+                appointments,
                 emergency_contacts: contacts,
                 insurance: {
                     provider: this.insuranceProvider.value.trim(),
@@ -415,6 +670,10 @@ export class MedicalApp {
             this.present(item);
         } else if (actionName === 'edit') {
             this.openEdit(item);
+        } else if (actionName === 'calendar') {
+            if (!downloadMedicalCalendar(item, medicalFromItem(item))) {
+                this.options.toast?.(t('Agrega una hora o una cita para crear recordatorios.'));
+            }
         } else if (actionName === 'share') {
             this.options.openShare?.(item);
         } else if (actionName === 'download') {
@@ -446,6 +705,8 @@ export class MedicalApp {
                     ...medical.allergies,
                     ...medical.conditions,
                     ...medical.medications,
+                    ...medical.medicationSchedule.map((entry) => `${entry.name} ${entry.dose}`),
+                    ...medical.appointments.map((entry) => `${entry.title} ${entry.location}`),
                 ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
             })
             .sort((a, b) => String(a.metadata?.title || '').localeCompare(String(b.metadata?.title || ''), locale()));
@@ -493,6 +754,30 @@ export class MedicalApp {
         if (medical.conditions.length > 0) {
             grid.appendChild(this.stat(t('Condiciones'), medical.conditions.join(', '), true));
         }
+        const scheduledMeds = medical.medicationSchedule.filter((entry) => entry.name);
+        if (scheduledMeds.length > 0) {
+            grid.appendChild(this.stat(
+                t('Medicamentos y horarios'),
+                scheduledMeds.map((entry) => [
+                    entry.name,
+                    entry.dose,
+                    entry.times?.length ? `(${entry.times.join(', ')})` : '',
+                ].filter(Boolean).join(' ')).join(' · '),
+                true,
+            ));
+        }
+        const nextAppointment = medical.appointments
+            .filter((entry) => entry.title && entry.date)
+            .sort((a, b) => `${a.date} ${a.time || ''}`.localeCompare(`${b.date} ${b.time || ''}`))[0];
+        if (nextAppointment) {
+            grid.appendChild(this.stat(
+                t('Próxima cita'),
+                [nextAppointment.title, nextAppointment.date, nextAppointment.time, nextAppointment.location]
+                    .filter(Boolean)
+                    .join(' · '),
+                true,
+            ));
+        }
         if (contact) {
             grid.appendChild(this.stat(
                 t('Contacto de emergencia'),
@@ -519,6 +804,9 @@ export class MedicalApp {
         const actions = el('div', 'mp-medical-card__actions');
         actions.appendChild(this.actionButton(t('Presentar carnet'), 'present', 'badge'));
         actions.appendChild(this.actionButton(t('Editar'), 'edit', 'edit'));
+        if (medicalCalendar(item, medical)) {
+            actions.appendChild(this.actionButton(t('Agregar al calendario'), 'calendar', 'calendar_month'));
+        }
         if (this.options.canShare?.(item) && item.state !== 'transferred') {
             actions.appendChild(this.actionButton(t('Compartir'), 'share', 'send'));
         }

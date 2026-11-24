@@ -1,6 +1,7 @@
 package app.mypass
 
 import android.app.Application
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -13,6 +14,9 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.util.Base64
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import java.io.ByteArrayOutputStream
@@ -64,6 +68,10 @@ enum class Screen {
     Medical,
     MedicalEditor,
     Family,
+    Trash,
+    Search,
+    ShareImport,
+    Backup,
     Scan,
     Settings,
     Notifications,
@@ -159,6 +167,26 @@ data class UiMedicalDoctor(
     val clinic: String = "",
 )
 
+data class UiMedication(
+    val id: String = "",
+    val name: String = "",
+    val dose: String = "",
+    val times: List<String> = emptyList(),
+    val startDate: String = "",
+    val endDate: String = "",
+    val notes: String = "",
+)
+
+data class UiAppointment(
+    val id: String = "",
+    val title: String = "",
+    val date: String = "",
+    val time: String = "",
+    val location: String = "",
+    val notes: String = "",
+    val reminderMinutes: Int = 1440,
+)
+
 data class UiMedicalCard(
     val holder: String = "",
     val birthDate: String = "",
@@ -166,6 +194,8 @@ data class UiMedicalCard(
     val allergies: List<String> = emptyList(),
     val conditions: List<String> = emptyList(),
     val medications: List<String> = emptyList(),
+    val medicationSchedule: List<UiMedication> = emptyList(),
+    val appointments: List<UiAppointment> = emptyList(),
     val contacts: List<UiMedicalContact> = emptyList(),
     val insurance: UiMedicalInsurance = UiMedicalInsurance(),
     val doctor: UiMedicalDoctor = UiMedicalDoctor(),
@@ -183,6 +213,8 @@ data class MedicalDraft(
     val allergies: String = "",
     val conditions: String = "",
     val medications: String = "",
+    val medicationSchedule: List<UiMedication> = emptyList(),
+    val appointments: List<UiAppointment> = emptyList(),
     val contactName: String = "",
     val contactRelation: String = "",
     val contactPhone: String = "",
@@ -234,6 +266,13 @@ data class PassDraft(
     val isNew: Boolean = true,
 )
 
+data class SharedFile(
+    val uri: String,
+    val name: String,
+    val mime: String,
+    val size: Long,
+)
+
 data class UiContact(
     val id: String,
     val name: String,
@@ -279,6 +318,8 @@ data class UiItem(
     val localPath: String?,
     val expiresAt: String?,
     val updatedAt: String? = null,
+    val deletedAt: String? = null,
+    val pendingAction: String? = null,
     val ocrText: String = "",
     val pass: UiPass? = null,
     val credential: UiCredential? = null,
@@ -297,6 +338,12 @@ data class UiState(
     val status: String? = null,
     val busy: Boolean = false,
     val items: List<UiItem> = emptyList(),
+    val trashItems: List<UiItem> = emptyList(),
+    val recentItems: List<UiItem> = emptyList(),
+    val focusItemId: String? = null,
+    val pendingShortcut: String? = null,
+    val pendingOpenItemId: String? = null,
+    val sharedFiles: List<SharedFile> = emptyList(),
     val contacts: List<UiContact> = emptyList(),
     val incomingShares: List<UiShare> = emptyList(),
     val shareRequests: List<UiShareRequest> = emptyList(),
@@ -318,6 +365,7 @@ data class UiState(
     val credentialDraft: CredentialDraft? = null,
     val medicalDraft: MedicalDraft? = null,
     val scanForPass: Boolean = false,
+    val scanForTotp: Boolean = false,
     val scanSourcePath: String? = null,
     val updateState: UpdateState = UpdateState.Idle,
     val dismissedUpdateCode: Int = 0,
@@ -476,6 +524,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .orEmpty()
                     if (store.hasVault() && store.email().isNotBlank() && store.email() != email.trim()) {
                         store.clearAll()
+                        AgendaReminders.cancelAll(getApplication())
                     }
                     store.saveToken(token)
                     store.saveEmail(email.trim())
@@ -550,6 +599,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .orEmpty()
                     if (store.hasVault() && store.email().isNotBlank() && store.email() != accountEmail) {
                         store.clearAll()
+                        AgendaReminders.cancelAll(getApplication())
                     }
                     if (accountEmail.isNotBlank()) {
                         store.saveEmail(accountEmail)
@@ -1083,6 +1133,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             credentialDraft = null,
             medicalDraft = null,
             scanForPass = false,
+            scanForTotp = false,
             scanSourcePath = null,
             status = null,
             error = null,
@@ -1092,6 +1143,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         lock()
         store.clearToken()
+        AgendaReminders.cancelAll(getApplication())
         _state.value = _state.value.copy(screen = Screen.Login)
     }
 
@@ -1105,6 +1157,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 loadAccountProfile(token)
                 refreshRecoveryStatus()
                 loadIdentityKeys(key, token)
+                processPendingActions(token)
                 uploadPending(key, token)
                 fetchServer(key, token)
                 refreshItems(key)
@@ -1372,6 +1425,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (device.optBoolean("revoked", false) || !device.isNull("revoked_at")) {
             withContext(Dispatchers.Main) {
                 store.clearAll()
+                AgendaReminders.cancelAll(getApplication())
                 masterKey?.let(Crypto::memzero)
                 masterKey = null
                 _state.value = _state.value.copy(
@@ -1948,6 +2002,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun editCredential(item: UiItem) {
         val credential = item.credential ?: return
+        recordRecentItem(item.id)
         val local = store.findItem(item.id)
         _state.value = _state.value.copy(
             screen = Screen.CredentialEditor,
@@ -2007,6 +2062,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun editMedicalCard(item: UiItem) {
         val medical = item.medical ?: return
+        recordRecentItem(item.id)
         val local = store.findItem(item.id)
         val contact = medical.contacts.firstOrNull() ?: UiMedicalContact()
         _state.value = _state.value.copy(
@@ -2021,6 +2077,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 allergies = medical.allergies.joinToString(", "),
                 conditions = medical.conditions.joinToString(", "),
                 medications = medical.medications.joinToString(", "),
+                medicationSchedule = medical.medicationSchedule,
+                appointments = medical.appointments,
                 contactName = contact.name,
                 contactRelation = contact.relation,
                 contactPhone = contact.phone,
@@ -2072,16 +2130,470 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             error = null,
             status = null,
             scanForPass = forPass,
+            scanForTotp = false,
+        )
+    }
+
+    fun openTotpScanner() {
+        _state.value = _state.value.copy(
+            screen = Screen.Scan,
+            error = null,
+            status = null,
+            scanForPass = false,
+            scanForTotp = true,
         )
     }
 
     fun backFromScan() {
-        val target = if (_state.value.scanForPass) Screen.Passes else Screen.Vault
-        _state.value = _state.value.copy(screen = target, error = null, status = null)
+        val target = when {
+            _state.value.scanForTotp -> if (_state.value.credentialDraft == null) Screen.Credentials else Screen.CredentialEditor
+            _state.value.scanForPass -> Screen.Passes
+            else -> Screen.Vault
+        }
+        _state.value = _state.value.copy(
+            screen = target,
+            error = null,
+            status = null,
+            scanForPass = false,
+            scanForTotp = false,
+        )
     }
 
     fun openSettings() {
         _state.value = _state.value.copy(screen = Screen.Settings, error = null, status = null)
+    }
+
+    fun openTrash() {
+        _state.value = _state.value.copy(screen = Screen.Trash, error = null, status = null)
+    }
+
+    fun addSharedUris(uris: List<Uri>) {
+        if (uris.isEmpty()) {
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val resolver = getApplication<Application>().contentResolver
+            val files = uris.distinctBy { it.toString() }.mapNotNull { uri ->
+                runCatching {
+                    val name = resolver.query(
+                        uri,
+                        arrayOf(OpenableColumns.DISPLAY_NAME),
+                        null,
+                        null,
+                        null,
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getString(0) else null
+                    }?.takeIf { it.isNotBlank() }
+                        ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                        ?: "documento"
+
+                    val mime = resolver.getType(uri) ?: "application/octet-stream"
+                    val size = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+                    SharedFile(uri.toString(), name, mime, size)
+                }.getOrNull()
+            }
+
+            if (files.isEmpty()) {
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                val merged = (_state.value.sharedFiles + files).distinctBy { it.uri }
+                _state.value = _state.value.copy(
+                    sharedFiles = merged,
+                    screen = if (masterKey != null) Screen.ShareImport else _state.value.screen,
+                    error = null,
+                    status = null,
+                )
+            }
+        }
+    }
+
+    fun openShareImport() {
+        if (_state.value.sharedFiles.isEmpty() || masterKey == null) {
+            return
+        }
+        _state.value = _state.value.copy(
+            screen = Screen.ShareImport,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun discardSharedFiles() {
+        _state.value = _state.value.copy(
+            sharedFiles = emptyList(),
+            screen = Screen.Home,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun exportBackup(passphrase: String, uri: Uri) {
+        val key = masterKey ?: return
+        val token = store.token()
+        if (passphrase.length < 12) {
+            _state.value = _state.value.copy(error = text(R.string.backup_error_short))
+            return
+        }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.backup_exporting),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val entries = linkedMapOf<String, ByteArray>()
+                val manifestItems = JSONArray()
+                val items = _state.value.items.filter { it.state == "active" || it.state == "received" }
+
+                for (item in items) {
+                    val local = store.findItem(item.id) ?: continue
+                    val metadata = item.metadataJson ?: continue
+                    var localPath = local.localPath
+
+                    if (localPath == null && local.blobId != null && token != null) {
+                        val bytes = ApiClient.downloadBlob(token, local.blobId)
+                        localPath = store.writeVaultFile(item.id, bytes).absolutePath
+                    }
+
+                    val manifestItem = JSONObject()
+                        .put("type", item.type)
+                        .put("expires_at", item.expiresAt ?: JSONObject.NULL)
+                        .put("metadata", metadata)
+
+                    if (localPath != null) {
+                        val plaintext = Crypto.decryptFile(key, File(localPath).readBytes())
+                        val entryName = "files/${item.id}.bin"
+                        entries[entryName] = plaintext
+                        manifestItem.put(
+                            "file",
+                            JSONObject()
+                                .put("entry", entryName)
+                                .put("name", item.originalName)
+                                .put("mime", item.mime)
+                                .put("size", plaintext.size),
+                        )
+                    }
+                    manifestItems.put(manifestItem)
+                }
+
+                val manifest = JSONObject()
+                    .put("format", 1)
+                    .put("app", "My Pass")
+                    .put("app_version", BuildConfig.VERSION_NAME)
+                    .put("created_at", java.time.Instant.now().toString())
+                    .put("items", manifestItems)
+                entries["manifest.json"] = manifest.toString().toByteArray(Charsets.UTF_8)
+
+                val container = BackupContainer.encrypt(passphrase, BackupContainer.zip(entries))
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(container)
+                } ?: error(text(R.string.backup_error_write))
+
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = text(R.string.backup_exported, items.size),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.backup_error_export),
+                    )
+                }
+            }
+        }
+    }
+
+    fun importBackup(passphrase: String, uri: Uri) {
+        val key = masterKey ?: return
+        if (passphrase.isBlank()) {
+            _state.value = _state.value.copy(error = text(R.string.backup_error_empty))
+            return
+        }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.backup_importing),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val resolver = getApplication<Application>().contentResolver
+                val container = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error(text(R.string.backup_error_read))
+                check(container.size <= 1024 * 1024 * 1024) { text(R.string.backup_error_too_large) }
+
+                val entries = BackupContainer.unzip(BackupContainer.decrypt(passphrase, container))
+                val manifestBytes = entries["manifest.json"] ?: error(text(R.string.backup_error_manifest))
+                val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))
+                val items = manifest.optJSONArray("items") ?: JSONArray()
+                var imported = 0
+
+                for (index in 0 until items.length()) {
+                    val entry = items.optJSONObject(index) ?: continue
+                    val metadata = entry.optJSONObject("metadata") ?: continue
+                    val id = store.newItemId()
+                    val fileInfo = entry.optJSONObject("file")
+                    var localPath: String? = null
+
+                    if (fileInfo != null) {
+                        val fileName = fileInfo.optString("entry")
+                        val plaintext = entries[fileName] ?: continue
+                        val encrypted = Crypto.encryptFile(key, plaintext)
+                        localPath = store.writeVaultFile(id, encrypted).absolutePath
+                        metadata
+                            .put("original_name", fileInfo.optString("name", "documento"))
+                            .put("mime", fileInfo.optString("mime", "application/octet-stream"))
+                            .put("size", plaintext.size)
+                    }
+
+                    val encryptedMetadata = Base64.encodeToString(
+                        Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                        Base64.NO_WRAP,
+                    )
+                    val expiresAt = entry.optString("expires_at")
+                        .takeIf { it.isNotBlank() && it != "null" }
+                    store.upsert(
+                        LocalItem(
+                            id = id,
+                            type = entry.optString("type", "document"),
+                            state = "active",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = null,
+                            version = 1,
+                            expiresAt = expiresAt,
+                            localPath = localPath,
+                            pendingUpload = true,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                    imported += 1
+                }
+
+                refreshItems(key)
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.Vault,
+                        busy = false,
+                        status = text(R.string.backup_imported, imported),
+                        error = null,
+                    )
+                }
+                if (imported > 0) {
+                    sync()
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.backup_error_import),
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveSharedFiles() {
+        val key = masterKey ?: return
+        val files = _state.value.sharedFiles
+        if (files.isEmpty() || _state.value.busy) {
+            return
+        }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_saving_shared_files),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val resolver = getApplication<Application>().contentResolver
+            var saved = 0
+            var failed = 0
+
+            for (shared in files) {
+                runCatching {
+                    val uri = Uri.parse(shared.uri)
+                    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error(text(R.string.error_read_file))
+                    if (bytes.size > 100 * 1024 * 1024) {
+                        error(text(R.string.error_file_too_large))
+                    }
+
+                    val id = store.newItemId()
+                    val title = shared.name.substringBeforeLast('.').ifBlank { text(R.string.document) }
+                    val metadata = JSONObject()
+                        .put("title", title)
+                        .put("type", "document")
+                        .put("original_name", shared.name)
+                        .put("mime", shared.mime)
+                        .put("size", bytes.size)
+                        .put("expires_at", JSONObject.NULL)
+
+                    val encryptedMetadata = Base64.encodeToString(
+                        Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                        Base64.NO_WRAP,
+                    )
+                    val encryptedFile = Crypto.encryptFile(key, bytes)
+                    val file = store.writeVaultFile(id, encryptedFile)
+
+                    store.upsert(
+                        LocalItem(
+                            id = id,
+                            type = "document",
+                            state = "active",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = null,
+                            version = 1,
+                            expiresAt = null,
+                            localPath = file.absolutePath,
+                            pendingUpload = true,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                    saved += 1
+                }.onFailure {
+                    failed += 1
+                }
+            }
+
+            refreshItems(key)
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    busy = false,
+                    sharedFiles = emptyList(),
+                    screen = Screen.Vault,
+                    status = when {
+                        failed == 0 -> text(R.string.status_shared_files_saved, saved)
+                        saved == 0 -> null
+                        else -> text(R.string.status_shared_files_partial, saved, failed)
+                    },
+                    error = if (saved == 0) text(R.string.error_save_document) else null,
+                )
+            }
+            if (saved > 0) {
+                sync()
+            }
+        }
+    }
+
+    fun openBackup() {
+        _state.value = _state.value.copy(screen = Screen.Backup, error = null, status = null)
+    }
+
+    fun openSearch() {
+        _state.value = _state.value.copy(screen = Screen.Search, error = null, status = null)
+    }
+
+    fun queueShortcut(action: String?) {
+        val supported = setOf(
+            "app.mypass.action.SEARCH",
+            "app.mypass.action.SCAN",
+            "app.mypass.action.NEW_PASS",
+            "app.mypass.action.CREDENTIALS",
+            "app.mypass.action.NEXT_PASS",
+        )
+        if (action == null || action !in supported) {
+            return
+        }
+        _state.value = _state.value.copy(pendingShortcut = action)
+    }
+
+    fun queueOpenItem(id: String?) {
+        if (id.isNullOrBlank()) {
+            return
+        }
+        _state.value = _state.value.copy(pendingOpenItemId = id)
+    }
+
+    fun consumeOpenItem() {
+        val id = _state.value.pendingOpenItemId ?: return
+        val item = _state.value.items.firstOrNull { it.id == id } ?: return
+        _state.value = _state.value.copy(pendingOpenItemId = null)
+        when {
+            item.pass != null -> openPassItem(item.id)
+            item.credential != null -> editCredential(item)
+            item.medical != null -> editMedicalCard(item)
+            else -> openItem(item)
+        }
+    }
+
+    fun consumeShortcut() {
+        val action = _state.value.pendingShortcut ?: return
+        _state.value = _state.value.copy(pendingShortcut = null)
+
+        when (action) {
+            "app.mypass.action.SEARCH" -> openSearch()
+            "app.mypass.action.SCAN" -> openScanner(false)
+            "app.mypass.action.NEW_PASS" -> newPass("flight")
+            "app.mypass.action.CREDENTIALS" -> openCredentials()
+            "app.mypass.action.NEXT_PASS" -> openNextPass()
+        }
+    }
+
+    private fun openNextPass() {
+        val next = sortActivePassItems(
+            _state.value.items.filter { it.pass != null && !isExpired(it) && it.state != "transferred" },
+        ).firstOrNull()
+        if (next != null) {
+            openPassItem(next.id)
+        } else {
+            openPasses()
+        }
+    }
+
+    fun closeSearch() {
+        _state.value = _state.value.copy(screen = Screen.Home, error = null, status = null)
+    }
+
+    fun recordRecentItem(id: String) {
+        store.recordRecentItem(id)
+        val recent = store.recentItemIds()
+            .mapNotNull { itemId -> _state.value.items.firstOrNull { it.id == itemId } }
+            .take(12)
+        _state.value = _state.value.copy(recentItems = recent)
+    }
+
+    fun openPassItem(id: String) {
+        recordRecentItem(id)
+        _state.value = _state.value.copy(
+            screen = Screen.Passes,
+            focusItemId = id,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun openCredentialItem(id: String) {
+        val item = _state.value.items.firstOrNull { it.id == id } ?: return
+        editCredential(item)
+    }
+
+    fun openMedicalItem(id: String) {
+        val item = _state.value.items.firstOrNull { it.id == id } ?: return
+        editMedicalCard(item)
+    }
+
+    fun clearFocusItem() {
+        if (_state.value.focusItemId != null) {
+            _state.value = _state.value.copy(focusItemId = null)
+        }
+    }
+
+    fun clearRecentItems() {
+        store.clearRecentItems()
+        _state.value = _state.value.copy(recentItems = emptyList())
     }
 
     fun createPassFromScan(photo: File) {
@@ -2665,6 +3177,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .put("title", title)
                     .put("type", "medical_card")
                     .put("expires_at", expiresAt ?: JSONObject.NULL)
+                val scheduledMedications = draft.medicationSchedule.filter { it.name.isNotBlank() }
+                val medicationNames = if (scheduledMedications.isNotEmpty()) {
+                    scheduledMedications.map { it.name }
+                } else {
+                    commaList(draft.medications)
+                }
+                val medicationArray = JSONArray()
+                scheduledMedications.forEach { medication ->
+                    val times = JSONArray()
+                    medication.times
+                        .filter { it.matches(Regex("^\\d{1,2}:\\d{2}$")) }
+                        .distinct()
+                        .forEach(times::put)
+                    medicationArray.put(
+                        JSONObject()
+                            .put("id", medication.id.ifBlank { java.util.UUID.randomUUID().toString() })
+                            .put("name", medication.name.trim())
+                            .put("dose", medication.dose.trim())
+                            .put("times", times)
+                            .put("start_date", medication.startDate.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                            .put("end_date", medication.endDate.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                            .put("notes", medication.notes.trim()),
+                    )
+                }
+                val appointmentArray = JSONArray()
+                draft.appointments
+                    .filter { it.title.isNotBlank() }
+                    .forEach { appointment ->
+                        appointmentArray.put(
+                            JSONObject()
+                                .put("id", appointment.id.ifBlank { java.util.UUID.randomUUID().toString() })
+                                .put("title", appointment.title.trim())
+                                .put("date", appointment.date.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                                .put("time", appointment.time.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                                .put("location", appointment.location.trim())
+                                .put("notes", appointment.notes.trim())
+                                .put("reminder_minutes", appointment.reminderMinutes),
+                        )
+                    }
+
                 val medicalJson = metadata.optJSONObject("medical") ?: JSONObject()
                 medicalJson
                     .put("holder", draft.holder.trim())
@@ -2672,7 +3224,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .put("blood_type", draft.bloodType)
                     .put("allergies", JSONArray(commaList(draft.allergies)))
                     .put("conditions", JSONArray(commaList(draft.conditions)))
-                    .put("medications", JSONArray(commaList(draft.medications)))
+                    .put("medications", JSONArray(medicationNames))
+                    .put("medication_schedule", medicationArray)
+                    .put("appointments", appointmentArray)
                     .put("emergency_contacts", contacts)
                     .put(
                         "insurance",
@@ -3492,6 +4046,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun processPendingActions(token: String) {
+        for (item in store.pendingActions()) {
+            when (item.pendingAction) {
+                "delete" -> runCatching {
+                    ApiClient.deleteItem(token, item.id)
+                }.onSuccess {
+                    store.clearPendingAction(item.id)
+                }.onFailure { error ->
+                    if (error is ApiException && error.statusCode == 404) {
+                        store.clearPendingAction(item.id)
+                    }
+                }
+
+                "restore" -> runCatching {
+                    ApiClient.restoreItem(token, item.id)
+                }.onSuccess {
+                    store.clearPendingAction(item.id)
+                    store.restoreItem(item.id, pending = false)
+                }
+            }
+        }
+    }
+
     private fun uploadPending(key: ByteArray, token: String) {
         for (item in store.pendingItems()) {
             val bytes = item.localPath?.let { runCatching { File(it).readBytes() }.getOrNull() }
@@ -3509,45 +4086,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun fetchServer(key: ByteArray, token: String) {
-        val serverItems = ApiClient.listItems(token)
-        for (index in 0 until serverItems.length()) {
-            val json = serverItems.getJSONObject(index)
-            val id = json.getString("id")
-            val existing = store.findItem(id)
-            if (existing?.pendingUpload == true) {
-                continue
-            }
+        val serverIds = mutableSetOf<String>()
+        val activeItems = ApiClient.listItems(token)
+        val trashedItems = ApiClient.listTrashedItems(token)
 
-            val encryptedMetadata = json.getString("encrypted_metadata")
-            val blobId = json.optString("blob_id").takeIf { it.isNotBlank() && it != "null" }
-            val metadata = runCatching {
-                JSONObject(String(Crypto.open(key, Base64.decode(encryptedMetadata, Base64.NO_WRAP))))
-            }.getOrNull()
+        for (serverItems in listOf(activeItems, trashedItems)) {
+            for (index in 0 until serverItems.length()) {
+                val json = serverItems.getJSONObject(index)
+                val id = json.getString("id")
+                serverIds.add(id)
+                val existing = store.findItem(id)
+                if (existing?.pendingUpload == true || existing?.pendingAction != null) {
+                    continue
+                }
 
-            var localPath = existing?.localPath
-            if (blobId != null && localPath == null) {
-                val bytes = ApiClient.downloadBlob(token, blobId)
-                localPath = store.writeVaultFile(id, bytes).absolutePath
-            }
+                val encryptedMetadata = json.getString("encrypted_metadata")
+                val blobId = json.optString("blob_id").takeIf { it.isNotBlank() && it != "null" }
+                val state = json.optString("state").takeIf { it.isNotBlank() && it != "null" } ?: "active"
+                val deletedAt = json.optString("deleted_at").takeIf { it.isNotBlank() && it != "null" }
 
-            store.markSyncedFromServer(
-                id = id,
-                type = json.getString("type"),
-                encryptedMetadata = encryptedMetadata,
-                blobId = blobId,
-                version = json.optInt("version", 1),
-                expiresAt = json.optString("expires_at").takeIf { it.isNotBlank() && it != "null" },
-                localPath = localPath,
-            )
+                var localPath = existing?.localPath
+                if (state != "trashed" && blobId != null && localPath == null) {
+                    val bytes = ApiClient.downloadBlob(token, blobId)
+                    localPath = store.writeVaultFile(id, bytes).absolutePath
+                }
 
-            if (metadata == null) {
-                continue
+                store.markSyncedFromServer(
+                    id = id,
+                    type = json.getString("type"),
+                    state = state,
+                    encryptedMetadata = encryptedMetadata,
+                    blobId = blobId,
+                    version = json.optInt("version", 1),
+                    expiresAt = json.optString("expires_at").takeIf { it.isNotBlank() && it != "null" },
+                    deletedAt = deletedAt,
+                    localPath = localPath,
+                )
             }
         }
+
+        store.removeMissingFromServer(serverIds)
     }
 
     private fun refreshItems(key: ByteArray) {
-        val items = store.allItems().map { item ->
+        val mapped = store.allItems().map { item ->
             val metadata = runCatching {
                 JSONObject(String(Crypto.open(key, Base64.decode(item.encryptedMetadata, Base64.NO_WRAP))))
             }.getOrNull()
@@ -3576,6 +4158,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 localPath = item.localPath,
                 expiresAt = item.expiresAt,
                 updatedAt = item.updatedAt,
+                deletedAt = item.deletedAt,
+                pendingAction = item.pendingAction,
                 ocrText = metadata?.optString("ocr_text")?.takeIf { it.isNotBlank() && it != "null" } ?: "",
                 pass = pass,
                 credential = credential,
@@ -3584,8 +4168,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
+        val items = mapped.filter { it.state != "trashed" }
+        val trashItems = mapped
+            .filter { it.state == "trashed" }
+            .sortedByDescending { it.deletedAt ?: it.updatedAt.orEmpty() }
+        val recentItems = store.recentItemIds()
+            .mapNotNull { id -> items.firstOrNull { it.id == id } }
+            .take(12)
+
         viewModelScope.launch(Dispatchers.Main) {
-            _state.value = _state.value.copy(items = items, status = null, error = null)
+            _state.value = _state.value.copy(
+                items = items,
+                trashItems = trashItems,
+                recentItems = recentItems,
+                status = null,
+                error = null,
+            )
+            updateNextPassShortcut(items)
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { AgendaReminders.rebuild(getApplication(), items) }
+        }
+    }
+
+    private fun updateNextPassShortcut(items: List<UiItem>) {
+        val next = sortActivePassItems(
+            items.filter { it.pass != null && !isExpired(it) && it.state != "transferred" },
+        ).firstOrNull()
+
+        if (next == null) {
+            ShortcutManagerCompat.removeAllDynamicShortcuts(getApplication())
+            return
+        }
+
+        val shortcut = ShortcutInfoCompat.Builder(getApplication(), "next_pass")
+            .setShortLabel(text(R.string.shortcut_next_pass_short))
+            .setLongLabel(text(R.string.shortcut_next_pass_long))
+            .setIcon(IconCompat.createWithResource(getApplication(), R.drawable.ic_ticket))
+            .setIntent(
+                Intent(getApplication(), MainActivity::class.java)
+                    .setAction("app.mypass.action.NEXT_PASS"),
+            )
+            .setRank(0)
+            .build()
+
+        runCatching {
+            ShortcutManagerCompat.setDynamicShortcuts(getApplication(), listOf(shortcut))
         }
     }
 
@@ -3724,6 +4352,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val insurance = json.optJSONObject("insurance")
         val doctor = json.optJSONObject("doctor")
+        val legacyMedications = parseMedicalList(json, "medications")
+        val medicationSchedule = mutableListOf<UiMedication>()
+        json.optJSONArray("medication_schedule")?.let { array ->
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                val times = mutableListOf<String>()
+                entry.optJSONArray("times")?.let { values ->
+                    for (timeIndex in 0 until values.length()) {
+                        values.optString(timeIndex).takeIf { it.isNotBlank() }?.let(times::add)
+                    }
+                }
+                medicationSchedule.add(
+                    UiMedication(
+                        id = entry.optString("id").takeIf { it.isNotBlank() && it != "null" }
+                            ?: java.util.UUID.randomUUID().toString(),
+                        name = entry.optString("name").takeIf { it != "null" }.orEmpty(),
+                        dose = entry.optString("dose").takeIf { it != "null" }.orEmpty(),
+                        times = times,
+                        startDate = entry.optString("start_date").takeIf { it != "null" }.orEmpty(),
+                        endDate = entry.optString("end_date").takeIf { it != "null" }.orEmpty(),
+                        notes = entry.optString("notes").takeIf { it != "null" }.orEmpty(),
+                    ),
+                )
+            }
+        }
+        if (medicationSchedule.isEmpty()) {
+            legacyMedications.forEach { name ->
+                if (name.isNotBlank()) {
+                    medicationSchedule.add(
+                        UiMedication(name = name, id = java.util.UUID.randomUUID().toString()),
+                    )
+                }
+            }
+        }
+
+        val appointments = mutableListOf<UiAppointment>()
+        json.optJSONArray("appointments")?.let { array ->
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                appointments.add(
+                    UiAppointment(
+                        id = entry.optString("id").takeIf { it.isNotBlank() && it != "null" }
+                            ?: java.util.UUID.randomUUID().toString(),
+                        title = entry.optString("title").takeIf { it != "null" }.orEmpty(),
+                        date = entry.optString("date").takeIf { it != "null" }.orEmpty(),
+                        time = entry.optString("time").takeIf { it != "null" }.orEmpty(),
+                        location = entry.optString("location").takeIf { it != "null" }.orEmpty(),
+                        notes = entry.optString("notes").takeIf { it != "null" }.orEmpty(),
+                        reminderMinutes = entry.optInt("reminder_minutes", 1440),
+                    ),
+                )
+            }
+        }
 
         return UiMedicalCard(
             holder = json.optString("holder").takeIf { it != "null" }.orEmpty(),
@@ -3731,7 +4412,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             bloodType = json.optString("blood_type").takeIf { it != "null" }.orEmpty(),
             allergies = parseMedicalList(json, "allergies"),
             conditions = parseMedicalList(json, "conditions"),
-            medications = parseMedicalList(json, "medications"),
+            medications = legacyMedications,
+            medicationSchedule = medicationSchedule,
+            appointments = appointments,
             contacts = contacts,
             insurance = UiMedicalInsurance(
                 provider = insurance?.optString("provider").orEmpty(),
@@ -3858,8 +4541,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun createCredentialFromTotpScan(photo: File) {
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_scanning_totp))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val parsed = runCatching {
+                val bitmap = decodeSampledBitmap(photo, 1800)
+                val decoded = Barcode.decode(bitmap) ?: error(text(R.string.error_totp_qr_not_found))
+                val uri = Totp.parseUri(decoded.text) ?: error(text(R.string.error_totp_qr_invalid))
+                uri
+            }
+
+            photo.delete()
+            withContext(Dispatchers.Main) {
+                parsed.onSuccess { uri ->
+                    val current = _state.value.credentialDraft ?: CredentialDraft()
+                    val title = current.title.ifBlank {
+                        uri.issuer.ifBlank { uri.account.substringBefore("@").ifBlank { "TOTP" } }
+                    }
+                    _state.value = _state.value.copy(
+                        screen = Screen.CredentialEditor,
+                        credentialDraft = current.copy(
+                            title = title,
+                            username = current.username.ifBlank { uri.account },
+                            totpSecret = uri.config.secret,
+                            totpAlgorithm = uri.config.algorithm,
+                            totpDigits = uri.config.digits,
+                            totpPeriod = uri.config.period,
+                        ),
+                        busy = false,
+                        scanForTotp = false,
+                        scanForPass = false,
+                        status = text(R.string.status_totp_detected),
+                        error = null,
+                    )
+                }.onFailure { error ->
+                    _state.value = _state.value.copy(
+                        screen = if (_state.value.credentialDraft == null) Screen.Credentials else Screen.CredentialEditor,
+                        busy = false,
+                        scanForTotp = false,
+                        scanForPass = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_totp_qr_invalid),
+                    )
+                }
+            }
+        }
+    }
+
     fun addScan(photo: File) {
         val key = masterKey ?: return
+        if (_state.value.scanForTotp) {
+            createCredentialFromTotpScan(photo)
+            return
+        }
         if (_state.value.scanForPass) {
             createPassFromScan(photo)
             return
@@ -4011,11 +4746,84 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val token = store.token()
 
         viewModelScope.launch(Dispatchers.IO) {
-            store.deleteItem(item.id)
-            if (token != null && !item.pendingUpload) {
+            val needsServer = !item.pendingUpload
+            store.trashItem(item.id, pending = needsServer)
+
+            if (needsServer && token != null) {
                 runCatching { ApiClient.deleteItem(token, item.id) }
+                    .onSuccess { store.clearPendingAction(item.id) }
             }
+
             refreshItems(key)
+            Reminders.checkNow(getApplication())
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    status = text(R.string.status_moved_to_trash),
+                    error = null,
+                )
+            }
+        }
+    }
+
+    fun restoreItem(item: UiItem) {
+        val key = masterKey ?: return
+        val token = store.token()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val needsServer = !item.pendingUpload
+            store.restoreItem(item.id, pending = needsServer)
+
+            if (needsServer && token != null) {
+                runCatching { ApiClient.restoreItem(token, item.id) }
+                    .onSuccess { store.clearPendingAction(item.id) }
+            }
+
+            refreshItems(key)
+            Reminders.checkNow(getApplication())
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    status = text(R.string.status_restored),
+                    error = null,
+                )
+            }
+        }
+    }
+
+    fun permanentlyDeleteItem(item: UiItem) {
+        val key = masterKey ?: return
+        val token = store.token()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            if (!item.pendingUpload) {
+                if (token == null) {
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(error = text(R.string.error_delete_forever))
+                    }
+                    return@launch
+                }
+
+                val result = runCatching { ApiClient.forceDeleteItem(token, item.id) }
+                if (result.isFailure) {
+                    val error = result.exceptionOrNull()
+                    if (error !is ApiException || error.statusCode != 404) {
+                        withContext(Dispatchers.Main) {
+                            _state.value = _state.value.copy(
+                                error = error?.message ?: text(R.string.error_delete_forever),
+                            )
+                        }
+                        return@launch
+                    }
+                }
+            }
+
+            store.deleteItem(item.id)
+            refreshItems(key)
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    status = text(R.string.status_deleted_forever),
+                    error = null,
+                )
+            }
         }
     }
 
@@ -4070,6 +4878,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openItem(item: UiItem) {
         val key = masterKey ?: return
+        recordRecentItem(item.id)
         _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_opening_document))
 
         viewModelScope.launch(Dispatchers.IO) {

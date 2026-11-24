@@ -155,7 +155,15 @@
                 <label for="credential-totp" class="mp-label">{{ __('Secreto TOTP (opcional)') }}</label>
                 <input id="credential-totp" type="text" maxlength="512" class="mp-input font-mono"
                        placeholder="JBSWY3DPEHPK3PXP o otpauth://totp/..." autocomplete="off" spellcheck="false">
-                <p class="mp-hint mt-1">{{ __('Pega el secreto o la URL otpauth de tu app de autenticación. Se guarda cifrado.') }}</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <button id="credential-totp-scan" type="button" class="mp-btn mp-btn-secondary mp-btn-sm">
+                        <x-icon name="qr_code_scanner" class="text-[18px]" />
+                        {{ __('Escanear QR') }}
+                    </button>
+                    <span id="credential-totp-scan-status" class="mp-hint" role="status"></span>
+                </div>
+                <input id="credential-totp-qr" type="file" accept="image/*" capture="environment" class="hidden">
+                <p class="mp-hint mt-1">{{ __('Pega el secreto, la URL otpauth o escanea el QR de tu app de autenticación. Se guarda cifrado.') }}</p>
             </div>
             <div class="sm:col-span-2">
                 <label for="credential-tags" class="mp-label">{{ __('Etiquetas (separadas por comas)') }}</label>

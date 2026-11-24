@@ -247,6 +247,30 @@ function findLabeledValue(lines, labels) {
     return null;
 }
 
+function findCoordinates(text) {
+    const raw = String(text || '');
+    const urlMatch = raw.match(/[?&]q=(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/)
+        || raw.match(/@(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/);
+    if (urlMatch) {
+        const lat = Number(urlMatch[1]);
+        const lng = Number(urlMatch[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            return `${lat},${lng}`;
+        }
+    }
+
+    const direct = raw.match(/\b(-?\d{1,3}\.\d{3,})\s*[,;]\s*(-?\d{1,3}\.\d{3,})\b/);
+    if (direct) {
+        const lat = Number(direct[1]);
+        const lng = Number(direct[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            return `${lat},${lng}`;
+        }
+    }
+
+    return null;
+}
+
 function findFirstMatch(lines, patterns) {
     for (const line of lines) {
         for (const pattern of patterns) {
@@ -456,6 +480,8 @@ function parseEventText(text, reference = new Date()) {
     const row = findLabeledValue(lines, ['ROW', 'FILA']);
     const seat = findLabeledValue(lines, ['SEAT', 'ASIENTO']);
     const venue = findLabeledValue(lines, ['VENUE', 'RECINTO', 'LOCATION', 'UBICACION', 'PLACE', 'LUGAR']);
+    const address = findLabeledValue(lines, ['ADDRESS', 'DIRECCION', 'CALLE', 'STREET']);
+    const coordinates = findCoordinates(text);
     const holder = detectPersonName(lines);
 
     if (dateMatch) {
@@ -478,6 +504,12 @@ function parseEventText(text, reference = new Date()) {
     }
     if (venue) {
         fields.location = venue.trim();
+    }
+    if (address) {
+        fields.address = address.trim();
+    }
+    if (coordinates) {
+        fields.coordinates = coordinates;
     }
     if (holder) {
         fields.holder = holder;
@@ -508,6 +540,8 @@ function parseTransitText(text, reference = new Date()) {
     const carriage = findLabeledValue(lines, ['CARRIAGE', 'COCHE', 'VAGON', 'COACH']);
     const seat = findLabeledValue(lines, ['SEAT', 'ASIENTO', 'PLAZA']);
     const route = findLabeledValue(lines, ['ROUTE', 'RUTA', 'LINE', 'LINEA', 'DESTINATION', 'DESTINO']);
+    const address = findLabeledValue(lines, ['ADDRESS', 'DIRECCION', 'CALLE', 'STREET']);
+    const coordinates = findCoordinates(text);
     const boarding = findLabeledValue(lines, ['BOARDING', 'EMBARQUE', 'ABORDAJE', 'INICIO DE ABORDAJE']);
     const boardingEnd = findLabeledValue(lines, ['BOARDING ENDS', 'BOARDING CLOSES', 'BOARDING END', 'CIERRE DE ABORDAJE', 'FIN DE ABORDAJE']);
     const boardingRange = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(?:-|–|—|TO|A)\s*([01]?\d|2[0-3]):([0-5]\d)\b/);
@@ -537,6 +571,13 @@ function parseTransitText(text, reference = new Date()) {
     }
     if (terminal) {
         fields.terminal = terminal.trim();
+        fields.location = terminal.trim();
+    }
+    if (address) {
+        fields.address = address.trim();
+    }
+    if (coordinates) {
+        fields.coordinates = coordinates;
     }
     if (platform) {
         fields.platform = platform.trim();

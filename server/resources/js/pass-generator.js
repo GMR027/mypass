@@ -76,6 +76,8 @@ function fieldSchemas() {
         ],
         event: [
             { key: 'location', label: t('Recinto / lugar'), placeholder: t('Estadio, teatro…') },
+            { key: 'address', label: t('Dirección (opcional)'), placeholder: t('Calle, número, ciudad') },
+            { key: 'coordinates', label: t('Ubicación exacta (opcional)'), placeholder: t('19.3029, -99.1505 o enlace de Maps') },
             { key: 'date', label: t('Fecha del evento'), type: 'date' },
             { key: 'time', label: t('Hora del evento'), type: 'time' },
             { key: 'gate', label: t('Puerta de acceso'), placeholder: '6' },
@@ -85,6 +87,9 @@ function fieldSchemas() {
         ],
         transit: [
             { key: 'route', label: t('Ruta / línea'), placeholder: t('Madrid → Barcelona') },
+            { key: 'location', label: t('Estación / parada'), placeholder: t('Estación Central, andén 3') },
+            { key: 'address', label: t('Dirección (opcional)'), placeholder: t('Calle, número, ciudad') },
+            { key: 'coordinates', label: t('Ubicación exacta (opcional)'), placeholder: t('19.3029, -99.1505 o enlace de Maps') },
             { key: 'date', label: t('Fecha de viaje'), type: 'date' },
             { key: 'time', label: t('Hora de salida'), type: 'time' },
             { key: 'boarding_start', label: t('Inicio de abordaje'), type: 'time' },

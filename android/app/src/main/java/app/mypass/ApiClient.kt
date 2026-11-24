@@ -181,6 +181,19 @@ object ApiClient {
         return JSONObject(response).getJSONArray("data")
     }
 
+    fun listTrashedItems(token: String): JSONArray {
+        val response = request("GET", "/items?trashed=1", token, null, null)
+        return JSONObject(response).getJSONArray("data")
+    }
+
+    fun restoreItem(token: String, id: String) {
+        request("POST", "/items/$id/restore", token, byteArrayOf(), "application/json")
+    }
+
+    fun forceDeleteItem(token: String, id: String) {
+        request("DELETE", "/items/$id/force", token, null, null)
+    }
+
     fun appVersion(): JSONObject {
         val response = request("GET", "/app/version", null, null, null)
         return JSONObject(response)

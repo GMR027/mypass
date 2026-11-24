@@ -92,6 +92,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/blobs', [BlobController::class, 'store']);
         Route::get('/blobs/{blob}', [BlobController::class, 'show']);
 
+        Route::post('/items/{item}/restore', [VaultItemController::class, 'restore']);
+        Route::delete('/items/{item}/force', [VaultItemController::class, 'forceDestroy']);
+
         Route::apiResource('items', VaultItemController::class)
             ->only(['index', 'store', 'show', 'update', 'destroy']);
     });

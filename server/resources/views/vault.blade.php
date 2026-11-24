@@ -164,6 +164,11 @@
                     <h2 class="mp-title-md mt-3">{{ __('Abrir mi bóveda') }}</h2>
                     <p class="mp-body-sm mt-2">{{ __('Escribe la llave de la bóveda que creaste en esta computadora.') }}</p>
 
+                    <p id="share-pending" class="mp-alert mp-alert-info mt-5" role="status" hidden>
+                        <x-icon name="upload_file" class="mt-0.5 text-[21px]" />
+                        <span id="share-pending-text"></span>
+                    </p>
+
                     <form id="unlock-form" class="mt-6 space-y-4">
                         <div>
                             <label for="vault-passphrase" class="mp-label">{{ __('Llave de la bóveda') }}</label>
@@ -283,10 +288,24 @@
                         <p class="mp-hint mt-1 mp-break">{{ $email }} · {{ __('Cifrado de punto a punto activo en este navegador.') }}</p>
                     </div>
                 </div>
-                <button id="vault-lock" type="button" class="mp-btn mp-btn-secondary shrink-0">
-                    <x-icon name="lock" class="text-[20px]" />
-                    {{ __('Bloquear') }}
-                </button>
+                <div class="grid w-full grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:w-auto sm:flex-wrap">
+                    <button id="vault-search-open" type="button" class="mp-btn mp-btn-quiet w-full sm:w-auto">
+                        <x-icon name="search" class="text-[20px]" />
+                        {{ __('Buscar') }}
+                    </button>
+                    <button id="backup-open" type="button" class="mp-btn mp-btn-quiet w-full sm:w-auto">
+                        <x-icon name="save" class="text-[20px]" />
+                        {{ __('Respaldo') }}
+                    </button>
+                    <button id="trash-open" type="button" class="mp-btn mp-btn-quiet w-full sm:w-auto">
+                        <x-icon name="delete" class="text-[20px]" />
+                        {{ __('Papelera') }}
+                    </button>
+                    <button id="vault-lock" type="button" class="mp-btn mp-btn-secondary w-full sm:w-auto">
+                        <x-icon name="lock" class="text-[20px]" />
+                        {{ __('Bloquear') }}
+                    </button>
+                </div>
             </div>
 
             <div class="mp-tabs mt-5" role="tablist" aria-label="{{ __('Secciones de la bóveda') }}">
@@ -771,6 +790,124 @@
                 <button id="confirm-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
                 <button id="confirm-accept" type="button" class="mp-btn mp-btn-danger">{{ __('Continuar') }}</button>
             </div>
+        </div>
+    </dialog>
+
+    <dialog id="backup-modal" class="mp-dialog" aria-labelledby="backup-modal-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="save" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="backup-modal-title" class="mp-title-md">{{ __('Copia de seguridad') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Cifrada en tu navegador. Incluye documentos, pases, credenciales y salud.') }}</p>
+                    </div>
+                </div>
+                <button id="backup-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <p id="backup-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
+            <p id="backup-status" class="mp-alert mp-alert-info" role="status" hidden></p>
+
+            <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                <section class="mp-card p-4">
+                    <h3 class="mp-title-sm">{{ __('Crear una copia') }}</h3>
+                    <p class="mp-hint mt-1">{{ __('Protege la copia con una frase que solo tú conozcas.') }}</p>
+                    <div class="mt-3 space-y-3">
+                        <div>
+                            <label for="backup-passphrase" class="mp-label">{{ __('Frase de la copia') }}</label>
+                            <input id="backup-passphrase" type="password" class="mp-input" autocomplete="new-password">
+                        </div>
+                        <div>
+                            <label for="backup-passphrase-confirm" class="mp-label">{{ __('Confirma la frase') }}</label>
+                            <input id="backup-passphrase-confirm" type="password" class="mp-input" autocomplete="new-password">
+                        </div>
+                        <button id="backup-export" type="button" class="mp-btn mp-btn-primary w-full">
+                            <x-icon name="download" class="text-[20px]" />
+                            {{ __('Crear copia') }}
+                        </button>
+                    </div>
+                </section>
+
+                <section class="mp-card p-4">
+                    <h3 class="mp-title-sm">{{ __('Restaurar una copia') }}</h3>
+                    <p class="mp-hint mt-1">{{ __('Agrega los elementos a esta bóveda. No se borra lo que ya tienes.') }}</p>
+                    <div class="mt-3 space-y-3">
+                        <div>
+                            <label for="backup-file" class="mp-label">{{ __('Archivo .mypassbackup') }}</label>
+                            <input id="backup-file" type="file" accept=".mypassbackup,application/octet-stream" class="mp-file-input">
+                        </div>
+                        <div>
+                            <label for="backup-restore-passphrase" class="mp-label">{{ __('Frase de la copia') }}</label>
+                            <input id="backup-restore-passphrase" type="password" class="mp-input" autocomplete="off">
+                        </div>
+                        <button id="backup-import" type="button" class="mp-btn mp-btn-secondary w-full">
+                            <x-icon name="upload" class="text-[20px]" />
+                            {{ __('Restaurar copia') }}
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <p class="mp-hint mt-4">{{ __('Guarda el archivo en un lugar seguro. Sin la frase no se puede recuperar.') }}</p>
+        </div>
+    </dialog>
+
+    <dialog id="vault-search-modal" class="mp-dialog" aria-labelledby="vault-search-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="search" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="vault-search-title" class="mp-title-md">{{ __('Buscar en mi bóveda') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Documentos, pases, credenciales y salud. Todo se busca en este dispositivo.') }}</p>
+                    </div>
+                </div>
+                <button id="vault-search-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <div class="relative mt-4">
+                <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+                    <x-icon name="search" class="text-[21px]" />
+                </span>
+                <input id="vault-search-input" type="search" class="mp-input pl-12 text-[17px]"
+                       placeholder="{{ __('Busca un vuelo, una contraseña o un documento') }}"
+                       aria-label="{{ __('Buscar en mi bóveda') }}" autocomplete="off">
+            </div>
+
+            <p id="vault-search-status" class="mp-hint mt-2" role="status"></p>
+            <div id="vault-search-results" class="mt-4 space-y-2"></div>
+        </div>
+    </dialog>
+
+    <dialog id="trash-modal" class="mp-dialog" aria-labelledby="trash-modal-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile">
+                        <x-icon name="delete" class="text-[24px]" />
+                    </span>
+                    <div>
+                        <h2 id="trash-modal-title" class="mp-title-md">{{ __('Papelera') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Los elementos se guardan 30 días. Puedes restaurarlos o eliminarlos para siempre.') }}</p>
+                    </div>
+                </div>
+                <button id="trash-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+
+            <p id="trash-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
+            <p id="trash-empty" class="mp-empty mt-4" hidden>{{ __('La papelera está vacía.') }}</p>
+            <ul id="trash-list" class="mt-4 space-y-3"></ul>
         </div>
     </dialog>
 

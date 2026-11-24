@@ -373,6 +373,8 @@
                     'document_request_declined' => __('Solicitud rechazada'),
                     'document_request_cancelled' => __('Solicitud cancelada'),
                     'item_deleted' => __('Documento eliminado'),
+                    'item_restored' => __('Documento restaurado'),
+                    'item_purged' => __('Documento eliminado definitivamente'),
                     'vault_recovery_enabled' => __('Recuperación por correo activada'),
                     'vault_recovery_disabled' => __('Recuperación por correo desactivada'),
                     'vault_recovery_requested' => __('Código de recuperación solicitado'),
