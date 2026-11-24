@@ -433,8 +433,10 @@ private fun CredentialCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(padding),
             ) {
-                CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
-                body()
+                Column {
+                    CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
+                    body()
+                }
             }
         } else if (credential.appearanceMode == "banner") {
             MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
