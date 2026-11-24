@@ -88,6 +88,42 @@ function formatTime(value) {
     return match ? `${match[1].padStart(2, '0')}:${match[2]}` : String(value);
 }
 
+function boardingStart(fields) {
+    return fields?.boarding_start || fields?.boarding || '';
+}
+
+function boardingWindow(fields) {
+    const start = formatTime(boardingStart(fields));
+    const end = formatTime(fields?.boarding_end || '');
+
+    if (start && end) {
+        return `${start} – ${end}`;
+    }
+
+    if (start) {
+        return start;
+    }
+
+    if (end) {
+        return tf('Cierre :time', { time: end });
+    }
+
+    return '';
+}
+
+function boardingStrip(fields) {
+    const window = boardingWindow(fields);
+    if (!window) {
+        return null;
+    }
+
+    const strip = el('div', 'mp-pass-card__boarding mt-2');
+    strip.appendChild(icon('schedule', 'text-[16px]'));
+    strip.appendChild(el('span', null, tf('Abordaje :window', { window })));
+
+    return strip;
+}
+
 function isExpired(item) {
     if (!item?.expires_at) {
         return false;
@@ -232,6 +268,13 @@ function subtitleFor(pass) {
         if (fields.gate) {
             bits.push(tf('Puerta :gate', { gate: fields.gate }));
         }
+        if (fields.terminal) {
+            bits.push(tf('Terminal :terminal', { terminal: fields.terminal }));
+        }
+        const window = boardingWindow(fields);
+        if (window) {
+            bits.push(tf('Abordaje :window', { window }));
+        }
         return bits.join(' · ');
     }
 
@@ -240,7 +283,15 @@ function subtitleFor(pass) {
     }
 
     if (pass.category === 'transit') {
-        return [fields.route, fields.date ? formatDate(fields.date) : '', fields.time ? formatTime(fields.time) : ''].filter(Boolean).join(' · ');
+        const bits = [fields.route, fields.date ? formatDate(fields.date) : '', fields.time ? formatTime(fields.time) : ''].filter(Boolean);
+        if (fields.terminal) {
+            bits.push(tf('Terminal :terminal', { terminal: fields.terminal }));
+        }
+        const window = boardingWindow(fields);
+        if (window) {
+            bits.push(tf('Abordaje :window', { window }));
+        }
+        return bits.join(' · ');
     }
 
     return [pass.holder, fields.number, fields.expires ? tf('Vigente hasta :date', { date: formatDate(fields.expires) }) : ''].filter(Boolean).join(' · ');
@@ -325,9 +376,9 @@ function createPassCardElement(item, options = {}) {
         const meta = el('div', 'mp-pass-card__meta mt-3');
         for (const [label, value] of [
             [t('Puerta'), pass.fields?.gate || '—'],
+            [t('Terminal'), pass.fields?.terminal || '—'],
             [t('Asiento'), pass.fields?.seat || '—'],
             [t('Zona'), pass.fields?.zone || '—'],
-            [t('Embarque'), pass.fields?.boarding ? formatTime(pass.fields.boarding) : '—'],
         ]) {
             const cell = el('div');
             cell.appendChild(el('span', null, label));
@@ -335,6 +386,10 @@ function createPassCardElement(item, options = {}) {
             meta.appendChild(cell);
         }
         body.appendChild(meta);
+        const boarding = boardingStrip(pass.fields);
+        if (boarding) {
+            body.appendChild(boarding);
+        }
 
         const footer = el('div', 'mp-pass-card__footer');
         footer.appendChild(el('span', null, pass.fields?.passenger || pass.holder || t('Titular')));
@@ -373,9 +428,10 @@ function createPassCardElement(item, options = {}) {
         right.appendChild(el('p', 'text-[14px] font-bold', pass.fields?.date ? formatDate(pass.fields.date) : pass.fields?.expires ? formatDate(pass.fields.expires) : '—'));
         details.append(left, right);
         body.appendChild(details);
-        if (pass.fields?.platform || pass.fields?.carriage || pass.fields?.seat) {
-            const meta = el('div', 'mt-3 grid grid-cols-3 gap-1 rounded-xl bg-black/20 p-2 text-center');
+        if (pass.fields?.terminal || pass.fields?.platform || pass.fields?.carriage || pass.fields?.seat) {
+            const meta = el('div', 'mt-3 grid grid-cols-2 gap-1 rounded-xl bg-black/20 p-2 text-center');
             for (const [label, value] of [
+                [t('Terminal'), pass.fields?.terminal || '—'],
                 [t('Andén'), pass.fields?.platform || '—'],
                 [t('Coche'), pass.fields?.carriage || '—'],
                 [t('Asiento'), pass.fields?.seat || '—'],
@@ -386,6 +442,10 @@ function createPassCardElement(item, options = {}) {
                 meta.appendChild(cell);
             }
             body.appendChild(meta);
+        }
+        const boarding = boardingStrip(pass.fields);
+        if (boarding) {
+            body.appendChild(boarding);
         }
     } else {
         const holder = el('div', 'mt-3 flex items-center justify-between gap-3');

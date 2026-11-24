@@ -171,7 +171,9 @@ return [
         'recipient_item_id' => 'documento recibido',
         'enabled' => 'estado',
         'locale' => 'idioma',
+        'birth_date' => 'fecha de nacimiento',
         'simple_mode' => 'modo simple',
+        'easy_mode' => 'modo fácil',
         'current_password' => 'contraseña actual',
     ],
 ];

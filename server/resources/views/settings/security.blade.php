@@ -133,7 +133,10 @@
 
         <section id="vault-security-app" class="mp-card mp-card-pad mt-5"
                  data-keys-url="{{ route('web.keys.show') }}"
-                 data-email="{{ $user->email }}">
+                 data-email="{{ $user->email }}"
+                 data-recovery-status-url="{{ route('web.vault-recovery.status') }}"
+                 data-recovery-enable-url="{{ route('web.vault-recovery.enable') }}"
+                 data-recovery-disable-url="{{ route('web.vault-recovery.disable') }}">
             <div class="flex items-start gap-4">
                 <span class="mp-icon-tile">
                     <x-icon name="key" class="text-[24px]" />
@@ -225,6 +228,51 @@
                         </div>
                     </form>
                 </div>
+
+                <div class="mt-6 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 md:p-5">
+                    <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                        <div class="flex items-start gap-3">
+                            <span class="mp-icon-tile shrink-0 bg-white">
+                                <x-icon name="mark_email_read" class="text-[24px]" />
+                            </span>
+                            <div>
+                                <h3 class="font-semibold text-on-surface">{{ __('Recuperación por correo') }}</h3>
+                                <p class="mp-hint mt-1 max-w-2xl">{{ __('Si olvidas la llave de tu bóveda, te enviamos un código a :email y puedes abrirla de nuevo. Es la forma más fácil, pero el servidor guarda una copia recuperable de la llave maestra.', ['email' => $emailRecoveryMasked]) }}</p>
+                            </div>
+                        </div>
+                        <span class="mp-badge {{ $emailRecoveryEnabled ? 'mp-badge-primary' : 'mp-badge-neutral' }} shrink-0">
+                            <x-icon :name="$emailRecoveryEnabled ? 'check_circle' : 'mail'" class="text-[17px]" :filled="$emailRecoveryEnabled" />
+                            {{ $emailRecoveryEnabled ? __('Activada') : __('Desactivada') }}
+                        </span>
+                    </div>
+
+                    <p id="email-recovery-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                    <p id="email-recovery-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+
+                    @if ($emailRecoveryEnabled)
+                        <form id="email-recovery-disable-form" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <div class="flex-1">
+                                <label for="email-recovery-password" class="mp-label">{{ __('Contraseña de la cuenta') }}</label>
+                                <input id="email-recovery-password" type="password" required autocomplete="current-password" class="mp-input">
+                            </div>
+                            <button id="email-recovery-disable" type="submit" class="mp-btn mp-btn-danger shrink-0">
+                                <x-icon name="link_off" class="text-[20px]" />
+                                {{ __('Desactivar recuperación') }}
+                            </button>
+                        </form>
+                    @else
+                        <form id="email-recovery-enable-form" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <div class="flex-1">
+                                <label for="email-recovery-passphrase" class="mp-label">{{ __('Frase actual de la bóveda') }}</label>
+                                <input id="email-recovery-passphrase" type="password" required autocomplete="current-password" class="mp-input">
+                            </div>
+                            <button id="email-recovery-enable" type="submit" class="mp-btn mp-btn-primary shrink-0">
+                                <x-icon name="mark_email_read" class="text-[20px]" />
+                                {{ __('Activar recuperación') }}
+                            </button>
+                        </form>
+                    @endif
+                </div>
             @endif
         </section>
 
@@ -234,19 +282,25 @@
                     <x-icon name="accessibility_new" class="text-[24px]" />
                 </span>
                 <div>
-                    <h2 class="mp-title-sm">{{ __('Modo simple') }}</h2>
-                    <p class="mp-hint mt-1 max-w-2xl">{{ __('Agranda los textos y los botones de toda la web.') }}</p>
+                    <h2 class="mp-title-sm">{{ __('Modo fácil y texto grande') }}</h2>
+                    <p class="mp-hint mt-1 max-w-2xl">{{ __('El modo fácil agranda textos, simplifica la navegación y deja la ayuda de recuperación a la mano. Se activa automáticamente a partir de los 51 años.') }}</p>
                 </div>
             </div>
 
             <div class="mt-5 grid gap-5 sm:grid-cols-2">
                 <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-outline-variant/60 bg-surface-container-low px-4 py-3">
-                    <input id="simple-mode" type="checkbox" class="mp-switch-input" @checked($user->simple_mode)>
+                    <input id="easy-mode" type="checkbox" class="mp-switch-input" @checked($user->usesEasyMode())>
                     <span class="mp-switch" aria-hidden="true"></span>
-                    <span class="text-[15px] font-semibold">{{ __('Usar modo simple') }}</span>
+                    <span class="text-[15px] font-semibold">{{ __('Usar modo fácil') }}</span>
                 </label>
 
-                <div>
+                <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-outline-variant/60 bg-surface-container-low px-4 py-3">
+                    <input id="simple-mode" type="checkbox" class="mp-switch-input" @checked($user->simple_mode)>
+                    <span class="mp-switch" aria-hidden="true"></span>
+                    <span class="text-[15px] font-semibold">{{ __('Solo texto grande') }}</span>
+                </label>
+
+                <div class="sm:col-span-2">
                     <label for="locale" class="mp-label">{{ __('Idioma') }}</label>
                     <select id="locale" class="mp-select">
                         <option value="es-MX" @selected(($user->locale ?? 'es-MX') === 'es-MX')>{{ __('Español') }}</option>
@@ -254,6 +308,13 @@
                     </select>
                 </div>
             </div>
+
+            @if (! $user->birth_date)
+                <p class="mp-hint mt-3">
+                    <a href="{{ route('settings.profile') }}" class="font-semibold text-primary underline underline-offset-4">{{ __('Agrega tu fecha de nacimiento') }}</a>
+                    {{ __('para que el modo fácil se active solo si te corresponde.') }}
+                </p>
+            @endif
 
             <p id="prefs-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
             <p id="prefs-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
@@ -312,6 +373,10 @@
                     'document_request_declined' => __('Solicitud rechazada'),
                     'document_request_cancelled' => __('Solicitud cancelada'),
                     'item_deleted' => __('Documento eliminado'),
+                    'vault_recovery_enabled' => __('Recuperación por correo activada'),
+                    'vault_recovery_disabled' => __('Recuperación por correo desactivada'),
+                    'vault_recovery_requested' => __('Código de recuperación solicitado'),
+                    'vault_recovery_used' => __('Bóveda abierta con recuperación por correo'),
                 ];
             @endphp
 
@@ -558,6 +623,7 @@
         });
 
         const simpleMode = document.getElementById('simple-mode');
+        const easyMode = document.getElementById('easy-mode');
         const localeSelect = document.getElementById('locale');
         const prefsStatus = document.getElementById('prefs-status');
         const prefsError = document.getElementById('prefs-error');
@@ -571,6 +637,7 @@
                     body: {
                         locale: localeSelect.value,
                         simple_mode: simpleMode.checked,
+                        easy_mode: easyMode ? easyMode.checked : null,
                     },
                 });
                 prefsStatus.textContent = body.message;
@@ -583,15 +650,17 @@
         }
 
         simpleMode?.addEventListener('change', savePreferences);
+        easyMode?.addEventListener('change', savePreferences);
         localeSelect?.addEventListener('change', savePreferences);
 
         const autoLock = document.getElementById('auto-lock');
         const autoLockStatus = document.getElementById('auto-lock-status');
         const autoLockKey = 'mypass.autoLockMinutes';
+        const defaultAutoLock = @json($user->usesEasyMode() ? '30' : '10');
 
         if (autoLock) {
             const saved = localStorage.getItem(autoLockKey);
-            autoLock.value = saved === null ? '10' : saved;
+            autoLock.value = saved === null ? defaultAutoLock : saved;
             autoLock.addEventListener('change', () => {
                 localStorage.setItem(autoLockKey, autoLock.value);
                 autoLockStatus.textContent = autoLock.value === '0'

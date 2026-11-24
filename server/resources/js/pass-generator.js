@@ -66,9 +66,11 @@ function fieldSchemas() {
             { key: 'flight', label: t('Número de vuelo'), placeholder: 'IB 6401' },
             { key: 'date', label: t('Fecha de salida'), type: 'date' },
             { key: 'departure', label: t('Hora de salida'), type: 'time' },
-            { key: 'boarding', label: t('Hora de embarque'), type: 'time' },
-            { key: 'seat', label: t('Asiento'), placeholder: '2A' },
+            { key: 'boarding_start', label: t('Inicio de abordaje'), type: 'time' },
+            { key: 'boarding_end', label: t('Cierre de abordaje'), type: 'time' },
             { key: 'gate', label: t('Puerta de embarque'), placeholder: 'H12' },
+            { key: 'terminal', label: t('Terminal'), placeholder: 'T2' },
+            { key: 'seat', label: t('Asiento'), placeholder: '2A' },
             { key: 'zone', label: t('Zona / grupo'), placeholder: '1' },
             { key: 'pnr', label: t('Código de reserva'), placeholder: 'ABC123' },
         ],
@@ -85,6 +87,9 @@ function fieldSchemas() {
             { key: 'route', label: t('Ruta / línea'), placeholder: t('Madrid → Barcelona') },
             { key: 'date', label: t('Fecha de viaje'), type: 'date' },
             { key: 'time', label: t('Hora de salida'), type: 'time' },
+            { key: 'boarding_start', label: t('Inicio de abordaje'), type: 'time' },
+            { key: 'boarding_end', label: t('Cierre de abordaje'), type: 'time' },
+            { key: 'terminal', label: t('Terminal'), placeholder: t('Terminal de autobuses, estación…') },
             { key: 'platform', label: t('Andén / vía'), placeholder: '3' },
             { key: 'carriage', label: t('Coche / vagón'), placeholder: '5' },
             { key: 'seat', label: t('Asiento / plaza'), placeholder: '12B' },
@@ -547,6 +552,9 @@ class PassGenerator {
             this.state.issuer = pass.issuer || '';
             this.state.holder = pass.holder || pass.fields?.holder || pass.fields?.passenger || '';
             this.state.fields = { ...(pass.fields || {}) };
+            if (!this.state.fields.boarding_start && this.state.fields.boarding) {
+                this.state.fields.boarding_start = this.state.fields.boarding;
+            }
             this.state.notes = Array.isArray(pass.notes) ? [...pass.notes] : [];
             this.state.theme = pass.theme || categoryTheme(this.state.category);
             this.state.themeColor = pass.themeColor || THEME_COLORS[this.state.theme] || THEME_COLORS.midnight;
@@ -771,13 +779,24 @@ class PassGenerator {
             const id = `generator-field-${field.key}`;
             const label = el('label', null, field.label);
             label.setAttribute('for', id);
-            const input = document.createElement(field.type === 'date' || field.type === 'time' ? 'input' : 'input');
+            const input = document.createElement('input');
             input.id = id;
-            input.className = 'mp-input mp-input-sm';
+            input.className = field.type === 'date' || field.type === 'time'
+                ? 'mp-input mp-input-sm mp-date-input'
+                : 'mp-input mp-input-sm';
             input.dataset.field = field.key;
             input.type = field.type || 'text';
             if (field.placeholder) {
                 input.placeholder = field.placeholder;
+            }
+            if (field.type === 'date' || field.type === 'time') {
+                input.addEventListener('click', () => {
+                    try {
+                        input.showPicker?.();
+                    } catch {
+                        // The native picker still opens with the field controls.
+                    }
+                });
             }
             input.value = this.fieldValue(field.key);
             wrapper.append(label, input);

@@ -1,7 +1,16 @@
 <x-layout :title="__('Mi bóveda')">
-    @php($email = auth()->user()->email)
+    @php
+        $email = auth()->user()->email;
+        $vaultKeys = auth()->user()->keys()->first();
+        $emailRecoveryEnabled = $vaultKeys?->emailRecoveryEnabled() ?? false;
+        $easyMode = auth()->user()->usesEasyMode();
+    @endphp
 
     <div id="vault-app"
+         data-easy-mode="{{ $easyMode ? '1' : '0' }}"
+         data-email-recovery-enabled="{{ $emailRecoveryEnabled ? '1' : '0' }}"
+         data-recovery-request-url="{{ route('web.vault-recovery.request') }}"
+         data-recovery-verify-url="{{ route('web.vault-recovery.verify') }}"
          data-keys-url="{{ route('web.keys.show') }}"
          data-items-url="{{ route('web.items.index') }}"
          data-blobs-url="{{ route('web.blobs.store') }}"
@@ -91,6 +100,61 @@
                 </div>
             </div>
 
+            <div id="trusted-device-card" class="mp-card mp-card-pad mb-5" hidden>
+                <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                    <div class="flex items-start gap-3">
+                        <span class="mp-icon-tile bg-primary-fixed text-primary">
+                            <x-icon name="verified_user" class="text-[25px]" filled />
+                        </span>
+                        <div>
+                            <h2 class="mp-title-sm">{{ __('Este equipo ya está autorizado') }}</h2>
+                            <p class="mp-hint mt-1">{{ __('Abre tu bóveda sin escribir la llave. Solo funciona en este navegador.') }}</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="trusted-unlock" type="button" class="mp-btn mp-btn-primary">
+                            <x-icon name="lock_open" class="text-[21px]" />
+                            {{ __('Abrir mi bóveda') }}
+                        </button>
+                        <button id="trusted-forget" type="button" class="mp-btn mp-btn-quiet">
+                            <x-icon name="delete" class="text-[20px]" />
+                            {{ __('Olvidar este equipo') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="email-recovery-card" class="mp-card mp-card-pad mb-5" @if (! $emailRecoveryEnabled) hidden @endif>
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile bg-primary-fixed text-primary">
+                        <x-icon name="mark_email_read" class="text-[25px]" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <h2 class="mp-title-sm">{{ __('Recuperar con mi correo') }}</h2>
+                        <p class="mp-hint mt-1">{{ __('Si olvidaste tu llave, te enviamos un código a :email y abrimos tu bóveda.', ['email' => $email]) }}</p>
+
+                        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <button id="email-recovery-send" type="button" class="mp-btn mp-btn-primary shrink-0">
+                                <x-icon name="send" class="text-[21px]" />
+                                {{ __('Enviar código a mi correo') }}
+                            </button>
+                            <div class="flex-1">
+                                <label for="email-recovery-code" class="mp-label">{{ __('Código de 6 dígitos') }}</label>
+                                <input id="email-recovery-code" inputmode="numeric" autocomplete="one-time-code"
+                                       maxlength="6" class="mp-input text-center font-mono tracking-[0.3em]">
+                            </div>
+                            <button id="email-recovery-verify" type="button" class="mp-btn mp-btn-secondary shrink-0">
+                                <x-icon name="key" class="text-[21px]" />
+                                {{ __('Abrir bóveda') }}
+                            </button>
+                        </div>
+
+                        <p id="email-recovery-status" class="mt-3 text-[15px] font-medium text-primary" role="status"></p>
+                        <p id="email-recovery-error" class="mp-alert mp-alert-error mt-3" role="alert" hidden></p>
+                    </div>
+                </div>
+            </div>
+
             <div class="grid gap-5 lg:grid-cols-2">
                 <div class="mp-card mp-card-pad">
                     <span class="mp-badge mp-badge-warning">
@@ -113,6 +177,14 @@
                                 </button>
                             </div>
                         </div>
+
+                        <label class="flex items-start gap-3 rounded-xl border border-outline-variant/60 bg-surface-container-low px-4 py-3">
+                            <input id="remember-device" type="checkbox" class="mp-checkbox mt-0.5" @checked($easyMode)>
+                            <span class="text-[15px] leading-relaxed">
+                                <strong class="block font-semibold text-on-surface">{{ __('Abrir sin escribir la llave la próxima vez') }}</strong>
+                                <span class="mp-hint">{{ __('Solo en este navegador. Puedes olvidarlo desde esta misma pantalla.') }}</span>
+                            </span>
+                        </label>
 
                         <p id="unlock-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
 

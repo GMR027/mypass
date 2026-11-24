@@ -2,7 +2,10 @@
 
 @php
     $isSpanish = str_starts_with(app()->getLocale(), 'es');
-    $shellUser = \App\Models\User::find(session('login.id'));
+    $shellUser = auth()->user() ?? \App\Models\User::find(session('login.id'));
+    $guestEasy = request()->cookie('mypass_easy') === '1';
+    $shellEasy = $shellUser?->usesEasyMode() ?? $guestEasy;
+    $shellLargeText = $shellUser?->usesLargeText() ?? $guestEasy;
 @endphp
 
 <!DOCTYPE html>
@@ -17,7 +20,7 @@
     <x-translations />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-surface text-on-surface {{ $shellUser?->simple_mode ? 'simple-mode' : '' }}">
+<body data-easy="{{ $shellEasy ? '1' : '0' }}" class="min-h-screen bg-surface text-on-surface {{ $shellLargeText ? 'simple-mode' : '' }} {{ $shellEasy ? 'easy-mode' : '' }}">
     <div class="min-h-screen lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <aside class="mp-auth-panel relative hidden overflow-hidden px-10 py-12 text-on-primary lg:flex lg:flex-col lg:justify-between xl:px-14">
             <div class="relative z-10">
@@ -110,6 +113,13 @@
             <header class="flex items-center justify-between gap-3 px-5 py-4 lg:hidden">
                 <x-brand :href="url('/')" />
                 <div class="flex items-center gap-1.5">
+                    <button type="button"
+                            data-easy-toggle
+                            aria-pressed="{{ $shellEasy ? 'true' : 'false' }}"
+                            class="inline-flex min-h-12 items-center gap-1 rounded-lg px-2.5 text-sm font-semibold text-on-surface-variant hover:bg-surface-container">
+                        <span class="material-symbols-outlined text-[19px]" aria-hidden="true">accessibility_new</span>
+                        <span data-easy-toggle-label>{{ $shellEasy ? __('Modo normal') : __('Modo fácil') }}</span>
+                    </button>
                     <a href="{{ route('language.switch', 'es-MX') }}"
                        @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-primary text-on-primary' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
                        @if ($isSpanish) aria-current="true" @endif>ES</a>
@@ -120,6 +130,13 @@
             </header>
 
             <div class="hidden justify-end gap-2 px-8 pt-6 lg:flex">
+                <button type="button"
+                        data-easy-toggle
+                        aria-pressed="{{ $shellEasy ? 'true' : 'false' }}"
+                        class="inline-flex min-h-12 items-center gap-1.5 rounded-xl border border-outline-variant/60 bg-white/80 px-3 text-sm font-semibold text-on-surface-variant shadow-sm backdrop-blur hover:bg-surface-container">
+                    <span class="material-symbols-outlined text-[19px]" aria-hidden="true">accessibility_new</span>
+                    <span data-easy-toggle-label>{{ $shellEasy ? __('Modo normal') : __('Modo fácil') }}</span>
+                </button>
                 <a href="{{ route('language.switch', 'es-MX') }}"
                    @class(['inline-flex min-h-12 items-center rounded-lg px-3 text-sm font-semibold', 'bg-primary text-on-primary' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])>ES</a>
                 <a href="{{ route('language.switch', 'en') }}"

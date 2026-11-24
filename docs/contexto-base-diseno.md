@@ -37,7 +37,7 @@ Bóveda personal cifrada de extremo a extremo para documentos, boletos, tarjetas
 - Modo simple en web y Android.
 - Traducción completa ES/EN en web, incluidos mensajes de validación y autenticación.
 - Página de inicio pública.
-- Backend con **58 pruebas y 278 aserciones pasando**.
+- Backend con **94 pruebas y 442 aserciones pasando**.
 - Billetera de pases, generador OCR, presentación QR, notificaciones y desbloqueo con huella en Android.
 - Recuperación de cuenta, cambio de frase de bóveda, llave de emergencia y auto-bloqueo web.
 

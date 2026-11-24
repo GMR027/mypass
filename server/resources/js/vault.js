@@ -25,6 +25,16 @@ const emergencyForm = document.getElementById('emergency-key-form');
 const emergencyKeyInput = document.getElementById('emergency-key');
 const emergencyStatus = document.getElementById('emergency-key-status');
 const emergencyError = document.getElementById('emergency-key-error');
+const rememberDevice = document.getElementById('remember-device');
+const trustedDeviceCard = document.getElementById('trusted-device-card');
+const trustedUnlockButton = document.getElementById('trusted-unlock');
+const trustedForgetButton = document.getElementById('trusted-forget');
+const emailRecoveryCard = document.getElementById('email-recovery-card');
+const emailRecoverySend = document.getElementById('email-recovery-send');
+const emailRecoveryCode = document.getElementById('email-recovery-code');
+const emailRecoveryVerify = document.getElementById('email-recovery-verify');
+const emailRecoveryStatus = document.getElementById('email-recovery-status');
+const emailRecoveryError = document.getElementById('email-recovery-error');
 const lockButton = document.getElementById('vault-lock');
 const addForm = document.getElementById('add-form');
 const addError = document.getElementById('add-error');
@@ -112,6 +122,13 @@ const sharesUrl = app?.dataset.sharesUrl;
 const shareBase = app?.dataset.shareBase;
 const requestsUrl = app?.dataset.requestsUrl;
 const requestBase = app?.dataset.requestBase;
+const recoveryRequestUrl = app?.dataset.recoveryRequestUrl;
+const recoveryVerifyUrl = app?.dataset.recoveryVerifyUrl;
+const easyMode = app?.dataset.easyMode === '1';
+const emailRecoveryEnabled = app?.dataset.emailRecoveryEnabled === '1';
+
+const TRUSTED_DB = 'mypass-trusted-device';
+const TRUSTED_STORE = 'keys';
 
 const MAGIC = new Uint8Array([0x4d, 0x59, 0x50, 0x44]); // MYPD
 const VERSION = 1;
@@ -275,6 +292,175 @@ function open(combined, key) {
         nonce,
         key,
     );
+}
+
+function trustedId() {
+    return `user:${app?.dataset.email ?? ''}`;
+}
+
+function openTrustedDb() {
+    return new Promise((resolve, reject) => {
+        const request = window.indexedDB.open(TRUSTED_DB, 1);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(TRUSTED_STORE)) {
+                request.result.createObjectStore(TRUSTED_STORE, { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+function trustedTransaction(mode) {
+    return openTrustedDb().then((db) => ({
+        db,
+        store: db.transaction(TRUSTED_STORE, mode).objectStore(TRUSTED_STORE),
+    }));
+}
+
+async function readTrustedRecord() {
+    const { db, store } = await trustedTransaction('readonly');
+
+    return new Promise((resolve, reject) => {
+        const request = store.get(trustedId());
+        request.onsuccess = () => {
+            db.close();
+            resolve(request.result ?? null);
+        };
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
+    });
+}
+
+async function writeTrustedRecord(record) {
+    const { db, store } = await trustedTransaction('readwrite');
+
+    return new Promise((resolve, reject) => {
+        const request = store.put(record);
+        request.onsuccess = () => {
+            db.close();
+            resolve();
+        };
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
+    });
+}
+
+async function deleteTrustedRecord() {
+    const { db, store } = await trustedTransaction('readwrite');
+
+    return new Promise((resolve, reject) => {
+        const request = store.delete(trustedId());
+        request.onsuccess = () => {
+            db.close();
+            resolve();
+        };
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
+    });
+}
+
+function trustedCryptoAvailable() {
+    return Boolean(window.indexedDB && window.crypto?.subtle && window.isSecureContext);
+}
+
+async function saveTrustedDevice(key) {
+    if (!trustedCryptoAvailable()) {
+        return;
+    }
+
+    try {
+        const cryptoKey = await window.crypto.subtle.generateKey(
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt'],
+        );
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const data = await window.crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            cryptoKey,
+            key,
+        );
+
+        await writeTrustedRecord({
+            id: trustedId(),
+            key: cryptoKey,
+            iv,
+            data,
+            created_at: new Date().toISOString(),
+        });
+    } catch (error) {
+        console.warn('No se pudo recordar este equipo', error);
+    }
+}
+
+async function openTrustedDevice() {
+    if (!trustedCryptoAvailable()) {
+        return null;
+    }
+
+    try {
+        const record = await readTrustedRecord();
+        if (!record) {
+            return null;
+        }
+
+        const data = await window.crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: new Uint8Array(record.iv) },
+            record.key,
+            record.data,
+        );
+
+        return new Uint8Array(data);
+    } catch (error) {
+        console.warn('El acceso recordado ya no es válido', error);
+        await deleteTrustedRecord().catch(() => {});
+        return null;
+    }
+}
+
+async function refreshTrustedDeviceCard() {
+    if (!trustedDeviceCard) {
+        return;
+    }
+
+    const record = trustedCryptoAvailable() ? await readTrustedRecord().catch(() => null) : null;
+    trustedDeviceCard.hidden = !record;
+
+    if (rememberDevice) {
+        rememberDevice.closest('label')?.classList.toggle('hidden', !trustedCryptoAvailable());
+    }
+}
+
+async function unlockWithTrustedDevice() {
+    hideError(unlockError);
+    const button = trustedUnlockButton;
+    button && (button.disabled = true);
+
+    try {
+        await sodium.ready;
+        const candidate = await openTrustedDevice();
+
+        if (!candidate) {
+            await refreshTrustedDeviceCard();
+            throw new Error(t('Este equipo ya no tiene acceso recordado. Escribe tu llave de la bóveda.'));
+        }
+
+        const keys = await fetchKeys();
+        await finishUnlock(keys, candidate);
+    } catch (error) {
+        showError(unlockError, error.message || t('No se pudo abrir la bóveda con este equipo.'));
+    } finally {
+        if (button) {
+            button.disabled = false;
+        }
+    }
 }
 
 function encryptJson(value) {
@@ -453,6 +639,11 @@ async function finishUnlock(keys, candidateKey) {
     }
 
     masterKey = candidateKey;
+
+    if (rememberDevice?.checked) {
+        await saveTrustedDevice(candidateKey);
+    }
+
     lastActivityAt = Date.now();
     passphraseInput.value = '';
     hideError(unlockError);
@@ -670,6 +861,87 @@ async function unlockFromEmergencyKey(event) {
             sodium.memzero(recoveryKek);
         }
         button.disabled = false;
+    }
+}
+
+async function postJson(url, payload = {}) {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(body.message || t('No se pudo completar la operación.'));
+    }
+
+    return body;
+}
+
+async function sendEmailRecoveryCode() {
+    hideError(emailRecoveryError);
+    emailRecoveryStatus.textContent = t('Enviando código…');
+    emailRecoverySend.disabled = true;
+
+    try {
+        if (!emailRecoveryEnabled) {
+            throw new Error(t('La recuperación por correo no está activada.'));
+        }
+
+        const body = await postJson(recoveryRequestUrl);
+        emailRecoveryStatus.textContent = body.message;
+        emailRecoveryCode?.focus();
+    } catch (error) {
+        emailRecoveryStatus.textContent = '';
+        showError(emailRecoveryError, error.message || t('No se pudo enviar el código.'));
+    } finally {
+        emailRecoverySend.disabled = false;
+    }
+}
+
+async function verifyEmailRecoveryCode() {
+    hideError(emailRecoveryError);
+    const digits = (emailRecoveryCode?.value ?? '').replace(/\D/g, '');
+
+    if (digits.length !== 6) {
+        showError(emailRecoveryError, t('Escribe el código de 6 dígitos que llegó a tu correo.'));
+        return;
+    }
+
+    emailRecoveryStatus.textContent = t('Comprobando el código…');
+    emailRecoveryVerify.disabled = true;
+    let secret = null;
+    let candidate = null;
+
+    try {
+        await sodium.ready;
+        const body = await postJson(recoveryVerifyUrl, { code: digits });
+        const payload = body.data ?? {};
+        secret = fromB64(payload.secret);
+        candidate = open(fromB64(payload.wrapped_master_key), secret);
+
+        const keys = await fetchKeys();
+        await finishUnlock(keys, candidate);
+        candidate = null;
+        emailRecoveryCode.value = '';
+        emailRecoveryStatus.textContent = t('Bóveda abierta con tu correo.');
+    } catch (error) {
+        emailRecoveryStatus.textContent = '';
+        showError(emailRecoveryError, error.message || t('No se pudo abrir la bóveda con el código.'));
+    } finally {
+        if (secret) {
+            sodium.memzero(secret);
+        }
+        if (candidate) {
+            sodium.memzero(candidate);
+        }
+        emailRecoveryVerify.disabled = false;
     }
 }
 
@@ -2185,8 +2457,9 @@ async function addItem(event) {
 }
 
 function autoLockMinutes() {
-    const value = Number.parseInt(localStorage.getItem(autoLockKey) ?? '10', 10);
-    return Number.isFinite(value) ? value : 10;
+    const fallback = easyMode ? '30' : '10';
+    const value = Number.parseInt(localStorage.getItem(autoLockKey) ?? fallback, 10);
+    return Number.isFinite(value) ? value : Number.parseInt(fallback, 10);
 }
 
 function markActivity() {
@@ -2430,6 +2703,7 @@ async function savePass(payload) {
 
 async function init() {
     await sodium.ready;
+    await refreshTrustedDeviceCard();
 
     try {
         const keys = await fetchKeys();
@@ -2500,6 +2774,20 @@ if (app) {
 
     unlockForm?.addEventListener('submit', unlock);
     emergencyForm?.addEventListener('submit', unlockFromEmergencyKey);
+    trustedUnlockButton?.addEventListener('click', unlockWithTrustedDevice);
+    trustedForgetButton?.addEventListener('click', async () => {
+        await deleteTrustedRecord().catch(() => {});
+        await refreshTrustedDeviceCard();
+        showToast(t('Este equipo ya no abrirá la bóveda automáticamente.'));
+    });
+    emailRecoverySend?.addEventListener('click', sendEmailRecoveryCode);
+    emailRecoveryVerify?.addEventListener('click', verifyEmailRecoveryCode);
+    emailRecoveryCode?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            verifyEmailRecoveryCode();
+        }
+    });
     addForm?.addEventListener('submit', addItem);
     lockButton?.addEventListener('click', () => lock());
     document.addEventListener('pointerdown', markActivity, { passive: true });

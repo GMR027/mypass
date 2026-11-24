@@ -76,12 +76,16 @@
         {{ __('Si acabas de crear tu cuenta, revisa tu correo para confirmarla.') }}
     </p>
 
+    <p class="mt-2 text-center text-[14px] text-on-surface-variant">
+        {{ __('¿Olvidaste la llave de tu bóveda? Inicia sesión y usa la recuperación por correo.') }}
+    </p>
+
     <div class="mt-6 flex items-start gap-3 rounded-2xl bg-accent-soft p-4 text-sm leading-relaxed text-on-surface-variant">
         <x-icon name="bolt" class="mt-0.5 text-[20px] text-accent-deep" />
         <p>{{ __('Al desbloquear tu bóveda, tus pases y boletos aparecen primero.') }}</p>
     </div>
 
-    <div class="mt-6 rounded-2xl border border-primary/15 bg-primary-fixed/40 p-4">
+    <div class="mp-hide-easy mt-6 rounded-2xl border border-primary/15 bg-primary-fixed/40 p-4">
         <div class="flex items-start gap-3">
             <span class="mp-icon-tile">
                 <x-icon name="android" />

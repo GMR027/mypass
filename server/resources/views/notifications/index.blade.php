@@ -41,6 +41,9 @@
                             'share_received' => 'forward_to_inbox',
                             'share_accepted' => 'mark_email_read',
                             'document_request' => 'contact_support',
+                            'vault_recovery_enabled' => 'mark_email_read',
+                            'vault_recovery_disabled' => 'link_off',
+                            'vault_recovery_used' => 'lock_open',
                             default => 'notifications',
                         };
                         $title = match ($type) {
@@ -49,6 +52,9 @@
                             'share_received' => __('Documento compartido contigo'),
                             'share_accepted' => __('Envío aceptado'),
                             'document_request' => __('Solicitud de documento'),
+                            'vault_recovery_enabled' => __('Recuperación por correo activada'),
+                            'vault_recovery_disabled' => __('Recuperación por correo desactivada'),
+                            'vault_recovery_used' => __('Bóveda abierta con recuperación por correo'),
                             default => __('Actividad de la bóveda'),
                         };
                         $description = match ($type) {
@@ -57,6 +63,7 @@
                             'share_received' => __(':name te envió un documento cifrado.', ['name' => $data['from'] ?? __('Alguien')]),
                             'share_accepted' => __(':name aceptó el documento que le enviaste.', ['name' => $data['from'] ?? __('Alguien')]),
                             'document_request' => __(':name te pidió un documento: :type.', ['name' => $data['from'] ?? __('Alguien'), 'type' => $data['document_type'] ?? __('Documento')]),
+                            'vault_recovery_enabled', 'vault_recovery_disabled', 'vault_recovery_used' => $data['message'] ?? __('Revisa la seguridad de tu bóveda.'),
                             default => __('Tienes actividad nueva en tu bóveda.'),
                         };
                     @endphp

@@ -13,6 +13,7 @@ use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SecurityController;
+use App\Http\Controllers\VaultRecoveryController;
 use App\Models\VaultItem;
 use Illuminate\Support\Facades\Route;
 
@@ -78,6 +79,7 @@ Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     Route::get('/settings/profile', [ProfileController::class, 'show'])->name('settings.profile');
+    Route::post('/settings/profile/birth-date', [ProfileController::class, 'updateBirthDate'])->name('settings.profile.birth-date.update');
     Route::post('/settings/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('settings.profile.avatar.update');
     Route::delete('/settings/profile/avatar', [ProfileController::class, 'destroyAvatar'])->name('settings.profile.avatar.destroy');
     Route::delete('/settings/account', [ProfileController::class, 'destroy'])->name('settings.account.destroy');
@@ -90,6 +92,12 @@ Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
 
     Route::get('/api/web/keys', [KeyController::class, 'show'])->name('web.keys.show');
     Route::put('/api/web/keys', [KeyController::class, 'update'])->name('web.keys.update');
+
+    Route::get('/api/web/vault-recovery/status', [VaultRecoveryController::class, 'status'])->name('web.vault-recovery.status');
+    Route::post('/api/web/vault-recovery/request', [VaultRecoveryController::class, 'requestCode'])->name('web.vault-recovery.request');
+    Route::post('/api/web/vault-recovery/verify', [VaultRecoveryController::class, 'verifyCode'])->name('web.vault-recovery.verify');
+    Route::post('/api/web/vault-recovery/enable', [VaultRecoveryController::class, 'enable'])->name('web.vault-recovery.enable');
+    Route::post('/api/web/vault-recovery/disable', [VaultRecoveryController::class, 'disable'])->name('web.vault-recovery.disable');
 
     Route::get('/api/web/items', [VaultItemController::class, 'index'])->name('web.items.index');
     Route::post('/api/web/items', [VaultItemController::class, 'store'])->name('web.items.store');

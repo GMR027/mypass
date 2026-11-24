@@ -39,7 +39,9 @@ class PassParserTest {
             DATE / FECHA: 28 NOV 2026
             DEPARTURE / SALIDA: 17:45
             BOARDING / EMBARQUE: 17:05
+            BOARDING ENDS / CIERRE: 17:25
             GATE / PUERTA: H12
+            TERMINAL: T4
             SEAT / ASIENTO: 2A
             ZONE / ZONA: 1
         """.trimIndent()
@@ -52,9 +54,34 @@ class PassParserTest {
         assertEquals("IB 6401", parsed.fields["flight"])
         assertEquals("2A", parsed.fields["seat"])
         assertEquals("H12", parsed.fields["gate"])
+        assertEquals("T4", parsed.fields["terminal"])
+        assertEquals("17:05", parsed.fields["boarding_start"])
+        assertEquals("17:25", parsed.fields["boarding_end"])
         assertEquals("2026-11-28", parsed.fields["date"])
         assertTrue(parsed.holder.contains("FERNANDEZ"))
         assertTrue(parsed.confidence > 0.8f)
+    }
+
+    @Test
+    fun transit_text_extracts_terminal_and_boarding_window() {
+        val text = """
+            TRAIN TICKET
+            ROUTE / RUTA: Madrid → Barcelona
+            TERMINAL / ESTACION: Estación Sur
+            PLATFORM / ANDEN: 3
+            BOARDING / EMBARQUE: 10:00
+            BOARDING ENDS / CIERRE: 10:20
+            DATE / FECHA: 28 NOV 2026
+            SEAT / ASIENTO: 12B
+        """.trimIndent()
+
+        val parsed = PassParser.parse(text, categoryHint = "transit", reference = LocalDate.of(2026, 11, 22))
+
+        assertEquals("transit", parsed.category)
+        assertEquals("Estación Sur", parsed.fields["terminal"])
+        assertEquals("3", parsed.fields["platform"])
+        assertEquals("10:00", parsed.fields["boarding_start"])
+        assertEquals("10:20", parsed.fields["boarding_end"])
     }
 
     @Test

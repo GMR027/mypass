@@ -57,6 +57,9 @@
                    autocomplete="email" inputmode="email" class="mp-input" placeholder="edgar@ejemplo.com">
         </div>
 
+        <x-date-wheel name="birth_date" :value="old('birth_date')" :required="true"
+                      :hint="__('Solo la usamos para adaptar la app y confirmar que tienes 18 años o más. No se muestra a otros usuarios.')" />
+
         <div>
             <label for="password" class="mp-label">{{ __('Contraseña segura') }}</label>
             <div class="relative">

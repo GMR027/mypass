@@ -106,6 +106,26 @@
         </div>
     </section>
 
+    @if ($user->usesEasyMode())
+        <section class="mp-card mp-card-pad mt-5">
+            <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div class="flex items-start gap-4">
+                    <span class="mp-icon-tile-lg bg-primary-fixed text-primary">
+                        <x-icon name="support_agent" class="text-[30px]" />
+                    </span>
+                    <div>
+                        <h2 class="mp-title-sm">{{ __('¿Necesitas ayuda para abrir tu bóveda?') }}</h2>
+                        <p class="mp-hint mt-1 max-w-2xl">{{ __('Abre tu bóveda con un botón en este equipo. Si olvidaste tu llave, podemos enviarte un código a tu correo.') }}</p>
+                    </div>
+                </div>
+                <a href="{{ route('vault', ['tab' => 'pases']) }}" class="mp-btn mp-btn-primary shrink-0">
+                    <x-icon name="lock_open" class="text-[21px]" />
+                    {{ __('Abrir mi bóveda') }}
+                </a>
+            </div>
+        </section>
+    @endif
+
     @if ($expiringCount > 0)
         <div class="mp-alert mp-alert-warning mt-5" role="status">
             <x-icon name="schedule" class="mt-0.5 text-[22px]" />

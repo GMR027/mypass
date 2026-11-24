@@ -1,12 +1,18 @@
 {
   "es": [
-    "Centro de notificaciones con campana, vencimientos y actividad.",
-    "Aviso y actualización de la app desde Ajustes.",
-    "Ajustes visuales: botones uniformes, textos sin desbordes y accesos rápidos alineados."
+    "Registro con fecha de nacimiento, modo fácil automático a partir de los 51 años y recuperación por correo.",
+    "Equipo de confianza para abrir la bóveda con un clic y recuperación desde Android con un PIN nuevo.",
+    "Pases de vuelo y transporte con terminal, puerta e inicio y cierre de abordaje.",
+    "Credenciales con logo, banner o fondo, tipos de cuenta personalizados y grupos.",
+    "Fechas y horas de pases con los selectores del sistema.",
+    "Notificaciones de vencimiento con el icono de My Pass."
   ],
   "en": [
-    "Notification center with bell, expirations and activity.",
-    "In-app update notice and installation from Settings.",
-    "Visual polish: consistent buttons, no overflowing text and aligned quick actions."
+    "Sign-up with date of birth, automatic easy mode from age 51 and email recovery.",
+    "Trusted device to open the vault in one click and Android recovery with a new PIN.",
+    "Flight and transit passes with terminal, gate and boarding start/end.",
+    "Credentials with logo, banner or background, custom account types and groups.",
+    "Pass dates and times use the system pickers.",
+    "Expiry notifications show the My Pass icon."
   ]
 }

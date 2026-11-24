@@ -126,6 +126,47 @@
         <section class="mp-card mp-card-pad mt-5">
             <div class="flex items-start gap-4">
                 <span class="mp-icon-tile">
+                    <x-icon name="cake" class="text-[24px]" />
+                </span>
+                <div>
+                    <h2 class="mp-title-sm">{{ __('Fecha de nacimiento') }}</h2>
+                    <p class="mp-hint mt-1 max-w-2xl">{{ __('Nos ayuda a mostrar una interfaz más fácil si tienes 51 años o más. Puedes cambiarla cuando quieras.') }}</p>
+                </div>
+            </div>
+
+            @if ($errors->updateBirthDate->any())
+                <div class="mp-alert mp-alert-error mt-4" role="alert">
+                    <x-icon name="error" class="mt-0.5 text-[21px]" />
+                    <p>{{ $errors->updateBirthDate->first() }}</p>
+                </div>
+            @endif
+
+            <div class="mt-5 flex flex-wrap items-center gap-3">
+                <span class="mp-badge mp-badge-neutral">
+                    <x-icon name="cake" class="text-[17px]" />
+                    {{ $user->birth_date ? __(':age años', ['age' => $user->age]) : __('Sin fecha') }}
+                </span>
+                @if ($user->usesEasyMode())
+                    <span class="mp-badge mp-badge-primary">
+                        <x-icon name="accessibility_new" class="text-[17px]" filled />
+                        {{ __('Modo fácil activo') }}
+                    </span>
+                @endif
+            </div>
+
+            <form method="POST" action="{{ route('settings.profile.birth-date.update') }}" class="mt-5">
+                @csrf
+                <x-date-wheel name="birth_date" :value="$user->birth_date?->toDateString()" :required="true" />
+                <button type="submit" class="mp-btn mp-btn-primary mt-4">
+                    <x-icon name="save" class="text-[20px]" />
+                    {{ __('Guardar fecha') }}
+                </button>
+            </form>
+        </section>
+
+        <section class="mp-card mp-card-pad mt-5">
+            <div class="flex items-start gap-4">
+                <span class="mp-icon-tile">
                     <x-icon name="password" class="text-[24px]" />
                 </span>
                 <div>

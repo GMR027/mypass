@@ -141,6 +141,24 @@ class VaultStore(context: Context) {
         prefs.edit().putBoolean(KEY_SIMPLE_MODE, enabled).apply()
     }
 
+    fun easyMode(): Boolean = prefs.getBoolean(KEY_EASY_MODE, false)
+
+    fun setEasyMode(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_EASY_MODE, enabled).apply()
+    }
+
+    fun ageGroup(): String = prefs.getString(KEY_AGE_GROUP, "unknown").orEmpty()
+
+    fun setAgeGroup(group: String) {
+        prefs.edit().putString(KEY_AGE_GROUP, group).apply()
+    }
+
+    fun birthDate(): String = prefs.getString(KEY_BIRTH_DATE, "").orEmpty()
+
+    fun setBirthDate(value: String) {
+        prefs.edit().putString(KEY_BIRTH_DATE, value).apply()
+    }
+
     fun saveEmail(email: String) {
         prefs.edit().putString(KEY_EMAIL, email).apply()
     }
@@ -296,6 +314,9 @@ class VaultStore(context: Context) {
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_SERVER_DEVICE_ID = "server_device_id"
         const val KEY_SIMPLE_MODE = "simple_mode"
+        const val KEY_EASY_MODE = "easy_mode"
+        const val KEY_AGE_GROUP = "age_group"
+        const val KEY_BIRTH_DATE = "birth_date"
         const val KEY_EMAIL = "email"
         const val KEY_NAME = "name"
         const val KEY_AVATAR_URL = "avatar_url"

@@ -28,6 +28,15 @@ if (root) {
     const recoveryCopy = document.getElementById('vault-recovery-copy');
     const recoveryDownload = document.getElementById('vault-recovery-download');
 
+    const emailRecoveryEnableForm = document.getElementById('email-recovery-enable-form');
+    const emailRecoveryPassphrase = document.getElementById('email-recovery-passphrase');
+    const emailRecoveryDisableForm = document.getElementById('email-recovery-disable-form');
+    const emailRecoveryPassword = document.getElementById('email-recovery-password');
+    const emailRecoveryStatus = document.getElementById('email-recovery-status');
+    const emailRecoveryError = document.getElementById('email-recovery-error');
+    const emailRecoveryEnableUrl = root.dataset.recoveryEnableUrl;
+    const emailRecoveryDisableUrl = root.dataset.recoveryDisableUrl;
+
     let pendingRecovery = null;
 
     function showError(element, message) {
@@ -117,6 +126,26 @@ if (root) {
             }
             throw new Error(message);
         }
+    }
+
+    async function postJson(url, payload) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        });
+        const body = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(body.message || t('No se pudo completar la operación.'));
+        }
+
+        return body;
     }
 
     async function unwrapMasterKey(passphrase, keys) {
@@ -350,4 +379,71 @@ if (root) {
         downloadKit(pendingRecovery.digits, pendingRecovery.salt, pendingRecovery.params);
         recoveryStatus.textContent = t('Archivo .mypss descargado. Guárdalo en un lugar seguro.');
     });
+
+    emailRecoveryEnableForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        hideError(emailRecoveryError);
+        emailRecoveryStatus.textContent = t('Activando…');
+
+        const passphrase = emailRecoveryPassphrase?.value ?? '';
+        if (passphrase.length < 12) {
+            emailRecoveryStatus.textContent = '';
+            showError(emailRecoveryError, t('Escribe la frase actual de la bóveda.'));
+            return;
+        }
+
+        let masterKey = null;
+        let recoverySecret = null;
+
+        try {
+            await sodium.ready;
+            const keys = await fetchKeys();
+            masterKey = await unwrapMasterKey(passphrase, keys);
+
+            recoverySecret = sodium.randombytes_buf(32);
+            const wrapped = seal(masterKey, recoverySecret);
+
+            await postJson(emailRecoveryEnableUrl, {
+                secret: toB64(recoverySecret),
+                wrapped_master_key: toB64(combined(wrapped.nonce, wrapped.ciphertext)),
+            });
+
+            emailRecoveryPassphrase.value = '';
+            emailRecoveryStatus.textContent = t('Recuperación por correo activada. Recargando…');
+            setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+            emailRecoveryStatus.textContent = '';
+            showError(emailRecoveryError, error.message || t('No se pudo activar la recuperación por correo.'));
+        } finally {
+            if (recoverySecret) {
+                sodium.memzero(recoverySecret);
+            }
+            if (masterKey) {
+                sodium.memzero(masterKey);
+            }
+        }
+    });
+
+    emailRecoveryDisableForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        hideError(emailRecoveryError);
+        emailRecoveryStatus.textContent = t('Desactivando…');
+
+        const password = emailRecoveryPassword?.value ?? '';
+        if (!password) {
+            emailRecoveryStatus.textContent = '';
+            showError(emailRecoveryError, t('Escribe la contraseña de tu cuenta.'));
+            return;
+        }
+
+        try {
+            await postJson(emailRecoveryDisableUrl, { password });
+            emailRecoveryStatus.textContent = t('Recuperación por correo desactivada. Recargando…');
+            setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+            emailRecoveryStatus.textContent = '';
+            showError(emailRecoveryError, error.message || t('No se pudo desactivar la recuperación por correo.'));
+        }
+    });
+
 }

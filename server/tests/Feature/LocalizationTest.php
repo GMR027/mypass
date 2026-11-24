@@ -83,6 +83,7 @@ class LocalizationTest extends TestCase
                 'email' => 'english-register@example.com',
                 'password' => 'Password12345!',
                 'password_confirmation' => 'Password12345!',
+                'birth_date' => now()->subYears(30)->toDateString(),
             ])
             ->assertRedirect();
 

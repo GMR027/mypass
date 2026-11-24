@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\AdultBirthDate;
 use App\Services\TwoFactorChallenge;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
@@ -19,17 +21,23 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::min(12)->letters()->numbers()],
+            'birth_date' => ['required', 'date_format:Y-m-d', new AdultBirthDate],
             'locale' => ['sometimes', 'string', 'in:es-MX,en'],
             'simple_mode' => ['sometimes', 'boolean'],
+            'easy_mode' => ['sometimes', 'nullable', 'boolean'],
             'device_name' => ['sometimes', 'string', 'max:120'],
         ]);
+
+        $isSenior = Carbon::parse($data['birth_date'])->age >= User::SENIOR_AGE;
 
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'],
+            'birth_date' => $data['birth_date'],
             'locale' => $data['locale'] ?? 'es-MX',
-            'simple_mode' => $data['simple_mode'] ?? true,
+            'simple_mode' => $data['simple_mode'] ?? $isSenior,
+            'easy_mode' => $data['easy_mode'] ?? null,
             'is_admin' => User::query()->count() === 0,
         ]);
 
@@ -102,6 +110,9 @@ class AuthController extends Controller
             'avatar_url' => $user->avatar_url,
             'locale' => $user->locale,
             'simple_mode' => $user->simple_mode,
+            'easy_mode' => $user->usesEasyMode(),
+            'age_group' => $user->age_group,
+            'birth_date' => $user->birth_date?->toDateString(),
             'has_two_factor' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at !== null,
             'has_email_two_factor' => $user->email_two_factor_enabled,
             'email_verified' => $user->hasVerifiedEmail(),

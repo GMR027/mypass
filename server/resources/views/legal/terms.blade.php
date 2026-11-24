@@ -12,7 +12,12 @@
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Tu cuenta y tus llaves') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('Eres responsable de tu contraseña, tu frase de bóveda, tu PIN y tu llave de emergencia. Si pierdes la llave de emergencia y olvidas la frase, no podemos recuperar el contenido cifrado. No compartas tus llaves con nadie.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('Eres responsable de tu contraseña, tu frase de bóveda, tu PIN y tu llave de emergencia. Si activas la recuperación por correo, guardamos una copia recuperable de la llave maestra y puedes abrir la bóveda con un código enviado a tu correo; esa función es opcional y hace que el servidor pueda ayudar a recuperar la bóveda. Si no la activas y pierdes la llave de emergencia y olvidas la frase, no podemos recuperar el contenido cifrado. No compartas tus llaves con nadie.') }}</p>
+            </section>
+
+            <section>
+                <h2 class="mp-title-sm">{{ __('Edad') }}</h2>
+                <p class="mp-body-sm mt-2">{{ __('Debes tener al menos 18 años para crear una cuenta y usar My Pass. La fecha de nacimiento que proporciones debe ser correcta.') }}</p>
             </section>
 
             <section>

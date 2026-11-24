@@ -10,7 +10,10 @@
     <x-translations />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-surface text-on-surface {{ auth()->user()?->simple_mode ? 'simple-mode' : '' }}">
+@php
+    $shellUser = auth()->user();
+@endphp
+<body @if ($shellUser) data-easy="{{ $shellUser->usesEasyMode() ? '1' : '0' }}" @endif class="min-h-screen bg-surface text-on-surface {{ $shellUser?->usesLargeText() ? 'simple-mode' : '' }} {{ $shellUser?->usesEasyMode() ? 'easy-mode' : '' }}">
     <a href="#contenido" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-3 focus:text-on-primary">
         {{ __('Saltar al contenido') }}
     </a>

@@ -33,6 +33,7 @@ class AuthTest extends TestCase
             'email' => 'edgar@example.com',
             'password' => 'Password12345!',
             'password_confirmation' => 'Password12345!',
+            'birth_date' => now()->subYears(30)->toDateString(),
             'locale' => 'es-MX',
             'simple_mode' => true,
             'device_name' => 'Tablet',

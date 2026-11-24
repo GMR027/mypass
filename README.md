@@ -44,14 +44,19 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
   - aviso de documentos por vencer;
   - página de inicio pública;
   - interfaz completa en español e inglés, con selector de idioma.
-- Pruebas de API y de navegador pasando (58 pruebas, 278 aserciones).
+- Pruebas de API y de navegador pasando (94 pruebas, 442 aserciones).
 - App Android en Kotlin + Compose, instalada en la tablet de pruebas.
 - Billetera de pases con pestañas Documentos, Pases, Familia y Dispositivos.
 - Generador de pases con OCR local (Tesseract.js), PDF.js, ZXing y códigos QR/PDF417/Aztec/Code 128.
 - Desbloqueo de Android con PIN y, cuando el dispositivo lo permite, huella o credencial del sistema.
+- Registro con fecha de nacimiento, cálculo de edad y modo fácil automático a partir de los 51 años, con opción de desactivarlo.
+- Recuperación de bóveda por correo opcional, equipo de confianza para abrir la bóveda con un clic y centro de recuperación con llave de emergencia.
 - Recuperación de cuenta web, cambio de contraseña, cambio de frase de bóveda, regeneración de llave de emergencia y eliminación de cuenta.
 - Auto-bloqueo de la bóveda web, cabeceras CSP y centro de notificaciones.
 - Páginas legales de privacidad y términos.
+- Pases de vuelo y transporte con terminal, puerta e inicio/cierre de abordaje, además de OCR para esos campos.
+- Credenciales con logo, banner o fondo, tipos de cuenta personalizados y grupos definidos por el usuario.
+- Android: fechas de pases con selector del sistema, recuperación de la bóveda por correo desde el celular y notificaciones con el ícono de la app.
 - Tablet: Xiaomi Pad 6, Android 13 (API 33), sin biometría fuerte.
 
 ## Requisitos locales
@@ -161,8 +166,8 @@ Ese valor queda dentro de `BuildConfig.API_BASE_URL` y no necesita `adb reverse`
 La versión de la app vive en `android/version.properties`:
 
 ```properties
-versionCode=10
-versionName=0.4.6
+versionCode=12
+versionName=0.6.0
 minSupportedVersionCode=0
 ```
 
@@ -221,9 +226,16 @@ python3 -m http.server 38100 --directory docs/landing-preview
 - `POST /api/v1/auth/two-factor/email`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/me`
+- `PATCH /api/v1/me/profile`
+- `PATCH /api/v1/me/preferences`
 - `GET|POST /api/v1/devices`
 - `POST /api/v1/devices/{id}/revoke`
 - `GET|PUT /api/v1/keys`
+- `GET /api/v1/vault-recovery/status`
+- `POST /api/v1/vault-recovery/request`
+- `POST /api/v1/vault-recovery/verify`
+- `POST /api/v1/vault-recovery/enable`
+- `DELETE /api/v1/vault-recovery`
 - `POST /api/v1/blobs`
 - `GET /api/v1/blobs/{id}`
 - `GET|POST /api/v1/items`
@@ -240,7 +252,9 @@ Todos los endpoints protegidos usan `Authorization: Bearer <token>`.
 
 ## Seguridad
 
-- El servidor no descifra documentos ni llaves; los blobs se suben ya cifrados por el cliente.
+- Por defecto, el servidor no descifra documentos ni llaves; los blobs se suben ya cifrados por el cliente.
+- La recuperación por correo es opcional. Si la persona la activa, el servidor guarda una copia recuperable de la llave maestra y la entrega solo después de verificar un código enviado al correo. El resto de cuentas mantiene el modelo de conocimiento cero.
+- La fecha de nacimiento se usa para confirmar que la cuenta es de una persona de 18 años o más y para activar el modo fácil a partir de los 51 años.
 - `.env`, `.env.testing`, `local.properties`, builds y vendors están fuera de Git.
 - No usar documentos reales en pruebas.
 

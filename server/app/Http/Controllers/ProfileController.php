@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateAvatarRequest;
+use App\Rules\AdultBirthDate;
 use App\Services\AuditLogger;
 use App\Services\UserAvatarService;
 use Illuminate\Http\RedirectResponse;
@@ -43,6 +44,19 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login')->with('status', __('Tu cuenta y tus datos se eliminaron.'));
+    }
+
+    public function updateBirthDate(Request $request): RedirectResponse
+    {
+        $data = $request->validateWithBag('updateBirthDate', [
+            'birth_date' => ['required', 'date_format:Y-m-d', new AdultBirthDate],
+        ]);
+
+        $request->user()->forceFill([
+            'birth_date' => $data['birth_date'],
+        ])->save();
+
+        return back()->with('status', __('Fecha de nacimiento guardada.'));
     }
 
     public function updateAvatar(UpdateAvatarRequest $request, UserAvatarService $avatars): RedirectResponse

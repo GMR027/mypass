@@ -17,9 +17,13 @@ class SecurityController extends Controller
     {
         $user = $request->user();
 
+        $keys = $user->keys()->first();
+
         return view('settings.security', [
             'user' => $user,
-            'hasVault' => $user->keys()->exists(),
+            'hasVault' => $keys !== null,
+            'emailRecoveryEnabled' => $keys?->emailRecoveryEnabled() ?? false,
+            'emailRecoveryMasked' => $user->email,
             'totpEnabled' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at !== null,
             'totpPending' => $user->two_factor_secret !== null && $user->two_factor_confirmed_at === null,
             'emailEnabled' => $user->email_two_factor_enabled,
@@ -45,11 +49,15 @@ class SecurityController extends Controller
         $data = $request->validate([
             'locale' => ['required', 'string', 'in:es-MX,en'],
             'simple_mode' => ['required', 'boolean'],
+            'easy_mode' => ['sometimes', 'nullable', 'boolean'],
         ]);
 
         $request->user()->forceFill([
             'locale' => $data['locale'],
             'simple_mode' => $data['simple_mode'],
+            'easy_mode' => array_key_exists('easy_mode', $data)
+                ? $data['easy_mode']
+                : $request->user()->easy_mode,
         ])->save();
 
         app()->setLocale($data['locale']);
@@ -61,6 +69,7 @@ class SecurityController extends Controller
             'data' => [
                 'locale' => $data['locale'],
                 'simple_mode' => $data['simple_mode'],
+                'easy_mode' => $request->user()->usesEasyMode(),
             ],
         ]);
     }

@@ -1031,6 +1031,18 @@
         line-height: 1.2;
     }
 
+    .mp-pass-card__boarding {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 0.65rem;
+        background: rgb(255 255 255 / 0.1);
+        padding: 0.45rem 0.65rem;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+
     .mp-pass-card__footer {
         display: flex;
         flex-wrap: wrap;
@@ -1179,6 +1191,72 @@
 
     .mp-credential-card__head {
         @apply flex items-start justify-between gap-3;
+    }
+
+    .mp-credential-group-heading {
+        grid-column: 1 / -1;
+        margin-top: 0.35rem;
+        border-bottom: 1px solid var(--color-outline-variant);
+        padding-bottom: 0.55rem;
+        font-size: 0.95rem;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        color: var(--color-on-surface-variant);
+    }
+
+    .mp-credential-card.has-banner {
+        padding-top: 0;
+    }
+
+    .mp-credential-card__banner {
+        margin: 0 -1.25rem 1rem;
+        border-radius: var(--radius-2xl, 1rem) var(--radius-2xl, 1rem) 0 0;
+        padding: 1.25rem;
+        color: #fff;
+        background-color: var(--credential-appearance-color, #1B4332);
+        background-image: linear-gradient(rgb(0 0 0 / 0.34), rgb(0 0 0 / 0.34)), var(--credential-appearance-image, none);
+        background-position: center;
+        background-size: cover;
+    }
+
+    .mp-credential-card.has-banner .mp-credential-card__title,
+    .mp-credential-card.has-banner .mp-credential-card__subtitle {
+        color: #fff;
+    }
+
+    .mp-credential-card.has-banner .mp-credential-card__subtitle {
+        color: rgb(255 255 255 / 0.78);
+    }
+
+    .mp-credential-card.has-banner .mp-credential-card__tile {
+        background: rgb(255 255 255 / 0.16);
+        color: #fff;
+    }
+
+    .mp-credential-card.has-banner .mp-btn-icon {
+        color: #fff;
+    }
+
+    .mp-credential-card.has-background {
+        padding: 0;
+        background-color: var(--credential-appearance-color, #1B4332);
+        background-image: linear-gradient(rgb(0 0 0 / 0.18), rgb(0 0 0 / 0.18)), var(--credential-appearance-image, none);
+        background-position: center;
+        background-size: cover;
+    }
+
+    .mp-credential-card__content {
+        margin: 0.9rem;
+        border-radius: 1rem;
+        background: rgb(255 255 255 / 0.92);
+        padding: 1rem;
+        backdrop-filter: blur(6px);
+    }
+
+    .mp-credential-card__tile img {
+        max-height: 2rem;
+        max-width: 2rem;
+        object-fit: contain;
     }
 
     .mp-credential-card__identity {
@@ -1330,7 +1408,153 @@
     }
 }
 
-body.simple-mode {
+/* Fechas nativas en formularios */
+.mp-date-input {
+    color-scheme: light;
+}
+
+.mp-date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.75;
+    padding: 0.25rem;
+}
+
+.mp-date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+/* Selector de fecha con ruedas */
+.mp-date-wheel {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+}
+
+.mp-date-wheel__viewport {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) minmax(0, 0.9fr);
+    height: 220px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--color-outline-variant) 80%, transparent);
+    border-radius: 1.25rem;
+    background: var(--color-surface-container-lowest);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+
+.mp-date-wheel__viewport::before,
+.mp-date-wheel__viewport::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    height: 64px;
+    pointer-events: none;
+}
+
+.mp-date-wheel__viewport::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--color-surface-container-lowest), transparent);
+}
+
+.mp-date-wheel__viewport::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--color-surface-container-lowest), transparent);
+}
+
+.mp-date-wheel__viewport {
+    --mp-wheel-highlight: color-mix(in srgb, var(--color-primary-fixed) 62%, transparent);
+}
+
+.mp-date-wheel__column {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    padding-block: 88px;
+    outline: none;
+    background-image: linear-gradient(
+        to bottom,
+        transparent calc(50% - 22px),
+        var(--mp-wheel-highlight) calc(50% - 22px),
+        var(--mp-wheel-highlight) calc(50% + 22px),
+        transparent calc(50% + 22px)
+    );
+}
+
+.mp-date-wheel__column::-webkit-scrollbar {
+    display: none;
+}
+
+.mp-date-wheel__column:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: -3px;
+    border-radius: 0.75rem;
+}
+
+.mp-date-wheel__column[data-active="true"] {
+    background-color: color-mix(in srgb, var(--color-primary-fixed) 18%, transparent);
+}
+
+.mp-date-wheel__item {
+    display: flex;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    scroll-snap-align: center;
+    cursor: pointer;
+    border-radius: 0.75rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-on-surface-variant);
+    transition: color 120ms ease, transform 120ms ease;
+    user-select: none;
+}
+
+.mp-date-wheel__item[data-selected="true"] {
+    color: var(--color-primary);
+    font-weight: 800;
+    transform: scale(1.04);
+}
+
+.mp-date-wheel__item[data-value=""] {
+    color: var(--color-outline);
+}
+
+.mp-date-wheel__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.mp-date-wheel__footer .mp-hint {
+    margin: 0;
+}
+
+.mp-form-easy .mp-label,
+.mp-form-easy .mp-hint {
+    font-size: 1.05rem;
+}
+
+.mp-form-easy .mp-input {
+    min-height: 3.75rem;
+    font-size: 1.1rem;
+}
+
+.mp-form-easy .mp-btn {
+    min-height: 3.75rem;
+    font-size: 1.1rem;
+}
+
+body.simple-mode,
+body.easy-mode {
     font-size: 20px;
 }
 
@@ -1379,6 +1603,61 @@ body.simple-mode .mp-medical-card__value {
 
 body.simple-mode .mp-card-pad {
     padding: 1.75rem;
+}
+
+body.easy-mode {
+    font-size: 22px;
+}
+
+body.easy-mode main {
+    line-height: 1.8;
+}
+
+body.easy-mode .mp-btn {
+    min-height: 4rem;
+    font-size: 1.2rem;
+}
+
+body.easy-mode .mp-input,
+body.easy-mode .mp-select {
+    height: 4rem;
+    font-size: 1.15rem;
+}
+
+body.easy-mode .mp-label,
+body.easy-mode .mp-hint,
+body.easy-mode .mp-body-sm {
+    font-size: 1.1rem;
+}
+
+body.easy-mode .mp-tab {
+    flex: 1 1 auto;
+    min-height: 4rem;
+    font-size: 1.15rem;
+}
+
+body.easy-mode .mp-grid-docs,
+body.easy-mode .mp-credential-list,
+body.easy-mode .mp-medical-list,
+body.easy-mode .mp-pass-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body.easy-mode .mp-card-pad {
+    padding: 2rem;
+}
+
+body.easy-mode .mp-eyebrow {
+    font-size: 0.9rem;
+}
+
+body.easy-mode .mp-icon-tile,
+body.easy-mode .mp-icon-tile-lg {
+    flex: 0 0 auto;
+}
+
+body.easy-mode .mp-hide-easy {
+    display: none !important;
 }
 
 @media print {

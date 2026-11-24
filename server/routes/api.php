@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\ShareController;
 use App\Http\Controllers\Api\V1\ShareRequestController;
 use App\Http\Controllers\Api\V1\TwoFactorController;
 use App\Http\Controllers\Api\V1\VaultItemController;
+use App\Http\Controllers\Api\V1\VaultRecoveryController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -45,6 +46,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
         Route::delete('/me/avatar', [ProfileController::class, 'destroyAvatar']);
+        Route::patch('/me/profile', [ProfileController::class, 'updateProfile']);
+        Route::patch('/me/preferences', [ProfileController::class, 'updatePreferences']);
 
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
@@ -58,6 +61,12 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/keys', [KeyController::class, 'show']);
         Route::put('/keys', [KeyController::class, 'update']);
+
+        Route::get('/vault-recovery/status', [VaultRecoveryController::class, 'status']);
+        Route::post('/vault-recovery/request', [VaultRecoveryController::class, 'requestCode'])->middleware('throttle:5,1');
+        Route::post('/vault-recovery/verify', [VaultRecoveryController::class, 'verifyCode'])->middleware('throttle:10,1');
+        Route::post('/vault-recovery/enable', [VaultRecoveryController::class, 'enable']);
+        Route::delete('/vault-recovery', [VaultRecoveryController::class, 'disable']);
 
         Route::get('/contacts', [ContactController::class, 'index']);
         Route::post('/contacts', [ContactController::class, 'store']);

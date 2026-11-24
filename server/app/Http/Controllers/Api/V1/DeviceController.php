@@ -67,6 +67,7 @@ class DeviceController extends Controller
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:120'],
+            'wrapped_master_key' => ['sometimes', 'nullable', 'string'],
             'pin_salt' => ['sometimes', 'nullable', 'string'],
             'pin_params' => ['sometimes', 'nullable', 'array'],
             'biometric_wrapped_master_key' => ['sometimes', 'nullable', 'string'],

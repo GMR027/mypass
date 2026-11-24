@@ -53,6 +53,7 @@ enum class Screen {
     Pair,
     PinSetup,
     TwoFactor,
+    RecoverVault,
     Locked,
     Home,
     Vault,
@@ -87,6 +88,13 @@ data class UiPass(
 
 data class UiCredential(
     val category: String,
+    val categoryLabel: String,
+    val categoryIcon: String,
+    val group: String,
+    val logo: String?,
+    val appearanceMode: String,
+    val appearanceColor: String,
+    val appearanceImage: String?,
     val username: String,
     val password: String,
     val url: String,
@@ -104,6 +112,13 @@ data class CredentialDraft(
     val itemId: String? = null,
     val version: Int? = null,
     val category: String = "login",
+    val categoryLabel: String = "",
+    val categoryIcon: String = "",
+    val group: String = "",
+    val logo: String? = null,
+    val appearanceMode: String = "none",
+    val appearanceColor: String = "#1B4332",
+    val appearanceImage: String? = null,
     val title: String = "",
     val username: String = "",
     val password: String = "",
@@ -290,6 +305,11 @@ data class UiState(
     val twoFactorToken: String? = null,
     val twoFactorMethods: List<String> = emptyList(),
     val simpleMode: Boolean = false,
+    val easyMode: Boolean = false,
+    val ageGroup: String = "unknown",
+    val birthDate: String = "",
+    val recoveryEmail: String = "",
+    val recoveryEnabled: Boolean = false,
     val biometricEnabled: Boolean = false,
     val viewerPath: String? = null,
     val viewerMime: String? = null,
@@ -357,6 +377,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> Screen.Login
             },
             simpleMode = store.simpleMode(),
+            easyMode = store.easyMode(),
+            ageGroup = store.ageGroup(),
+            birthDate = store.birthDate(),
+            recoveryEnabled = false,
             biometricEnabled = store.biometricEnabled(),
             email = store.email(),
             name = store.name(),
@@ -368,6 +392,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             lastUpdateCheck = updateStore.lastCheck(),
             expiryReadIds = notificationStore.readExpiryIds(),
         )
+
+        refreshRecoveryStatus()
+    }
+
+    fun refreshRecoveryStatus() {
+        val token = store.token() ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val status = runCatching { ApiClient.vaultRecoveryStatus(token) }.getOrNull() ?: return@launch
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(
+                    recoveryEnabled = status.optBoolean("enabled", false),
+                    recoveryEmail = status.optString("masked_email").orEmpty(),
+                )
+            }
+        }
     }
 
     private fun avatarCacheFile(): File = File(getApplication<Application>().filesDir, AVATAR_CACHE_FILE)
@@ -441,6 +481,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     store.saveEmail(email.trim())
                     store.saveName(accountName)
                     store.saveAvatarUrl(avatarUrl)
+                    applyAccountPreferences(account)
                     withContext(Dispatchers.Main) {
                         _state.value = _state.value.copy(
                             screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
@@ -451,9 +492,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             status = null,
                             twoFactorToken = null,
                             twoFactorMethods = emptyList(),
+                            simpleMode = store.simpleMode(),
+                            easyMode = store.easyMode(),
+                            ageGroup = store.ageGroup(),
+                            birthDate = store.birthDate(),
                             biometricEnabled = store.biometricEnabled(),
                         )
                     }
+                    refreshRecoveryStatus()
                     refreshAvatar(avatarUrl)
                 }
                 .onFailure { error ->
@@ -511,6 +557,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     store.saveName(accountName)
                     store.saveAvatarUrl(avatarUrl)
                     store.saveToken(accessToken)
+                    applyAccountPreferences(account)
                     withContext(Dispatchers.Main) {
                         _state.value = _state.value.copy(
                             screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
@@ -520,11 +567,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             busy = false,
                             status = null,
                             error = null,
+                            simpleMode = store.simpleMode(),
+                            easyMode = store.easyMode(),
+                            ageGroup = store.ageGroup(),
+                            birthDate = store.birthDate(),
                             twoFactorToken = null,
                             twoFactorMethods = emptyList(),
                             biometricEnabled = store.biometricEnabled(),
                         )
                     }
+                    refreshRecoveryStatus()
                     refreshAvatar(avatarUrl)
                 }
                 .onFailure { error ->
@@ -721,18 +773,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 masterKey = key
 
                 val token = store.token()
-                val publicKey = pairingPublicKey
-                if (token != null && publicKey != null) {
-                    runCatching {
-                        val serverDeviceId = ApiClient.registerDevice(
-                            token,
-                            publicKey,
-                            wrappedBase64,
-                            saltBase64,
-                            Crypto.PIN_OPS,
-                            Crypto.PIN_MEM,
-                        )
-                        store.saveServerDeviceId(serverDeviceId)
+                if (token != null) {
+                    val existingDeviceId = store.serverDeviceId()
+
+                    if (existingDeviceId != null) {
+                        runCatching {
+                            ApiClient.updateDevice(
+                                token,
+                                existingDeviceId,
+                                pinSalt = saltBase64,
+                                pinParams = JSONObject()
+                                    .put("ops_limit", Crypto.PIN_OPS)
+                                    .put("mem_limit", Crypto.PIN_MEM)
+                                    .put("algorithm", "argon2id13"),
+                                wrappedMasterKey = wrappedBase64,
+                            )
+                        }
+                    } else {
+                        val publicKey = pairingPublicKey
+                        if (publicKey != null) {
+                            runCatching {
+                                val serverDeviceId = ApiClient.registerDevice(
+                                    token,
+                                    publicKey,
+                                    wrappedBase64,
+                                    saltBase64,
+                                    Crypto.PIN_OPS,
+                                    Crypto.PIN_MEM,
+                                )
+                                store.saveServerDeviceId(serverDeviceId)
+                            }
+                        }
                     }
                 }
             }.onSuccess {
@@ -1032,6 +1103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 checkDeviceAllowed(token)
                 loadAccountProfile(token)
+                refreshRecoveryStatus()
                 loadIdentityKeys(key, token)
                 uploadPending(key, token)
                 fetchServer(key, token)
@@ -1054,12 +1126,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun applyAccountPreferences(account: org.json.JSONObject?) {
+        if (account == null) {
+            return
+        }
+
+        val birthDate = account.optString("birth_date").takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+        val ageGroup = account.optString("age_group").takeIf { it.isNotBlank() }.orEmpty()
+        val simpleMode = account.optBoolean("simple_mode", store.simpleMode())
+        val easyMode = account.optBoolean("easy_mode", store.easyMode())
+
+        store.setBirthDate(birthDate)
+        if (ageGroup.isNotBlank()) {
+            store.setAgeGroup(ageGroup)
+        }
+        store.setSimpleMode(simpleMode)
+        store.setEasyMode(easyMode)
+    }
+
     private suspend fun loadAccountProfile(token: String) {
         val user = runCatching { ApiClient.me(token) }.getOrNull() ?: return
         val name = user.optString("name").trim()
         val avatarUrl = user.optString("avatar_url")
             .takeIf { it.isNotBlank() && it != "null" }
             .orEmpty()
+
+        applyAccountPreferences(user)
+        withContext(Dispatchers.Main) {
+            _state.value = _state.value.copy(
+                simpleMode = store.simpleMode(),
+                easyMode = store.easyMode(),
+                ageGroup = store.ageGroup(),
+                birthDate = store.birthDate(),
+            )
+        }
 
         if (name.isNotBlank() && name != _state.value.name) {
             store.saveName(name)
@@ -1855,6 +1955,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 itemId = item.id,
                 version = local?.version ?: 1,
                 category = credential.category,
+                categoryLabel = credential.categoryLabel,
+                categoryIcon = credential.categoryIcon,
+                group = credential.group,
+                logo = credential.logo,
+                appearanceMode = credential.appearanceMode,
+                appearanceColor = credential.appearanceColor,
+                appearanceImage = credential.appearanceImage,
                 title = item.title,
                 username = credential.username,
                 password = credential.password,
@@ -2110,6 +2217,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun editPass(item: UiItem) {
         val pass = item.pass ?: return
         val local = store.findItem(item.id)
+        val normalizedFields = pass.fields.toMutableMap().apply {
+            if (!containsKey("boarding_start") && containsKey("boarding")) {
+                put("boarding_start", getValue("boarding"))
+            }
+        }
         _state.value = _state.value.copy(
             screen = Screen.PassEditor,
             passDraft = PassDraft(
@@ -2119,7 +2231,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 title = pass.title,
                 issuer = pass.issuer,
                 holder = pass.holder,
-                fields = pass.fields,
+                fields = normalizedFields,
                 notes = pass.notes,
                 codePayload = pass.codePayload.orEmpty(),
                 codeFormat = pass.codeFormat,
@@ -2323,6 +2435,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         },
                     )
                     .put("totp", totp?.toJson() ?: JSONObject.NULL)
+
+                if (draft.category == "custom") {
+                    credentialJson
+                        .put("category_label", draft.categoryLabel.trim())
+                        .put("category_icon", draft.categoryIcon.ifBlank { "lock" })
+                } else {
+                    credentialJson.remove("category_label")
+                    credentialJson.remove("category_icon")
+                }
+
+                if (draft.group.isBlank()) {
+                    credentialJson.remove("group")
+                } else {
+                    credentialJson.put("group", draft.group.trim())
+                }
+
+                if (draft.logo.isNullOrBlank()) {
+                    credentialJson.remove("logo")
+                } else {
+                    credentialJson.put("logo", draft.logo)
+                }
+
+                if (draft.appearanceMode == "none" || (draft.appearanceColor.isBlank() && draft.appearanceImage.isNullOrBlank())) {
+                    credentialJson.remove("appearance")
+                } else {
+                    credentialJson.put(
+                        "appearance",
+                        JSONObject()
+                            .put("mode", draft.appearanceMode)
+                            .put("color", draft.appearanceColor)
+                            .put("image", draft.appearanceImage ?: ""),
+                    )
+                }
+
                 metadata.put("credential", credentialJson)
 
                 var localPath = existing?.localPath
@@ -2874,6 +3020,219 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSimpleMode(enabled: Boolean) {
         store.setSimpleMode(enabled)
         _state.value = _state.value.copy(simpleMode = enabled)
+        syncPreferences(simpleMode = enabled)
+    }
+
+    fun setEasyMode(enabled: Boolean) {
+        store.setEasyMode(enabled)
+        _state.value = _state.value.copy(easyMode = enabled)
+        syncPreferences(easyMode = enabled)
+    }
+
+    fun setBirthDate(value: String) {
+        if (value.isBlank()) {
+            return
+        }
+
+        val token = store.token() ?: return
+        val previous = store.birthDate()
+        _state.value = _state.value.copy(
+            busy = true,
+            status = text(R.string.status_saving_birth_date),
+            error = null,
+            birthDate = value,
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { ApiClient.updateProfile(token, value) }
+                .onSuccess { data ->
+                    store.setBirthDate(data.optString("birth_date"))
+                    store.setAgeGroup(data.optString("age_group", "unknown"))
+                    store.setSimpleMode(data.optBoolean("simple_mode", store.simpleMode()))
+                    store.setEasyMode(data.optBoolean("easy_mode", store.easyMode()))
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(
+                            busy = false,
+                            status = text(R.string.status_birth_date_saved),
+                            birthDate = store.birthDate(),
+                            ageGroup = store.ageGroup(),
+                            simpleMode = store.simpleMode(),
+                            easyMode = store.easyMode(),
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(
+                            busy = false,
+                            status = null,
+                            birthDate = previous,
+                            error = error.message ?: text(R.string.error_save_birth_date),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun syncPreferences(simpleMode: Boolean? = null, easyMode: Boolean? = null) {
+        val token = store.token() ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { ApiClient.updatePreferences(token, simpleMode, easyMode) }
+        }
+    }
+
+    fun enableEmailRecovery() {
+        val token = store.token()
+        val key = masterKey
+
+        if (token == null || key == null) {
+            _state.value = _state.value.copy(error = text(R.string.error_unlock_to_enable_recovery))
+            return
+        }
+
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_enabling_recovery))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var secret: ByteArray? = null
+
+            runCatching {
+                secret = Crypto.randomBytes(32)
+                val wrapped = Crypto.seal(secret!!, key)
+                ApiClient.enableVaultRecovery(
+                    token,
+                    Base64.encodeToString(secret, Base64.NO_WRAP),
+                    Base64.encodeToString(wrapped, Base64.NO_WRAP),
+                )
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = text(R.string.status_recovery_enabled),
+                        recoveryEnabled = true,
+                        recoveryEmail = store.email(),
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_enable_recovery),
+                    )
+                }
+            }
+
+            secret?.let(Crypto::memzero)
+        }
+    }
+
+    fun startVaultRecovery() {
+        val token = store.token()
+        if (token == null) {
+            _state.value = _state.value.copy(error = text(R.string.error_sign_in_again))
+            return
+        }
+
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_preparing_recovery))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val status = runCatching { ApiClient.vaultRecoveryStatus(token) }.getOrNull()
+
+            if (status == null || !status.optBoolean("enabled", false)) {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = text(R.string.error_recovery_not_enabled),
+                    )
+                }
+                return@launch
+            }
+
+            runCatching {
+                val generator = KeyPairGenerator.getInstance("RSA")
+                generator.initialize(RSAKeyGenParameterSpec(2048, RSAKeyGenParameterSpec.F4))
+                val keyPair = generator.generateKeyPair()
+                pairingPrivateKey = keyPair.private
+                pairingPublicKey = Base64.encodeToString(keyPair.public.encoded, Base64.NO_WRAP)
+                ApiClient.requestVaultRecovery(token)
+            }.onSuccess { body ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.RecoverVault,
+                        busy = false,
+                        status = body.optString("message").takeIf { it.isNotBlank() },
+                        recoveryEmail = status.optString("masked_email"),
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_send_recovery_code),
+                    )
+                }
+            }
+        }
+    }
+
+    fun verifyVaultRecovery(code: String) {
+        val token = store.token()
+        if (token == null) {
+            _state.value = _state.value.copy(error = text(R.string.error_sign_in_again))
+            return
+        }
+
+        if (code.isBlank()) {
+            _state.value = _state.value.copy(error = text(R.string.error_enter_code))
+            return
+        }
+
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_checking_code))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val data = ApiClient.verifyVaultRecovery(token, code.trim())
+                val secret = Base64.decode(data.getString("secret"), Base64.NO_WRAP)
+                val wrapped = Base64.decode(data.getString("wrapped_master_key"), Base64.NO_WRAP)
+
+                try {
+                    Crypto.open(secret, wrapped)
+                } finally {
+                    Crypto.memzero(secret)
+                }
+            }.onSuccess { key ->
+                pendingMasterKey = key
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.PinSetup,
+                        busy = false,
+                        status = text(R.string.status_recovery_ready),
+                        recoveryEmail = "",
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_recovery_code),
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelVaultRecovery() {
+        _state.value = _state.value.copy(
+            screen = if (store.hasVault()) Screen.Locked else Screen.Pair,
+            busy = false,
+            status = null,
+            error = null,
+            recoveryEmail = "",
+        )
     }
 
     fun addContact(email: String) {
@@ -3289,9 +3648,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val totp = json.optJSONObject("totp")
         val secret = totp?.optString("secret")?.takeIf { it.isNotBlank() && it != "null" }
             ?: json.optString("totp_secret").takeIf { it.isNotBlank() && it != "null" }
+        val appearance = json.optJSONObject("appearance")
+        val rawCategory = json.optString("category").takeIf { it.isNotBlank() } ?: "login"
+        val categoryLabel = json.optString("category_label").takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+        val category = if (rawCategory == "custom" || categoryLabel.isNotBlank()) "custom" else rawCategory
+        val appearanceMode = appearance?.optString("mode")?.takeIf { it in setOf("banner", "background") } ?: "none"
+        val appearanceColor = appearance?.optString("color")
+            ?.takeIf { Regex("^#[0-9a-fA-F]{6}$").matches(it) }
+            ?: "#1B4332"
+        val appearanceImage = appearance?.optString("image")
+            ?.takeIf { it.startsWith("data:image/") && it != "null" }
 
         return UiCredential(
-            category = json.optString("category").takeIf { it.isNotBlank() } ?: "login",
+            category = category,
+            categoryLabel = if (category == "custom") categoryLabel else "",
+            categoryIcon = if (category == "custom") {
+                json.optString("category_icon").takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+            } else {
+                ""
+            },
+            group = json.optString("group").takeIf { it != "null" }.orEmpty(),
+            logo = json.optString("logo").takeIf { it.startsWith("data:image/") && it != "null" },
+            appearanceMode = appearanceMode,
+            appearanceColor = appearanceColor,
+            appearanceImage = appearanceImage,
             username = json.optString("username").takeIf { it != "null" }.orEmpty(),
             password = json.optString("password").takeIf { it != "null" }.orEmpty(),
             url = json.optString("url").takeIf { it != "null" }.orEmpty(),

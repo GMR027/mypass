@@ -7,13 +7,13 @@
         <div class="mp-card mp-card-pad mt-6 space-y-6">
             <section>
                 <h2 class="mp-title-sm">{{ __('Qué es My Pass') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('My Pass es una bóveda personal para guardar documentos, boletos, tarjetas y pases. El contenido se cifra en tu dispositivo antes de salir de él. El servidor guarda blobs cifrados y metadatos también cifrados; no puede leer tus documentos ni tus llaves.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('My Pass es una bóveda personal para guardar documentos, boletos, tarjetas y pases. El contenido se cifra en tu dispositivo antes de salir de él. Por defecto, el servidor guarda blobs cifrados y metadatos también cifrados; no puede leer tus documentos ni tus llaves. Si activas la recuperación por correo, guardamos una copia recuperable de la llave maestra para ese flujo.') }}</p>
             </section>
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Datos que tratamos') }}</h2>
                 <ul class="mp-body-sm mt-2 list-inside list-disc space-y-1">
-                    <li>{{ __('Datos de cuenta: nombre, correo, contraseña cifrada con hash, idioma y preferencias.') }}</li>
+                    <li>{{ __('Datos de cuenta: nombre, correo, contraseña cifrada con hash, fecha de nacimiento, idioma y preferencias.') }}</li>
                     <li>{{ __('Contenido cifrado: archivos, metadatos de documentos y pases, y blobs asociados.') }}</li>
                     <li>{{ __('Dispositivos: nombre, plataforma, última conexión y llaves públicas o envueltas.') }}</li>
                     <li>{{ __('Relaciones: contactos, envíos, solicitudes y notificaciones internas.') }}</li>
@@ -23,7 +23,7 @@
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Para qué los usamos') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('Para autenticarte, sincronizar tu bóveda entre tus dispositivos, permitir envíos cifrados a tus contactos, avisarte de vencimientos, prevenir abusos y mantener la seguridad del servicio. No vendemos tus datos ni los usamos para publicidad.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('Para autenticarte, sincronizar tu bóveda entre tus dispositivos, permitir envíos cifrados a tus contactos, avisarte de vencimientos, adaptar la interfaz a tu edad, confirmar que tienes 18 años o más, prevenir abusos y mantener la seguridad del servicio. No vendemos tus datos ni los usamos para publicidad.') }}</p>
             </section>
 
             <section>
@@ -43,17 +43,17 @@
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Cookies y almacenamiento local') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('Usamos cookies necesarias para la sesión y la protección CSRF, y almacenamiento local para el idioma, el modo simple y el tiempo de bloqueo automático. No usamos cookies de publicidad ni analítica de terceros.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('Usamos cookies necesarias para la sesión y la protección CSRF, y almacenamiento local para el idioma, el modo fácil, el texto grande, el equipo de confianza y el tiempo de bloqueo automático. No usamos cookies de publicidad ni analítica de terceros.') }}</p>
             </section>
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Seguridad') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('Las llaves se derivan con Argon2id y el contenido se cifra con XChaCha20-Poly1305 en el cliente. En producción el servicio debe servirse por HTTPS. Ningún sistema es infalible: guarda tu llave de emergencia y mantén actualizados tus dispositivos.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('Las llaves se derivan con Argon2id y el contenido se cifra con XChaCha20-Poly1305 en el cliente. En producción el servicio debe servirse por HTTPS. Si activas la recuperación por correo, guardamos una copia recuperable de la llave maestra y podemos abrir una copia de la bóveda después de verificar un código enviado a tu correo. Esa función es opcional. Ningún sistema es infalible: guarda tu llave de emergencia y mantén actualizados tus dispositivos.') }}</p>
             </section>
 
             <section>
                 <h2 class="mp-title-sm">{{ __('Menores y cambios') }}</h2>
-                <p class="mp-body-sm mt-2">{{ __('El servicio está pensado para personas adultas. Si cambiamos esta política, publicaremos la fecha de actualización y, cuando el cambio sea relevante, te avisaremos dentro de la aplicación.') }}</p>
+                <p class="mp-body-sm mt-2">{{ __('El servicio es solo para personas de 18 años o más. Usamos la fecha de nacimiento para confirmarlo y para activar el modo fácil a partir de los 51 años. Si cambiamos esta política, publicaremos la fecha de actualización y, cuando el cambio sea relevante, te avisaremos dentro de la aplicación.') }}</p>
             </section>
         </div>
 

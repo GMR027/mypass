@@ -1,15 +1,24 @@
 package app.mypass
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,13 +33,24 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,13 +66,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.io.ByteArrayOutputStream
+import kotlin.math.max
+import kotlin.math.min
 import kotlinx.coroutines.delay
 
 private val credentialCategoryLabels = mapOf(
@@ -71,10 +98,56 @@ private fun credentialCategoryLabel(category: String): String {
     return stringResource(credentialCategoryLabels[category] ?: R.string.credential_category_login)
 }
 
+private fun credentialTypeIcon(credential: UiCredential) = when {
+    credential.category == "custom" -> credential.categoryIcon.ifBlank { "lock" }
+    credential.category == "email" -> "mail"
+    credential.category == "social" -> "person"
+    credential.category == "work" -> "build"
+    credential.category == "wifi" -> "home"
+    credential.category == "server" -> "settings"
+    credential.category == "bank" -> "shopping"
+    else -> "lock"
+}
+
+private fun credentialIconVector(key: String) = when (key) {
+    "mail" -> Icons.Filled.Email
+    "person" -> Icons.Filled.Person
+    "phone" -> Icons.Filled.Phone
+    "shopping" -> Icons.Filled.ShoppingCart
+    "star" -> Icons.Filled.Star
+    "play" -> Icons.Filled.PlayArrow
+    "build" -> Icons.Filled.Build
+    "place" -> Icons.Filled.Place
+    "home" -> Icons.Filled.Home
+    "settings" -> Icons.Filled.Settings
+    "search" -> Icons.Filled.Search
+    else -> Icons.Filled.Lock
+}
+
+@Composable
+private fun credentialTypeLabel(credential: UiCredential): String {
+    return if (credential.category == "custom") {
+        credential.categoryLabel.ifBlank { stringResource(R.string.credential_category_custom) }
+    } else {
+        credentialCategoryLabel(credential.category)
+    }
+}
+
+private val customCredentialIcons = listOf(
+    "lock", "mail", "person", "phone", "shopping", "star",
+    "play", "build", "place", "home", "settings", "search",
+)
+
+private val credentialBannerColors = listOf(
+    "#1B4332", "#0C2340", "#4C1D95", "#7F1D1D",
+    "#9A3412", "#0E7490", "#374151", "#B45309",
+)
+
 @Composable
 fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
+    var groupFilter by remember { mutableStateOf("all") }
     var deleteTarget by remember { mutableStateOf<UiItem?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val context = LocalContext.current
@@ -89,7 +162,10 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
     val all = remember(state.items) {
         state.items.filter { it.credential != null && it.state != "transferred" }
     }
-    val visible = remember(all, search, filter) {
+    val groups = remember(all) {
+        all.mapNotNull { it.credential?.group?.takeIf(String::isNotBlank) }.distinct().sorted()
+    }
+    val visible = remember(all, search, filter, groupFilter) {
         val query = search.trim()
         all.filter { item ->
             val credential = item.credential ?: return@filter false
@@ -98,13 +174,30 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                 "totp" -> credential.totpSecret != null
                 else -> true
             }
-            matchesFilter && (
+            val matchesGroup = when (groupFilter) {
+                "all" -> true
+                "none" -> credential.group.isBlank()
+                else -> credential.group == groupFilter
+            }
+            matchesFilter && matchesGroup && (
                 query.isBlank() ||
                     item.title.contains(query, ignoreCase = true) ||
                     credential.username.contains(query, ignoreCase = true) ||
+                    credential.group.contains(query, ignoreCase = true) ||
+                    credential.categoryLabel.contains(query, ignoreCase = true) ||
                     credential.tags.any { it.contains(query, ignoreCase = true) } ||
                     credential.notes.contains(query, ignoreCase = true)
                 )
+        }
+    }
+    val visibleGroups = remember(visible, filter, groupFilter, search) {
+        if (filter == "all" && groupFilter == "all" && search.isBlank()) {
+            val buckets = visible.groupBy { it.credential?.group.orEmpty() }
+            buckets.keys.sortedWith(
+                compareBy<String> { it.isBlank() }.thenBy { it.lowercase() },
+            ).map { group -> group to buckets.getValue(group) }
+        } else {
+            listOf("" to visible)
         }
     }
 
@@ -187,6 +280,28 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                         MpFilterChip(stringResource(R.string.favorite_credentials), filter == "favorite") { filter = "favorite" }
                         MpFilterChip(stringResource(R.string.totp_credentials), filter == "totp") { filter = "totp" }
                     }
+                    if (groups.isNotEmpty() || all.any { it.credential?.group.isNullOrBlank() }) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            MpFilterChip(stringResource(R.string.all_groups), groupFilter == "all") {
+                                groupFilter = "all"
+                            }
+                            groups.forEach { group ->
+                                MpFilterChip(group, groupFilter == group) {
+                                    groupFilter = group
+                                }
+                            }
+                            if (all.any { it.credential?.group.isNullOrBlank() }) {
+                                MpFilterChip(stringResource(R.string.ungrouped), groupFilter == "none") {
+                                    groupFilter = "none"
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -206,16 +321,29 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                     )
                 }
             } else {
-                gridItems(visible, key = { it.id }) { item ->
-                    CredentialCard(
-                        item = item,
-                        now = now,
-                        context = context,
-                        onEdit = { viewModel.editCredential(item) },
-                        onDelete = { deleteTarget = item },
-                        onFavorite = { viewModel.toggleCredentialFavorite(item) },
-                        onOpenAttachment = { viewModel.openItem(item) },
-                    )
+                visibleGroups.forEach { (group, groupItems) ->
+                    if (groupItems.isNotEmpty() && filter == "all" && groupFilter == "all" && search.isBlank()) {
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "group:$group") {
+                            Text(
+                                text = if (group.isBlank()) stringResource(R.string.ungrouped) else group,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MpColors.OnSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
+                    gridItems(groupItems, key = { it.id }) { item ->
+                        CredentialCard(
+                            item = item,
+                            now = now,
+                            context = context,
+                            onEdit = { viewModel.editCredential(item) },
+                            onDelete = { deleteTarget = item },
+                            onFavorite = { viewModel.toggleCredentialFavorite(item) },
+                            onOpenAttachment = { viewModel.openItem(item) },
+                        )
+                    }
                 }
             }
         }
@@ -234,8 +362,6 @@ private fun CredentialCard(
 ) {
     val credential = item.credential ?: return
     var revealPassword by remember(item.id) { mutableStateOf(false) }
-    val usernameLabel = stringResource(R.string.username)
-    val passwordLabel = stringResource(R.string.password)
 
     LaunchedEffect(revealPassword) {
         if (revealPassword) {
@@ -244,163 +370,310 @@ private fun CredentialCard(
         }
     }
 
-    MpCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            MpIconTile(icon = Icons.Filled.Lock, size = 50)
-            Column(modifier = Modifier.weight(1f)) {
+    val bannerBitmap = remember(credential.appearanceImage) {
+        credential.appearanceImage?.let(::decodeDataUrl)
+    }
+    val bannerColor = runCatching {
+        Color(android.graphics.Color.parseColor(credential.appearanceColor))
+    }.getOrDefault(MpColors.Primary)
+    val hasAppearance = credential.appearanceMode != "none"
+        && (credential.appearanceColor.isNotBlank() || bannerBitmap != null)
+
+    val body: @Composable () -> Unit = {
+        CredentialBody(
+            item = item,
+            credential = credential,
+            now = now,
+            context = context,
+            revealPassword = revealPassword,
+            onToggleReveal = { revealPassword = !revealPassword },
+            onEdit = onEdit,
+            onDelete = onDelete,
+            onOpenAttachment = onOpenAttachment,
+        )
+    }
+
+    if (!hasAppearance) {
+        MpCard(modifier = Modifier.fillMaxWidth()) {
+            CredentialHead(item, credential, dark = false, onFavorite = onFavorite)
+            body()
+        }
+    } else if (credential.appearanceMode == "banner") {
+        MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(bannerColor),
+                ) {
+                    bannerBitmap?.let {
+                        Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color.Black.copy(alpha = 0.24f), Color.Black.copy(alpha = 0.5f)),
+                                ),
+                            ),
+                    )
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        CredentialHead(item, credential, dark = true, onFavorite = onFavorite)
+                    }
+                }
+                Column(modifier = Modifier.padding(20.dp)) {
+                    body()
+                }
+            }
+        }
+    } else {
+        MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(bannerColor),
+            ) {
+                bannerBitmap?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
+                            .padding(16.dp),
+                    ) {
+                        CredentialHead(item, credential, dark = false, onFavorite = onFavorite)
+                        body()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CredentialHead(
+    item: UiItem,
+    credential: UiCredential,
+    dark: Boolean,
+    onFavorite: () -> Unit,
+) {
+    val logoBitmap = remember(credential.logo) { credential.logo?.let(::decodeDataUrl) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (logoBitmap != null) {
+            Image(
+                bitmap = logoBitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (dark) Color.White.copy(alpha = 0.16f) else MpColors.SurfaceLow)
+                    .padding(7.dp),
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            MpIconTile(
+                icon = credentialIconVector(credentialTypeIcon(credential)),
+                size = 50,
+                background = if (dark) Color.White.copy(alpha = 0.16f) else MpColors.PrimaryFixed,
+                tint = if (dark) Color.White else MpColors.Primary,
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = if (dark) Color.White else MpColors.OnSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = credentialTypeLabel(credential),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (dark) Color.White.copy(alpha = 0.78f) else MpColors.OnSurfaceVariant,
+            )
+            if (credential.group.isNotBlank()) {
                 Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleLarge,
+                    text = credential.group,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (dark) Color.White.copy(alpha = 0.8f) else MpColors.Primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (credential.tags.isNotEmpty()) {
                 Text(
-                    text = credentialCategoryLabel(credential.category),
+                    text = credential.tags.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                )
-                if (credential.tags.isNotEmpty()) {
-                    Text(
-                        text = credential.tags.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MpColors.Primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            IconButton(onClick = onFavorite) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = stringResource(if (credential.favorite) R.string.remove_favorite else R.string.add_favorite),
-                    tint = if (credential.favorite) MpColors.Secondary else MpColors.OutlineVariant,
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CredentialValueRow(
-                label = stringResource(R.string.username),
-                value = credential.username.ifBlank { stringResource(R.string.no_username) },
-                onCopy = {
-                    SensitiveClipboard.copy(context, usernameLabel, credential.username)
-                },
-            )
-            CredentialValueRow(
-                label = stringResource(R.string.password),
-                value = when {
-                    credential.password.isBlank() -> stringResource(R.string.no_password)
-                    revealPassword -> credential.password
-                    else -> "••••••••••••"
-                },
-                monospace = true,
-                onCopy = {
-                    SensitiveClipboard.copy(context, passwordLabel, credential.password)
-                },
-                extra = {
-                    TextButton(onClick = { revealPassword = !revealPassword }) {
-                        Text(stringResource(if (revealPassword) R.string.hide else R.string.show))
-                    }
-                },
-            )
-            if (!credential.totpSecret.isNullOrBlank()) {
-                val totp = remember(credential.totpSecret, now / 1000) {
-                    Totp.parse(credential.totpSecret)?.let { config ->
-                        Totp.code(config, now) to Totp.secondsLeft(config.period, now)
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = "TOTP",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MpColors.OnSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = totp?.first ?: "••• •••",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        color = MpColors.Primary,
-                    )
-                    Text(
-                        text = stringResource(R.string.totp_seconds, totp?.second ?: 0),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MpColors.OnSurfaceVariant,
-                    )
-                    TextButton(onClick = {
-                        totp?.first?.let {
-                            SensitiveClipboard.copy(context, "TOTP", it)
-                        }
-                    }) {
-                        Text(stringResource(R.string.copy))
-                    }
-                }
-            }
-            if (credential.url.isNotBlank()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = credential.url,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MpColors.OnSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    TextButton(onClick = {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(credential.url)))
-                        }
-                    }) {
-                        Text(stringResource(R.string.open))
-                    }
-                }
-            }
-            if (item.blobId != null) {
-                TextButton(onClick = onOpenAttachment) {
-                    Text(stringResource(R.string.open_attachment))
-                }
-            }
-            if (credential.notes.isNotBlank()) {
-                Text(
-                    text = credential.notes,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                    maxLines = 3,
+                    color = if (dark) Color.White.copy(alpha = 0.7f) else MpColors.Primary,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
+        IconButton(onClick = onFavorite) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = stringResource(if (credential.favorite) R.string.remove_favorite else R.string.add_favorite),
+                tint = when {
+                    dark -> Color.White
+                    credential.favorite -> MpColors.Secondary
+                    else -> MpColors.OutlineVariant
+                },
+            )
+        }
+    }
+}
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            TextButton(onClick = onEdit) {
-                Text(stringResource(R.string.edit))
+@Composable
+private fun CredentialBody(
+    item: UiItem,
+    credential: UiCredential,
+    now: Long,
+    context: Context,
+    revealPassword: Boolean,
+    onToggleReveal: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onOpenAttachment: () -> Unit,
+) {
+    val usernameLabel = stringResource(R.string.username)
+    val passwordLabel = stringResource(R.string.password)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CredentialValueRow(
+            label = stringResource(R.string.username),
+            value = credential.username.ifBlank { stringResource(R.string.no_username) },
+            onCopy = {
+                SensitiveClipboard.copy(context, usernameLabel, credential.username)
+            },
+        )
+        CredentialValueRow(
+            label = stringResource(R.string.password),
+            value = when {
+                credential.password.isBlank() -> stringResource(R.string.no_password)
+                revealPassword -> credential.password
+                else -> "••••••••••••"
+            },
+            monospace = true,
+            onCopy = {
+                SensitiveClipboard.copy(context, passwordLabel, credential.password)
+            },
+            extra = {
+                TextButton(onClick = onToggleReveal) {
+                    Text(stringResource(if (revealPassword) R.string.hide else R.string.show))
+                }
+            },
+        )
+        if (!credential.totpSecret.isNullOrBlank()) {
+            val totp = remember(credential.totpSecret, now / 1000) {
+                Totp.parse(credential.totpSecret)?.let { config ->
+                    Totp.code(config, now) to Totp.secondsLeft(config.period, now)
+                }
             }
-            Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = onDelete) {
-                Text(stringResource(R.string.delete), color = MpColors.Error)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "TOTP",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MpColors.OnSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = totp?.first ?: "••• •••",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = MpColors.Primary,
+                )
+                Text(
+                    text = stringResource(R.string.totp_seconds, totp?.second ?: 0),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MpColors.OnSurfaceVariant,
+                )
+                TextButton(onClick = {
+                    totp?.first?.let {
+                        SensitiveClipboard.copy(context, "TOTP", it)
+                    }
+                }) {
+                    Text(stringResource(R.string.copy))
+                }
             }
+        }
+        if (credential.url.isNotBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = credential.url,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(credential.url)))
+                    }
+                }) {
+                    Text(stringResource(R.string.open))
+                }
+            }
+        }
+        if (item.blobId != null) {
+            TextButton(onClick = onOpenAttachment) {
+                Text(stringResource(R.string.open_attachment))
+            }
+        }
+        if (credential.notes.isNotBlank()) {
+            Text(
+                text = credential.notes,
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TextButton(onClick = onEdit) {
+            Text(stringResource(R.string.edit))
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(onClick = onDelete) {
+            Text(stringResource(R.string.delete), color = MpColors.Error)
         }
     }
 }
@@ -441,10 +714,21 @@ private fun CredentialValueRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
     val source = state.credentialDraft ?: return
     var category by remember(source) { mutableStateOf(source.category) }
+    var categoryLabel by remember(source) { mutableStateOf(source.categoryLabel) }
+    var categoryIcon by remember(source) { mutableStateOf(source.categoryIcon) }
+    var group by remember(source) { mutableStateOf(source.group) }
+    var logo by remember(source) { mutableStateOf(source.logo) }
+    var appearanceMode by remember(source) { mutableStateOf(source.appearanceMode) }
+    var appearanceColor by remember(source) { mutableStateOf(source.appearanceColor) }
+    var appearanceImage by remember(source) { mutableStateOf(source.appearanceImage) }
+    var showCustomTypeDialog by remember { mutableStateOf(false) }
+    var customTypeName by remember { mutableStateOf("") }
+    var customTypeIcon by remember { mutableStateOf("lock") }
     var title by remember(source) { mutableStateOf(source.title) }
     var username by remember(source) { mutableStateOf(source.username) }
     var password by remember(source) { mutableStateOf(source.password) }
@@ -457,6 +741,21 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
     var clearAttachment by remember(source) { mutableStateOf(source.clearAttachment) }
     val context = LocalContext.current
 
+    val customTypes = remember(state.items) {
+        state.items.mapNotNull { item ->
+            val credential = item.credential ?: return@mapNotNull null
+            if (credential.category != "custom" || credential.categoryLabel.isBlank()) {
+                return@mapNotNull null
+            }
+            credential.categoryLabel to (credential.categoryIcon.ifBlank { "lock" })
+        }.distinctBy { it.first.lowercase() }
+    }
+    val existingGroups = remember(state.items) {
+        state.items.mapNotNull { it.credential?.group?.takeIf(String::isNotBlank) }
+            .distinct()
+            .sorted()
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             attachmentUri = uri.toString()
@@ -464,9 +763,31 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
             clearAttachment = false
         }
     }
+    val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            encodeCredentialLogo(context, uri)?.let { logo = it }
+        }
+    }
+    val bannerPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            encodeCredentialBanner(context, uri)?.let {
+                appearanceImage = it
+                if (appearanceMode == "none") {
+                    appearanceMode = "banner"
+                }
+            }
+        }
+    }
 
     val draft = source.copy(
         category = category,
+        categoryLabel = categoryLabel,
+        categoryIcon = categoryIcon,
+        group = group,
+        logo = logo,
+        appearanceMode = appearanceMode,
+        appearanceColor = appearanceColor,
+        appearanceImage = appearanceImage,
         title = title,
         username = username,
         password = password,
@@ -507,11 +828,59 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
             item { MpStatusBanner(state.status, state.error) }
 
             item {
-                MpCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(stringResource(R.string.credential_preview), style = MaterialTheme.typography.labelMedium, color = MpColors.OnSurfaceVariant)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            MpIconTile(icon = Icons.Filled.Lock, size = 50)
+                val previewLogo = remember(logo) { logo?.let(::decodeDataUrl) }
+                val previewBanner = remember(appearanceImage) { appearanceImage?.let(::decodeDataUrl) }
+                val previewColor = runCatching {
+                    Color(android.graphics.Color.parseColor(appearanceColor))
+                }.getOrDefault(MpColors.Primary)
+                val previewIcon = when {
+                    category == "custom" -> categoryIcon.ifBlank { "lock" }
+                    category == "email" -> "mail"
+                    category == "social" -> "person"
+                    category == "work" -> "build"
+                    category == "wifi" -> "home"
+                    category == "server" -> "settings"
+                    category == "bank" -> "shopping"
+                    else -> "lock"
+                }
+                MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+                    Column {
+                        if (appearanceMode != "none" && (appearanceColor.isNotBlank() || previewBanner != null)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .background(previewColor),
+                            ) {
+                                previewBanner?.let {
+                                    Image(
+                                        bitmap = it.asImageBitmap(),
+                                        contentDescription = null,
+                                        modifier = Modifier.matchParentSize(),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.padding(20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (previewLogo != null) {
+                                Image(
+                                    bitmap = previewLogo.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MpColors.SurfaceLow)
+                                        .padding(7.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            } else {
+                                MpIconTile(icon = credentialIconVector(previewIcon), size = 50)
+                            }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title.ifBlank { username.ifBlank { stringResource(R.string.new_credential) } },
@@ -522,6 +891,13 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MpColors.OnSurfaceVariant,
                                 )
+                                if (group.isNotBlank()) {
+                                    Text(
+                                        text = group,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MpColors.Primary,
+                                    )
+                                }
                             }
                             if (source.favorite) {
                                 Icon(Icons.Filled.Star, contentDescription = null, tint = MpColors.Secondary)
@@ -544,10 +920,43 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                             credentialCategoryLabels.keys.forEach { value ->
                                 MpFilterChip(
                                     text = credentialCategoryLabel(value),
-                                    selected = category == value,
-                                    onClick = { category = value },
+                                    selected = category == value && categoryLabel.isBlank(),
+                                    onClick = {
+                                        category = value
+                                        categoryLabel = ""
+                                        categoryIcon = ""
+                                    },
                                 )
                             }
+                            customTypes.forEach { (label, icon) ->
+                                MpFilterChip(
+                                    text = label,
+                                    selected = category == "custom" && categoryLabel.equals(label, ignoreCase = true),
+                                    onClick = {
+                                        category = "custom"
+                                        categoryLabel = label
+                                        categoryIcon = icon
+                                    },
+                                )
+                            }
+                            if (category == "custom" && categoryLabel.isNotBlank()
+                                && customTypes.none { it.first.equals(categoryLabel, ignoreCase = true) }
+                            ) {
+                                MpFilterChip(
+                                    text = categoryLabel,
+                                    selected = true,
+                                    onClick = {},
+                                )
+                            }
+                            MpFilterChip(
+                                text = "+ " + stringResource(R.string.create_account_type),
+                                selected = false,
+                                onClick = {
+                                    customTypeName = ""
+                                    customTypeIcon = "lock"
+                                    showCustomTypeDialog = true
+                                },
+                            )
                         }
                         MpTextField(title, { title = it }, stringResource(R.string.service_name))
                         MpTextField(username, { username = it }, stringResource(R.string.username), keyboardType = androidx.compose.ui.text.input.KeyboardType.Email)
@@ -587,6 +996,171 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                             { url = it },
                             stringResource(R.string.website_optional),
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
+                        )
+                        MpTextField(
+                            group,
+                            { group = it },
+                            stringResource(R.string.credential_group),
+                        )
+                        if (existingGroups.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                existingGroups.forEach { existing ->
+                                    MpFilterChip(
+                                        text = existing,
+                                        selected = group == existing,
+                                        onClick = { group = existing },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                val previewLogo = remember(logo) { logo?.let(::decodeDataUrl) }
+                val previewBanner = remember(appearanceImage) { appearanceImage?.let(::decodeDataUrl) }
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.credential_appearance), style = MaterialTheme.typography.titleMedium)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(
+                                "none" to stringResource(R.string.appearance_none),
+                                "banner" to stringResource(R.string.appearance_banner),
+                                "background" to stringResource(R.string.appearance_background),
+                            ).forEach { (value, label) ->
+                                MpFilterChip(
+                                    text = label,
+                                    selected = appearanceMode == value,
+                                    onClick = { appearanceMode = value },
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (previewLogo != null) {
+                                Image(
+                                    bitmap = previewLogo.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MpColors.SurfaceLow)
+                                        .padding(7.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            } else {
+                                MpIconTile(icon = credentialIconVector(categoryIcon.ifBlank { "lock" }), size = 52)
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                MpButton(
+                                    text = stringResource(R.string.choose_logo),
+                                    onClick = { logoPicker.launch("image/*") },
+                                    variant = MpButtonVariant.Secondary,
+                                    fillWidth = true,
+                                )
+                                if (logo != null) {
+                                    MpButton(
+                                        text = stringResource(R.string.remove_logo),
+                                        onClick = { logo = null },
+                                        variant = MpButtonVariant.Quiet,
+                                        fillWidth = true,
+                                    )
+                                }
+                            }
+                        }
+                        Text(stringResource(R.string.credential_banner_color), style = MaterialTheme.typography.labelMedium, color = MpColors.OnSurfaceVariant)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            credentialBannerColors.forEach { color ->
+                                val parsed = runCatching { Color(android.graphics.Color.parseColor(color)) }
+                                    .getOrDefault(MpColors.Primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(parsed)
+                                        .then(
+                                            if (appearanceColor.equals(color, ignoreCase = true)) {
+                                                Modifier.border(3.dp, MpColors.Primary, CircleShape)
+                                            } else {
+                                                Modifier.border(1.dp, Color.Black.copy(alpha = 0.12f), CircleShape)
+                                            },
+                                        )
+                                        .clickable {
+                                            appearanceColor = color
+                                            if (appearanceMode == "none") {
+                                                appearanceMode = "banner"
+                                            }
+                                        },
+                                )
+                            }
+                        }
+                        MpTextField(
+                            appearanceColor,
+                            { value ->
+                                appearanceColor = value.take(7)
+                                if (appearanceMode == "none" && value.startsWith("#")) {
+                                    appearanceMode = "banner"
+                                }
+                            },
+                            stringResource(R.string.custom_color),
+                            placeholder = "#1B4332",
+                        )
+                        Text(stringResource(R.string.credential_banner_image), style = MaterialTheme.typography.labelMedium, color = MpColors.OnSurfaceVariant)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (previewBanner != null) {
+                                Image(
+                                    bitmap = previewBanner.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(width = 112.dp, height = 64.dp)
+                                        .clip(RoundedCornerShape(14.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                MpButton(
+                                    text = stringResource(R.string.choose_banner_image),
+                                    onClick = { bannerPicker.launch("image/*") },
+                                    variant = MpButtonVariant.Secondary,
+                                    fillWidth = true,
+                                )
+                                if (appearanceImage != null) {
+                                    MpButton(
+                                        text = stringResource(R.string.remove_image),
+                                        onClick = { appearanceImage = null },
+                                        variant = MpButtonVariant.Quiet,
+                                        fillWidth = true,
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.credential_banner_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
                         )
                     }
                 }
@@ -686,6 +1260,77 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                 )
             }
         }
+
+        if (showCustomTypeDialog) {
+            AlertDialog(
+                onDismissRequest = { showCustomTypeDialog = false },
+                title = { Text(stringResource(R.string.create_account_type)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        MpTextField(
+                            value = customTypeName,
+                            onValueChange = { customTypeName = it.take(40) },
+                            label = stringResource(R.string.custom_type_name),
+                        )
+                        Text(
+                            text = stringResource(R.string.icon),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            customCredentialIcons.forEach { iconKey ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (customTypeIcon == iconKey) MpColors.PrimaryFixed else MpColors.SurfaceLow,
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (customTypeIcon == iconKey) MpColors.Primary else MpColors.OutlineVariant,
+                                            RoundedCornerShape(12.dp),
+                                        )
+                                        .clickable { customTypeIcon = iconKey },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = credentialIconVector(iconKey),
+                                        contentDescription = null,
+                                        tint = MpColors.Primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val label = customTypeName.trim()
+                            if (label.isNotBlank()) {
+                                category = "custom"
+                                categoryLabel = label
+                                categoryIcon = customTypeIcon
+                                showCustomTypeDialog = false
+                            }
+                        },
+                        enabled = customTypeName.isNotBlank(),
+                    ) {
+                        Text(stringResource(R.string.use_this_type))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCustomTypeDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -693,4 +1338,101 @@ private fun displayName(context: Context, uri: Uri): String {
     return context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0) else null
     } ?: uri.lastPathSegment ?: "adjunto"
+}
+
+private const val MAX_CREDENTIAL_IMAGE_BYTES = 8 * 1024 * 1024
+private const val MAX_CREDENTIAL_BANNER_DATA_URL = 500_000
+
+private fun encodeCredentialLogo(context: Context, uri: Uri): String? {
+    val bytes = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    }.getOrNull() ?: return null
+    if (bytes.size > 3 * 1024 * 1024) {
+        return null
+    }
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        return null
+    }
+
+    var sampleSize = 1
+    while (max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= 256) {
+        sampleSize *= 2
+    }
+
+    val decoded = BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize },
+    ) ?: return null
+
+    return try {
+        val scale = min(1f, 256f / max(decoded.width, decoded.height))
+        val width = max(1, (decoded.width * scale).toInt())
+        val height = max(1, (decoded.height * scale).toInt())
+        val scaled = if (scale < 1f) Bitmap.createScaledBitmap(decoded, width, height, true) else decoded
+        val output = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.PNG, 100, output)
+        if (scaled !== decoded) {
+            scaled.recycle()
+        }
+        "data:image/png;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+    } finally {
+        decoded.recycle()
+    }
+}
+
+private fun encodeCredentialBanner(context: Context, uri: Uri): String? {
+    val bytes = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    }.getOrNull() ?: return null
+    if (bytes.size > MAX_CREDENTIAL_IMAGE_BYTES) {
+        return null
+    }
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        return null
+    }
+
+    var sampleSize = 1
+    while (max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= 1200) {
+        sampleSize *= 2
+    }
+
+    val decoded = BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize },
+    ) ?: return null
+
+    return try {
+        for ((edge, quality) in listOf(1200 to 82, 1000 to 72, 800 to 62)) {
+            val scale = min(1f, edge.toFloat() / max(decoded.width, decoded.height))
+            val width = max(1, (decoded.width * scale).toInt())
+            val height = max(1, (decoded.height * scale).toInt())
+            val scaled = if (scale < 1f) Bitmap.createScaledBitmap(decoded, width, height, true) else decoded
+            val output = ByteArrayOutputStream()
+            val compressed = scaled.compress(Bitmap.CompressFormat.WEBP_LOSSY, quality, output)
+            if (scaled !== decoded) {
+                scaled.recycle()
+            }
+            if (!compressed) {
+                continue
+            }
+            val dataUrl = "data:image/webp;base64," +
+                Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            if (dataUrl.length <= MAX_CREDENTIAL_BANNER_DATA_URL) {
+                return dataUrl
+            }
+        }
+        null
+    } finally {
+        decoded.recycle()
+    }
 }

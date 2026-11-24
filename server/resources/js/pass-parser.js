@@ -351,8 +351,11 @@ function parseFlightText(text, reference = new Date()) {
     const timeMatches = [...normalized.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)];
     const seat = findLabeledValue(lines, ['SEAT', 'ASIENTO']) || (normalized.match(/\b([0-9]{1,3}[A-F])\b/) || [])[1];
     const gate = findLabeledValue(lines, ['GATE', 'PUERTA']) || (normalized.match(/\b(?:GATE|PUERTA)\s*[:#-]?\s*([A-Z]?\d{1,3})\b/) || [])[1];
+    const terminal = findLabeledValue(lines, ['TERMINAL', 'TERM']);
     const zone = findLabeledValue(lines, ['ZONE', 'ZONA', 'GROUP', 'GRUPO']);
-    const boarding = findLabeledValue(lines, ['BOARDING', 'EMBARQUE', 'ABORDAJE']);
+    const boarding = findLabeledValue(lines, ['BOARDING', 'EMBARQUE', 'ABORDAJE', 'INICIO DE ABORDAJE']);
+    const boardingEnd = findLabeledValue(lines, ['BOARDING ENDS', 'BOARDING CLOSES', 'BOARDING END', 'CIERRE DE ABORDAJE', 'FIN DE ABORDAJE', 'CIERRE EMBARQUE']);
+    const boardingRange = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(?:-|–|—|TO|A)\s*([01]?\d|2[0-3]):([0-5]\d)\b/);
     const departure = findLabeledValue(lines, ['DEPARTURE', 'SALIDA', 'DEPARTS']);
 
     if (airports[0]) {
@@ -373,12 +376,25 @@ function parseFlightText(text, reference = new Date()) {
         fields.departure = `${timeMatches[0][1].padStart(2, '0')}:${timeMatches[0][2]}`;
     }
     if (timeMatches[1]) {
-        fields.boarding = `${timeMatches[1][1].padStart(2, '0')}:${timeMatches[1][2]}`;
+        fields.boarding_start = `${timeMatches[1][1].padStart(2, '0')}:${timeMatches[1][2]}`;
+        fields.boarding = fields.boarding_start;
+    }
+    if (boardingRange) {
+        fields.boarding_start = `${boardingRange[1].padStart(2, '0')}:${boardingRange[2]}`;
+        fields.boarding_end = `${boardingRange[3].padStart(2, '0')}:${boardingRange[4]}`;
+        fields.boarding = fields.boarding_start;
     }
     if (boarding) {
         const parsed = parseTime(boarding);
         if (parsed) {
+            fields.boarding_start = parsed;
             fields.boarding = parsed;
+        }
+    }
+    if (boardingEnd) {
+        const parsed = parseTime(boardingEnd);
+        if (parsed) {
+            fields.boarding_end = parsed;
         }
     }
     if (departure) {
@@ -392,6 +408,9 @@ function parseFlightText(text, reference = new Date()) {
     }
     if (gate) {
         fields.gate = gate.trim();
+    }
+    if (terminal) {
+        fields.terminal = terminal.trim();
     }
     if (zone) {
         fields.zone = zone.trim();
@@ -421,7 +440,7 @@ function parseFlightText(text, reference = new Date()) {
         fields,
         notes: [],
         code: detectCode(text),
-        confidence: confidenceFor(fields, ['origin', 'destination', 'flight', 'date', 'passenger', 'seat']),
+        confidence: confidenceFor(fields, ['origin', 'destination', 'flight', 'date', 'passenger', 'seat', 'terminal', 'boarding_start']),
         detectedFields: countFilled(fields),
     };
 }
@@ -485,9 +504,13 @@ function parseTransitText(text, reference = new Date()) {
     const dateMatch = normalized.match(/\b(\d{1,2}\s+[A-Z]{3}\.?\s+\d{4}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{4}[-/.]\d{1,2}[-/.]\d{1,2})\b/);
     const time = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
     const platform = findLabeledValue(lines, ['PLATFORM', 'ANDEN', 'VIA', 'TRACK']);
+    const terminal = findLabeledValue(lines, ['TERMINAL', 'TERM', 'ESTACION', 'STATION']);
     const carriage = findLabeledValue(lines, ['CARRIAGE', 'COCHE', 'VAGON', 'COACH']);
     const seat = findLabeledValue(lines, ['SEAT', 'ASIENTO', 'PLAZA']);
     const route = findLabeledValue(lines, ['ROUTE', 'RUTA', 'LINE', 'LINEA', 'DESTINATION', 'DESTINO']);
+    const boarding = findLabeledValue(lines, ['BOARDING', 'EMBARQUE', 'ABORDAJE', 'INICIO DE ABORDAJE']);
+    const boardingEnd = findLabeledValue(lines, ['BOARDING ENDS', 'BOARDING CLOSES', 'BOARDING END', 'CIERRE DE ABORDAJE', 'FIN DE ABORDAJE']);
+    const boardingRange = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(?:-|–|—|TO|A)\s*([01]?\d|2[0-3]):([0-5]\d)\b/);
     const holder = detectPersonName(lines);
 
     if (dateMatch) {
@@ -495,6 +518,25 @@ function parseTransitText(text, reference = new Date()) {
     }
     if (time) {
         fields.time = `${time[1].padStart(2, '0')}:${time[2]}`;
+    }
+    if (boardingRange) {
+        fields.boarding_start = `${boardingRange[1].padStart(2, '0')}:${boardingRange[2]}`;
+        fields.boarding_end = `${boardingRange[3].padStart(2, '0')}:${boardingRange[4]}`;
+    }
+    if (boarding) {
+        const parsed = parseTime(boarding);
+        if (parsed) {
+            fields.boarding_start = parsed;
+        }
+    }
+    if (boardingEnd) {
+        const parsed = parseTime(boardingEnd);
+        if (parsed) {
+            fields.boarding_end = parsed;
+        }
+    }
+    if (terminal) {
+        fields.terminal = terminal.trim();
     }
     if (platform) {
         fields.platform = platform.trim();
@@ -520,7 +562,7 @@ function parseTransitText(text, reference = new Date()) {
         fields,
         notes: [],
         code: detectCode(text),
-        confidence: confidenceFor(fields, ['date', 'time', 'route', 'platform', 'seat']),
+        confidence: confidenceFor(fields, ['date', 'time', 'route', 'platform', 'seat', 'terminal', 'boarding_start']),
         detectedFields: countFilled(fields),
     };
 }

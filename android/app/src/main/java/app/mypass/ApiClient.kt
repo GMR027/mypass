@@ -28,6 +28,58 @@ object ApiClient {
         return JSONObject(response).getJSONObject("user")
     }
 
+    fun updateProfile(token: String, birthDate: String): JSONObject {
+        val body = JSONObject().put("birth_date", birthDate)
+        val response = request("PATCH", "/me/profile", token, body.toString().toByteArray(), "application/json")
+        return JSONObject(response).getJSONObject("data")
+    }
+
+    fun updatePreferences(
+        token: String,
+        simpleMode: Boolean? = null,
+        easyMode: Boolean? = null,
+    ): JSONObject {
+        val body = JSONObject()
+        if (simpleMode != null) {
+            body.put("simple_mode", simpleMode)
+        }
+        if (easyMode != null) {
+            body.put("easy_mode", easyMode)
+        }
+        val response = request("PATCH", "/me/preferences", token, body.toString().toByteArray(), "application/json")
+        return JSONObject(response).getJSONObject("data")
+    }
+
+    fun vaultRecoveryStatus(token: String): JSONObject {
+        val response = request("GET", "/vault-recovery/status", token, null, null)
+        return JSONObject(response).getJSONObject("data")
+    }
+
+    fun requestVaultRecovery(token: String): JSONObject {
+        val response = request("POST", "/vault-recovery/request", token, ByteArray(0), "application/json")
+        return JSONObject(response)
+    }
+
+    fun verifyVaultRecovery(token: String, code: String): JSONObject {
+        val body = JSONObject().put("code", code)
+        val response = request("POST", "/vault-recovery/verify", token, body.toString().toByteArray(), "application/json")
+        return JSONObject(response).getJSONObject("data")
+    }
+
+    fun enableVaultRecovery(token: String, secret: String, wrappedMasterKey: String): JSONObject {
+        val body = JSONObject()
+            .put("secret", secret)
+            .put("wrapped_master_key", wrappedMasterKey)
+        val response = request("POST", "/vault-recovery/enable", token, body.toString().toByteArray(), "application/json")
+        return JSONObject(response)
+    }
+
+    fun disableVaultRecovery(token: String, password: String): JSONObject {
+        val body = JSONObject().put("password", password)
+        val response = request("DELETE", "/vault-recovery", token, body.toString().toByteArray(), "application/json")
+        return JSONObject(response)
+    }
+
     fun uploadAvatar(token: String, bytes: ByteArray): JSONObject {
         val boundary = "mypass-${UUID.randomUUID()}"
         val output = ByteArrayOutputStream()
@@ -327,6 +379,7 @@ object ApiClient {
         pinSalt: String? = null,
         pinParams: JSONObject? = null,
         biometricWrappedMasterKey: String? = null,
+        wrappedMasterKey: String? = null,
     ) {
         val body = JSONObject()
         if (pinSalt != null) {
@@ -337,6 +390,9 @@ object ApiClient {
         }
         if (biometricWrappedMasterKey != null) {
             body.put("biometric_wrapped_master_key", biometricWrappedMasterKey)
+        }
+        if (wrappedMasterKey != null) {
+            body.put("wrapped_master_key", wrappedMasterKey)
         }
         request("PATCH", "/devices/$id", token, body.toString().toByteArray(), "application/json")
     }

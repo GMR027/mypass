@@ -1,10 +1,14 @@
 package app.mypass
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.graphics.Bitmap
+import android.text.format.DateFormat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,8 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,6 +49,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,8 +65,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -70,6 +80,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 enum class MpButtonVariant {
     Primary,
@@ -514,6 +529,7 @@ fun MpTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     singleLine: Boolean = true,
     enabled: Boolean = true,
+    readOnly: Boolean = false,
     trailingContent: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
@@ -524,6 +540,7 @@ fun MpTextField(
         placeholder = placeholder?.let { { Text(it) } },
         singleLine = singleLine,
         enabled = enabled,
+        readOnly = readOnly,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         visualTransformation = visualTransformation,
         shape = MaterialTheme.shapes.medium,
@@ -541,6 +558,162 @@ fun MpTextField(
             disabledContainerColor = MpColors.SurfaceLow.copy(alpha = 0.5f),
         ),
     )
+}
+
+@Composable
+fun MpDateField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    defaultDate: LocalDate? = null,
+    minDate: LocalDate? = null,
+    maxDate: LocalDate? = null,
+) {
+    val context = LocalContext.current
+    val parsed = remember(value) {
+        runCatching { LocalDate.parse(value.take(10)) }.getOrNull()
+    }
+    val display = parsed?.format(
+        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()),
+    ) ?: value
+    var showPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showPicker) {
+        if (!showPicker) {
+            return@LaunchedEffect
+        }
+
+        val initial = parsed ?: defaultDate ?: LocalDate.now()
+        val dialog = DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                showPicker = false
+                onValueChange(LocalDate.of(year, month + 1, day).toString())
+            },
+            initial.year,
+            initial.monthValue - 1,
+            initial.dayOfMonth,
+        )
+        dialog.setTitle(label)
+        minDate?.let {
+            dialog.datePicker.minDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+        maxDate?.let {
+            dialog.datePicker.maxDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+        dialog.setOnDismissListener { showPicker = false }
+        dialog.show()
+    }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box {
+            MpTextField(
+                value = display,
+                onValueChange = {},
+                label = label,
+                enabled = enabled,
+                readOnly = true,
+                trailingContent = {
+                    Icon(
+                        imageVector = Icons.Filled.DateRange,
+                        contentDescription = stringResource(R.string.choose_date),
+                        tint = MpColors.Primary,
+                    )
+                },
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(enabled = enabled) { showPicker = true }
+                    .semantics { contentDescription = label },
+            )
+        }
+
+        if (value.isNotBlank()) {
+            TextButton(
+                onClick = { onValueChange("") },
+                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+            ) {
+                Text(stringResource(R.string.clear_date), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+fun MpTimeField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    defaultTime: LocalTime? = null,
+) {
+    val context = LocalContext.current
+    val parsed = remember(value) {
+        runCatching { LocalTime.parse(value.take(5)) }.getOrNull()
+    }
+    val display = parsed?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: value
+    var showPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showPicker) {
+        if (!showPicker) {
+            return@LaunchedEffect
+        }
+
+        val initial = parsed ?: defaultTime ?: LocalTime.now()
+        val dialog = TimePickerDialog(
+            context,
+            { _, hour, minute ->
+                showPicker = false
+                onValueChange(String.format(Locale.US, "%02d:%02d", hour, minute))
+            },
+            initial.hour,
+            initial.minute,
+            DateFormat.is24HourFormat(context),
+        )
+        dialog.setTitle(label)
+        dialog.setOnDismissListener { showPicker = false }
+        dialog.show()
+    }
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box {
+            MpTextField(
+                value = display,
+                onValueChange = {},
+                label = label,
+                enabled = enabled,
+                readOnly = true,
+                trailingContent = {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.choose_time),
+                        tint = MpColors.Primary,
+                    )
+                },
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(enabled = enabled) { showPicker = true }
+                    .semantics { contentDescription = label },
+            )
+        }
+
+        if (value.isNotBlank()) {
+            TextButton(
+                onClick = { onValueChange("") },
+                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+            ) {
+                Text(stringResource(R.string.clear_time), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
 }
 
 @Composable

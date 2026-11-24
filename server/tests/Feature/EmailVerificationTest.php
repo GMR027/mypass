@@ -21,6 +21,7 @@ class EmailVerificationTest extends TestCase
             'email' => 'web@example.com',
             'password' => 'Password12345!',
             'password_confirmation' => 'Password12345!',
+            'birth_date' => now()->subYears(30)->toDateString(),
         ]);
 
         $response->assertRedirect('/dashboard');

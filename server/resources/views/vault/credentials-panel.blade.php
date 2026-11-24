@@ -52,6 +52,8 @@
         </div>
     </div>
 
+    <div id="credential-group-filters" class="mt-2 flex gap-2 overflow-x-auto pb-1" aria-label="{{ __('Filtrar por grupo') }}"></div>
+
     <div id="credentials-empty" class="mp-empty mt-5" hidden>
         <span class="flex h-16 w-16 items-center justify-center rounded-full bg-primary-fixed text-primary">
             <x-icon name="key" class="text-[32px]" />
@@ -99,7 +101,27 @@
                     <option value="wifi">{{ __('Wi-Fi') }}</option>
                     <option value="server">{{ __('Servidor o API') }}</option>
                     <option value="other">{{ __('Otra') }}</option>
+                    <option value="__new__">{{ __('Crear tipo personalizado…') }}</option>
                 </select>
+            </div>
+            <div id="credential-custom-type" class="sm:col-span-2 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4" hidden>
+                <p class="font-semibold text-on-surface">{{ __('Crear tipo de cuenta') }}</p>
+                <p class="mp-hint mt-1">{{ __('Ponle un nombre y elige un icono. Estará disponible para tus próximas credenciales.') }}</p>
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="credential-custom-label" class="mp-label">{{ __('Nombre del tipo') }}</label>
+                        <input id="credential-custom-label" type="text" maxlength="40" class="mp-input"
+                               placeholder="{{ __('Streaming, gaming, escuela…') }}" autocomplete="off">
+                    </div>
+                    <div>
+                        <p class="mp-label">{{ __('Icono') }}</p>
+                        <div id="credential-custom-icons" class="flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <button id="credential-custom-save" type="button" class="mp-btn mp-btn-primary mp-btn-sm">{{ __('Usar este tipo') }}</button>
+                    <button id="credential-custom-cancel" type="button" class="mp-btn mp-btn-quiet mp-btn-sm">{{ __('Cancelar') }}</button>
+                </div>
             </div>
             <div>
                 <label for="credential-username" class="mp-label">{{ __('Usuario o correo') }}</label>
@@ -145,6 +167,58 @@
                 <textarea id="credential-notes" rows="3" maxlength="2000" class="mp-input resize-y"
                           placeholder="{{ __('Preguntas de seguridad, instrucciones, etc.') }}"></textarea>
             </div>
+
+            <div class="sm:col-span-2 border-t border-outline-variant/60 pt-4">
+                <p class="mp-eyebrow">{{ __('Organización y apariencia') }}</p>
+                <p class="mp-hint mt-1">{{ __('Agrupa la credencial y dale un logo o un banner para reconocerla rápido.') }}</p>
+            </div>
+
+            <div>
+                <label for="credential-group" class="mp-label">{{ __('Grupo (opcional)') }}</label>
+                <input id="credential-group" type="text" maxlength="60" class="mp-input" list="credential-group-options"
+                       placeholder="{{ __('Correo, redes sociales, trabajo…') }}" autocomplete="off">
+                <datalist id="credential-group-options"></datalist>
+                <p class="mp-hint mt-1">{{ __('Escribe un grupo nuevo o elige uno existente.') }}</p>
+            </div>
+
+            <div>
+                <label for="credential-appearance-mode" class="mp-label">{{ __('Banner o fondo') }}</label>
+                <select id="credential-appearance-mode" class="mp-select">
+                    <option value="none">{{ __('Sin banner') }}</option>
+                    <option value="banner">{{ __('Franja superior') }}</option>
+                    <option value="background">{{ __('Fondo completo') }}</option>
+                </select>
+            </div>
+
+            <div class="sm:col-span-2">
+                <label for="credential-logo" class="mp-label">{{ __('Logo (opcional)') }}</label>
+                <input id="credential-logo" type="file" accept="image/*"
+                       class="mp-input file:mr-3 file:rounded-lg file:border-0 file:bg-primary-fixed file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary">
+                <div id="credential-logo-preview-box" class="mt-2 flex items-center gap-3" hidden>
+                    <img id="credential-logo-preview" alt="" class="h-12 w-12 rounded-lg bg-surface-container-low object-contain p-1">
+                    <button id="credential-logo-clear" type="button" class="mp-btn mp-btn-quiet mp-btn-sm">{{ __('Quitar logo') }}</button>
+                </div>
+                <p class="mp-hint mt-1">{{ __('Reemplaza el icono del tipo de cuenta.') }}</p>
+            </div>
+
+            <div class="sm:col-span-2">
+                <label for="credential-banner-color" class="mp-label">{{ __('Color del banner') }}</label>
+                <div class="mt-1 flex flex-wrap items-center gap-2">
+                    <input id="credential-banner-color" type="color" value="#1B4332"
+                           class="h-11 w-14 cursor-pointer rounded-lg border border-outline-variant bg-white p-1"
+                           aria-label="{{ __('Color del banner') }}">
+                    <div id="credential-banner-presets" class="flex flex-wrap gap-2"></div>
+                </div>
+                <label for="credential-banner-image" class="mp-label mt-4">{{ __('Imagen del banner (opcional)') }}</label>
+                <input id="credential-banner-image" type="file" accept="image/*"
+                       class="mp-input file:mr-3 file:rounded-lg file:border-0 file:bg-primary-fixed file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary">
+                <div id="credential-banner-preview-box" class="mt-2 flex items-center gap-3" hidden>
+                    <img id="credential-banner-preview" alt="" class="h-16 w-28 rounded-lg bg-surface-container-low object-cover">
+                    <button id="credential-banner-clear" type="button" class="mp-btn mp-btn-quiet mp-btn-sm">{{ __('Quitar imagen') }}</button>
+                </div>
+                <p class="mp-hint mt-1">{{ __('La imagen se comprime y se guarda cifrada.') }}</p>
+            </div>
+
             <div class="sm:col-span-2">
                 <label for="credential-file" class="mp-label">{{ __('Archivo complementario (opcional)') }}</label>
                 <input id="credential-file" type="file" class="mp-input file:mr-3 file:rounded-lg file:border-0 file:bg-primary-fixed file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary">

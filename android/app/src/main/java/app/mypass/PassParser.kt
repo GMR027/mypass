@@ -150,8 +150,11 @@ object PassParser {
             ),
         )
         var best = fallback
-        var bestScore = 0
+        var bestScore = scores[fallback]?.count { normalized.contains(it) } ?: 0
         for ((category, words) in scores) {
+            if (category == fallback) {
+                continue
+            }
             val score = words.count { normalized.contains(it) }
             if (score > bestScore) {
                 best = category
@@ -195,14 +198,33 @@ object PassParser {
             .map { "${it.groupValues[1].padStart(2, '0')}:${it.groupValues[2]}" }
             .toList()
         times.getOrNull(0)?.let { fields["departure"] = it }
-        times.getOrNull(1)?.let { fields["boarding"] = it }
+        times.getOrNull(1)?.let {
+            fields["boarding_start"] = it
+            fields["boarding"] = it
+        }
+
+        val boardingRange = Regex(
+            "\\b([01]?\\d|2[0-3]):([0-5]\\d)\\s*(?:-|–|—|TO|A)\\s*([01]?\\d|2[0-3]):([0-5]\\d)\\b",
+        ).find(normalized)
+        boardingRange?.let {
+            fields["boarding_start"] = "${it.groupValues[1].padStart(2, '0')}:${it.groupValues[2]}"
+            fields["boarding_end"] = "${it.groupValues[3].padStart(2, '0')}:${it.groupValues[4]}"
+            fields["boarding"] = fields["boarding_start"].orEmpty()
+        }
 
         labeledValue(lines, listOf("SEAT", "ASIENTO"))?.let { fields["seat"] = it }
         labeledValue(lines, listOf("GATE", "PUERTA"))?.let { fields["gate"] = it }
+        labeledValue(lines, listOf("TERMINAL", "TERM"))?.let { fields["terminal"] = it }
         labeledValue(lines, listOf("ZONE", "ZONA", "GROUP", "GRUPO"))?.let { fields["zone"] = it }
-        labeledValue(lines, listOf("BOARDING", "EMBARQUE", "ABORDAJE"))
+        labeledValue(lines, listOf("BOARDING", "EMBARQUE", "ABORDAJE", "INICIO DE ABORDAJE"))
             ?.let { parseTime(it) }
-            ?.let { fields["boarding"] = it }
+            ?.let {
+                fields["boarding_start"] = it
+                fields["boarding"] = it
+            }
+        labeledValue(lines, listOf("BOARDING ENDS", "BOARDING CLOSES", "BOARDING END", "CIERRE DE ABORDAJE", "FIN DE ABORDAJE"))
+            ?.let { parseTime(it) }
+            ?.let { fields["boarding_end"] = it }
         labeledValue(lines, listOf("DEPARTURE", "SALIDA"))
             ?.let { parseTime(it) }
             ?.let { fields["departure"] = it }
@@ -230,7 +252,10 @@ object PassParser {
             issuer = issuer,
             holder = holder.orEmpty(),
             fields = fields,
-            confidence = confidence(fields, listOf("origin", "destination", "flight", "date", "passenger", "seat")),
+            confidence = confidence(
+                fields,
+                listOf("origin", "destination", "flight", "date", "passenger", "seat", "terminal", "boarding_start"),
+            ),
         )
     }
 
@@ -254,8 +279,20 @@ object PassParser {
         labeledValue(lines, listOf("ROW", "FILA"))?.let { fields["row"] = it }
         labeledValue(lines, listOf("SEAT", "ASIENTO", "PLAZA"))?.let { fields["seat"] = it }
         labeledValue(lines, listOf("PLATFORM", "ANDEN", "VIA"))?.let { fields["platform"] = it }
+        labeledValue(lines, listOf("TERMINAL", "TERM", "STATION", "ESTACION"))?.let { fields["terminal"] = it }
         labeledValue(lines, listOf("CARRIAGE", "COCHE", "VAGON"))?.let { fields["carriage"] = it }
         labeledValue(lines, listOf("ROUTE", "RUTA", "LINEA", "LINE"))?.let { fields["route"] = it }
+        labeledValue(lines, listOf("BOARDING", "EMBARQUE", "ABORDAJE", "INICIO DE ABORDAJE"))
+            ?.let { parseTime(it) }
+            ?.let { fields["boarding_start"] = it }
+        labeledValue(lines, listOf("BOARDING ENDS", "BOARDING CLOSES", "BOARDING END", "CIERRE DE ABORDAJE", "FIN DE ABORDAJE"))
+            ?.let { parseTime(it) }
+            ?.let { fields["boarding_end"] = it }
+        Regex("\\b([01]?\\d|2[0-3]):([0-5]\\d)\\s*(?:-|–|—|TO|A)\\s*([01]?\\d|2[0-3]):([0-5]\\d)\\b")
+            .find(normalized)?.let {
+                fields["boarding_start"] = "${it.groupValues[1].padStart(2, '0')}:${it.groupValues[2]}"
+                fields["boarding_end"] = "${it.groupValues[3].padStart(2, '0')}:${it.groupValues[4]}"
+            }
         holder?.let {
             fields[if (category == "flight") "passenger" else "holder"] = it
         }

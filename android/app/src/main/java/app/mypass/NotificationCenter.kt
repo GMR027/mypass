@@ -159,6 +159,9 @@ private fun activityMessage(context: android.content.Context, notification: UiNo
         "share_received" -> context.getString(R.string.notif_share_received, name)
         "share_accepted" -> context.getString(R.string.notif_share_accepted, name)
         "document_request" -> context.getString(R.string.notif_document_request, name, document)
+        "vault_recovery_enabled" -> context.getString(R.string.notif_recovery_enabled)
+        "vault_recovery_disabled" -> context.getString(R.string.notif_recovery_disabled)
+        "vault_recovery_used" -> context.getString(R.string.notif_recovery_used)
         else -> context.getString(R.string.notif_default)
     }
 }

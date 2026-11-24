@@ -1,6 +1,7 @@
 package app.mypass
 
 import android.app.LocaleManager
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
@@ -8,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -179,7 +181,7 @@ class MainActivity : FragmentActivity() {
                 CompositionLocalProvider(
                     LocalDensity provides Density(
                         density = baseDensity.density,
-                        fontScale = baseDensity.fontScale * if (state.simpleMode) 1.2f else 1f,
+                        fontScale = baseDensity.fontScale * if (state.simpleMode || state.easyMode) 1.2f else 1f,
                     ),
                 ) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MpColors.Background) {
@@ -278,6 +280,7 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
                     Screen.Pair -> PairScreen(state = state, viewModel = viewModel)
                     Screen.PinSetup -> PinSetupScreen(state = state, viewModel = viewModel)
                     Screen.TwoFactor -> TwoFactorScreen(state = state, viewModel = viewModel)
+                    Screen.RecoverVault -> RecoverVaultScreen(state = state, viewModel = viewModel)
                     Screen.Locked -> LockedScreen(state = state, viewModel = viewModel)
                     Screen.Home -> HomeScreen(state = state, viewModel = viewModel)
                     Screen.Vault -> VaultScreen(
@@ -758,6 +761,50 @@ private fun TwoFactorScreen(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
+private fun RecoverVaultScreen(state: UiState, viewModel: MainViewModel) {
+    var code by remember { mutableStateOf("") }
+
+    AuthShell {
+        AuthCard(
+            icon = Icons.Filled.Email,
+            title = stringResource(R.string.recover_vault_title),
+            subtitle = if (state.recoveryEmail.isNotBlank()) {
+                stringResource(R.string.recover_vault_email_hint, state.recoveryEmail)
+            } else {
+                stringResource(R.string.recover_vault_hint)
+            },
+            state = state,
+        ) {
+            MpTextField(
+                value = code,
+                onValueChange = { value -> code = value.filter(Char::isDigit).take(6) },
+                label = stringResource(R.string.recovery_code),
+                keyboardType = KeyboardType.Number,
+            )
+            MpButton(
+                text = stringResource(R.string.verify_recovery_code),
+                onClick = { viewModel.verifyVaultRecovery(code) },
+                enabled = !state.busy && code.length == 6,
+                loading = state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            MpButton(
+                text = stringResource(R.string.send_another_code),
+                onClick = viewModel::startVaultRecovery,
+                variant = MpButtonVariant.Secondary,
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            MpTextButton(
+                text = stringResource(R.string.cancel),
+                onClick = viewModel::cancelVaultRecovery,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        }
+    }
+}
+
+@Composable
 private fun PairScreen(state: UiState, viewModel: MainViewModel) {
     var code by remember { mutableStateOf("") }
 
@@ -781,6 +828,15 @@ private fun PairScreen(state: UiState, viewModel: MainViewModel) {
                 loading = state.busy,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (state.recoveryEnabled) {
+                MpButton(
+                    text = stringResource(R.string.recover_vault_with_email),
+                    onClick = viewModel::startVaultRecovery,
+                    variant = MpButtonVariant.Secondary,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             MpTextButton(
                 text = stringResource(R.string.use_another_account),
                 onClick = viewModel::logout,
@@ -902,6 +958,13 @@ private fun LockedScreen(state: UiState, viewModel: MainViewModel) {
                 loading = state.busy,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (state.recoveryEnabled) {
+                MpTextButton(
+                    text = stringResource(R.string.forgot_pin_recover),
+                    onClick = viewModel::startVaultRecovery,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
             MpTextButton(
                 text = stringResource(R.string.sign_out),
                 onClick = viewModel::logout,
@@ -1974,12 +2037,104 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
             item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
                     MpSwitchRow(
+                        title = stringResource(R.string.easy_mode),
+                        subtitle = stringResource(R.string.easy_mode_help),
+                        checked = state.easyMode,
+                        onCheckedChange = viewModel::setEasyMode,
+                        icon = Icons.Filled.Person,
+                    )
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    MpSwitchRow(
                         title = stringResource(R.string.simple_mode),
                         subtitle = stringResource(R.string.simple_mode_help),
                         checked = state.simpleMode,
                         onCheckedChange = viewModel::setSimpleMode,
                         icon = Icons.Filled.Person,
                     )
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.birth_date),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.birth_date_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        MpDateField(
+                            value = state.birthDate,
+                            onValueChange = viewModel::setBirthDate,
+                            label = stringResource(R.string.birth_date),
+                            enabled = !state.busy,
+                            defaultDate = LocalDate.now().minusYears(50),
+                            minDate = LocalDate.now().minusYears(120),
+                            maxDate = LocalDate.now().minusYears(18),
+                        )
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.email_recovery),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = if (state.recoveryEnabled) {
+                                stringResource(R.string.email_recovery_enabled_help, state.recoveryEmail)
+                            } else {
+                                stringResource(R.string.email_recovery_disabled_help)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        if (!state.recoveryEnabled) {
+                            MpButton(
+                                text = stringResource(R.string.enable_email_recovery),
+                                onClick = viewModel::enableEmailRecovery,
+                                variant = MpButtonVariant.Secondary,
+                                enabled = !state.busy,
+                                fillWidth = true,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.notification_settings),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.notification_settings_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        MpButton(
+                            text = stringResource(R.string.open_notification_settings),
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                runCatching { context.startActivity(intent) }
+                            },
+                            variant = MpButtonVariant.Secondary,
+                            fillWidth = true,
+                        )
+                    }
                 }
             }
 

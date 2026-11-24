@@ -10,6 +10,7 @@ import {
     splitList,
     totpSecondsLeft,
 } from './vault-secrets';
+import { bannerDataUrl, isImageDataUrl, logoDataUrl } from './media';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -36,6 +37,48 @@ const CATEGORY_LABELS = {
     server: 'Servidor o API',
     other: 'Otra',
 };
+
+const CUSTOM_TYPE_ICONS = [
+    { key: 'lock', symbol: 'lock', label: 'Candado' },
+    { key: 'mail', symbol: 'mail', label: 'Correo' },
+    { key: 'person', symbol: 'person', label: 'Persona' },
+    { key: 'phone', symbol: 'phone', label: 'Teléfono' },
+    { key: 'shopping', symbol: 'shopping_cart', label: 'Compras' },
+    { key: 'star', symbol: 'star', label: 'Favorito' },
+    { key: 'play', symbol: 'play_arrow', label: 'Streaming' },
+    { key: 'build', symbol: 'build', label: 'Herramientas' },
+    { key: 'place', symbol: 'place', label: 'Lugar' },
+    { key: 'home', symbol: 'home', label: 'Hogar' },
+    { key: 'settings', symbol: 'settings', label: 'Ajustes' },
+    { key: 'search', symbol: 'search', label: 'Búsqueda' },
+];
+
+const CUSTOM_TYPE_ICON_SYMBOLS = Object.fromEntries(
+    CUSTOM_TYPE_ICONS.map((entry) => [entry.key, entry.symbol]),
+);
+
+const BANNER_COLORS = [
+    '#1B4332',
+    '#0C2340',
+    '#4C1D95',
+    '#7F1D1D',
+    '#9A3412',
+    '#0E7490',
+    '#374151',
+    '#B45309',
+];
+
+function stringValue(value) {
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function validColor(value) {
+    return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : '';
+}
+
+function customTypeKey(label) {
+    return label.trim().toLowerCase();
+}
 
 function el(tag, className = '', text = null) {
     const node = document.createElement(tag);
@@ -92,9 +135,29 @@ export function credentialFromItem(item) {
     const totp = raw.totp && typeof raw.totp === 'object'
         ? raw.totp
         : parseTotp(raw.totp_secret || '');
+    const builtIn = CATEGORY_ICONS[raw.category] ? raw.category : null;
+    const customLabel = stringValue(raw.category_label);
+    const customIcon = stringValue(raw.category_icon);
+    const group = stringValue(raw.group);
+    const logo = isImageDataUrl(raw.logo) ? raw.logo : '';
+    const appearance = raw.appearance && typeof raw.appearance === 'object' ? raw.appearance : {};
+    const appearanceMode = ['banner', 'background'].includes(appearance.mode)
+        ? appearance.mode
+        : 'none';
+    const appearanceColor = validColor(appearance.color);
+    const appearanceImage = isImageDataUrl(appearance.image) ? appearance.image : '';
 
     return {
-        category: CATEGORY_ICONS[raw.category] ? raw.category : 'login',
+        category: builtIn || (customLabel ? 'custom' : 'login'),
+        categoryLabel: customLabel,
+        categoryIcon: customIcon,
+        group,
+        logo,
+        appearance: {
+            mode: appearanceMode,
+            color: appearanceColor,
+            image: appearanceImage,
+        },
         username: typeof raw.username === 'string' ? raw.username : '',
         password: typeof raw.password === 'string' ? raw.password : '',
         url: typeof raw.url === 'string' ? raw.url : '',
@@ -107,17 +170,41 @@ export function credentialFromItem(item) {
     };
 }
 
+function typeLabelFor(parsed) {
+    if (parsed.category === 'custom') {
+        return parsed.categoryLabel || t('Tipo personalizado');
+    }
+
+    return t(CATEGORY_LABELS[parsed.category] || 'Acceso general');
+}
+
+function typeIconSymbol(parsed) {
+    if (parsed.category === 'custom') {
+        return CUSTOM_TYPE_ICON_SYMBOLS[parsed.categoryIcon] || 'key';
+    }
+
+    return CATEGORY_ICONS[parsed.category] || 'key';
+}
+
 export class CredentialsApp {
     constructor(options) {
         this.options = options;
         this.items = [];
         this.filter = 'all';
         this.search = '';
+        this.groupFilter = 'all';
         this.editing = null;
         this.baseMetadata = {};
         this.existingBlobId = null;
         this.clearAttachment = false;
         this.fileLabel = '';
+        this.customTypes = new Map();
+        this.customTypeIcon = 'key';
+        this.previousCategory = 'login';
+        this.logo = null;
+        this.bannerMode = 'none';
+        this.bannerColor = BANNER_COLORS[0];
+        this.bannerImage = null;
         this.totpConfigs = new Map();
         this.revealTimers = new Map();
         this.totpTimer = null;
@@ -146,6 +233,25 @@ export class CredentialsApp {
         this.blobInput = document.getElementById('credential-blob-id');
         this.titleInput = document.getElementById('credential-title');
         this.categoryInput = document.getElementById('credential-category');
+        this.groupInput = document.getElementById('credential-group');
+        this.groupOptions = document.getElementById('credential-group-options');
+        this.groupFilters = document.getElementById('credential-group-filters');
+        this.customTypePanel = document.getElementById('credential-custom-type');
+        this.customTypeLabel = document.getElementById('credential-custom-label');
+        this.customTypeIcons = document.getElementById('credential-custom-icons');
+        this.customTypeSave = document.getElementById('credential-custom-save');
+        this.customTypeCancel = document.getElementById('credential-custom-cancel');
+        this.logoInput = document.getElementById('credential-logo');
+        this.logoPreviewBox = document.getElementById('credential-logo-preview-box');
+        this.logoPreview = document.getElementById('credential-logo-preview');
+        this.logoClear = document.getElementById('credential-logo-clear');
+        this.bannerModeInput = document.getElementById('credential-appearance-mode');
+        this.bannerColorInput = document.getElementById('credential-banner-color');
+        this.bannerPresets = document.getElementById('credential-banner-presets');
+        this.bannerImageInput = document.getElementById('credential-banner-image');
+        this.bannerPreviewBox = document.getElementById('credential-banner-preview-box');
+        this.bannerPreview = document.getElementById('credential-banner-preview');
+        this.bannerClear = document.getElementById('credential-banner-clear');
         this.usernameInput = document.getElementById('credential-username');
         this.passwordInput = document.getElementById('credential-password');
         this.passwordToggle = document.getElementById('credential-password-toggle');
@@ -178,6 +284,94 @@ export class CredentialsApp {
                 this.filter = filterButton.dataset.credentialFilter;
                 this.render();
             });
+        });
+
+        this.groupFilters?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-credential-group-filter]');
+            if (!button) {
+                return;
+            }
+            this.groupFilter = button.dataset.credentialGroupFilter;
+            this.render();
+        });
+
+        this.categoryInput?.addEventListener('change', () => {
+            if (this.categoryInput.value === '__new__') {
+                this.openCustomTypePanel();
+            } else {
+                this.previousCategory = this.categoryInput.value;
+                this.closeCustomTypePanel();
+            }
+        });
+
+        this.customTypeSave?.addEventListener('click', () => this.createCustomType());
+        this.customTypeCancel?.addEventListener('click', () => {
+            this.closeCustomTypePanel();
+            this.categoryInput.value = this.previousCategory;
+        });
+
+        this.logoInput?.addEventListener('change', async () => {
+            const file = this.logoInput.files?.[0];
+            if (!file) {
+                return;
+            }
+            try {
+                this.logo = await logoDataUrl(file);
+                this.renderAppearance();
+            } catch (error) {
+                this.showError(t(error.message || 'No se pudo procesar la imagen.'));
+            }
+        });
+        this.logoClear?.addEventListener('click', () => {
+            this.logo = null;
+            this.logoInput.value = '';
+            this.renderAppearance();
+        });
+
+        this.bannerModeInput?.addEventListener('change', () => {
+            this.bannerMode = this.bannerModeInput.value;
+            this.renderAppearance();
+        });
+        this.bannerColorInput?.addEventListener('input', () => {
+            this.bannerColor = this.bannerColorInput.value;
+            if (this.bannerMode === 'none') {
+                this.bannerMode = 'banner';
+                this.bannerModeInput.value = 'banner';
+            }
+            this.renderAppearance();
+        });
+        this.bannerPresets?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-banner-color]');
+            if (!button) {
+                return;
+            }
+            this.bannerColor = button.dataset.bannerColor;
+            if (this.bannerMode === 'none') {
+                this.bannerMode = 'banner';
+                this.bannerModeInput.value = 'banner';
+            }
+            this.renderAppearance();
+        });
+        this.bannerImageInput?.addEventListener('change', async () => {
+            const file = this.bannerImageInput.files?.[0];
+            if (!file) {
+                return;
+            }
+            try {
+                this.bannerImage = await bannerDataUrl(file);
+                if (this.bannerMode === 'none') {
+                    this.bannerMode = 'banner';
+                    this.bannerModeInput.value = 'banner';
+                }
+                this.renderAppearance();
+            } catch (error) {
+                this.showError(t(error.message || 'No se pudo procesar la imagen.'));
+            }
+        });
+        this.bannerClear?.addEventListener('click', () => {
+            this.bannerImage = null;
+            this.bannerImageInput.value = '';
+            this.renderAppearance();
         });
 
         this.form?.addEventListener('submit', (event) => this.save(event));
@@ -232,11 +426,187 @@ export class CredentialsApp {
         this.items = [];
         this.search = '';
         this.filter = 'all';
+        this.groupFilter = 'all';
+        this.customTypes = new Map();
         this.totpConfigs.clear();
         this.revealTimers.forEach((timer) => clearTimeout(timer));
         this.revealTimers.clear();
         this.close();
         this.render();
+    }
+
+    refreshCategoryOptions() {
+        if (!this.categoryInput) {
+            return;
+        }
+
+        const derived = new Map();
+        for (const item of this.items) {
+            const parsed = credentialFromItem(item);
+            if (parsed.category === 'custom' && parsed.categoryLabel) {
+                derived.set(customTypeKey(parsed.categoryLabel), {
+                    label: parsed.categoryLabel,
+                    icon: parsed.categoryIcon || 'key',
+                });
+            }
+        }
+        for (const [key, type] of this.customTypes) {
+            if (!derived.has(key)) {
+                derived.set(key, type);
+            }
+        }
+        this.customTypes = derived;
+
+        this.categoryInput.querySelectorAll('option[data-custom-type]').forEach((option) => option.remove());
+        const createOption = this.categoryInput.querySelector('option[value="__new__"]');
+        for (const [key, type] of this.customTypes) {
+            const option = document.createElement('option');
+            option.value = `custom:${key}`;
+            option.textContent = type.label;
+            option.dataset.customType = 'true';
+            this.categoryInput.insertBefore(option, createOption);
+        }
+    }
+
+    refreshGroupOptions() {
+        if (!this.groupOptions) {
+            return;
+        }
+
+        const groups = new Set();
+        for (const item of this.items) {
+            const group = credentialFromItem(item).group;
+            if (group) {
+                groups.add(group);
+            }
+        }
+        this.groupOptions.replaceChildren();
+        for (const group of [...groups].sort((a, b) => a.localeCompare(b, locale()))) {
+            const option = document.createElement('option');
+            option.value = group;
+            this.groupOptions.appendChild(option);
+        }
+    }
+
+    renderCustomIcons() {
+        if (!this.customTypeIcons) {
+            return;
+        }
+
+        this.customTypeIcons.replaceChildren();
+        for (const entry of CUSTOM_TYPE_ICONS) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'flex h-11 w-11 items-center justify-center rounded-xl border transition-colors';
+            button.dataset.customIcon = entry.key;
+            button.setAttribute('aria-label', t(entry.label));
+            button.setAttribute('aria-pressed', this.customTypeIcon === entry.key ? 'true' : 'false');
+            button.classList.toggle('border-primary', this.customTypeIcon === entry.key);
+            button.classList.toggle('bg-primary-fixed', this.customTypeIcon === entry.key);
+            button.classList.toggle('text-primary', this.customTypeIcon === entry.key);
+            button.classList.toggle('border-outline-variant/60', this.customTypeIcon !== entry.key);
+            button.appendChild(icon(entry.symbol, 'text-[22px]'));
+            button.addEventListener('click', () => {
+                this.customTypeIcon = entry.key;
+                this.renderCustomIcons();
+            });
+            this.customTypeIcons.appendChild(button);
+        }
+    }
+
+    openCustomTypePanel() {
+        if (!this.customTypePanel) {
+            return;
+        }
+
+        this.customTypeLabel.value = '';
+        this.customTypeIcon = 'key';
+        this.renderCustomIcons();
+        this.customTypePanel.hidden = false;
+        this.customTypeLabel.focus();
+    }
+
+    closeCustomTypePanel() {
+        if (this.customTypePanel) {
+            this.customTypePanel.hidden = true;
+        }
+    }
+
+    createCustomType() {
+        const label = (this.customTypeLabel?.value || '').trim();
+        if (!label) {
+            this.showError(t('Escribe un nombre para el tipo de cuenta.'));
+            this.customTypeLabel?.focus();
+            return;
+        }
+
+        const key = customTypeKey(label);
+        this.customTypes.set(key, { label, icon: this.customTypeIcon });
+        this.refreshCategoryOptions();
+        this.categoryInput.value = `custom:${key}`;
+        this.closeCustomTypePanel();
+        this.hideError();
+    }
+
+    renderAppearance() {
+        if (this.bannerColorInput) {
+            this.bannerColorInput.value = validColor(this.bannerColor) || BANNER_COLORS[0];
+        }
+        if (this.bannerModeInput) {
+            this.bannerModeInput.value = this.bannerMode;
+        }
+
+        this.bannerPresets?.querySelectorAll('[data-banner-color]').forEach((button) => {
+            const selected = button.dataset.bannerColor.toLowerCase() === this.bannerColor.toLowerCase();
+            button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            button.classList.toggle('ring-2', selected);
+            button.classList.toggle('ring-primary', selected);
+            button.classList.toggle('ring-offset-2', selected);
+        });
+
+        if (this.logoPreviewBox && this.logoPreview) {
+            this.logoPreviewBox.hidden = !this.logo;
+            if (this.logo) {
+                this.logoPreview.src = this.logo;
+            } else {
+                this.logoPreview.removeAttribute('src');
+            }
+        }
+
+        if (this.bannerPreviewBox && this.bannerPreview) {
+            this.bannerPreviewBox.hidden = !this.bannerImage;
+            if (this.bannerImage) {
+                this.bannerPreview.src = this.bannerImage;
+            } else {
+                this.bannerPreview.removeAttribute('src');
+            }
+        }
+    }
+
+    renderBannerPresets() {
+        if (!this.bannerPresets) {
+            return;
+        }
+
+        this.bannerPresets.replaceChildren();
+        for (const color of BANNER_COLORS) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'h-9 w-9 rounded-full border border-black/10 shadow-sm transition-transform hover:scale-110';
+            button.style.backgroundColor = color;
+            button.dataset.bannerColor = color;
+            button.setAttribute('aria-label', tf('Usar color :color', { color }));
+            button.addEventListener('click', () => {
+                this.bannerColor = color;
+                if (this.bannerMode === 'none') {
+                    this.bannerMode = 'banner';
+                    this.bannerModeInput.value = 'banner';
+                }
+                this.renderAppearance();
+            });
+            this.bannerPresets.appendChild(button);
+        }
+        this.renderAppearance();
     }
 
     openNew() {
@@ -249,6 +619,10 @@ export class CredentialsApp {
         this.existingBlobId = null;
         this.clearAttachment = false;
         this.fileLabel = '';
+        this.logo = null;
+        this.bannerMode = 'none';
+        this.bannerColor = BANNER_COLORS[0];
+        this.bannerImage = null;
         this.modalTitle.textContent = t('Nueva credencial');
         this.form.reset();
         this.idInput.value = '';
@@ -256,6 +630,14 @@ export class CredentialsApp {
         this.blobInput.value = '';
         this.passwordInput.type = 'password';
         this.passwordToggle?.setAttribute('aria-pressed', 'false');
+        this.groupInput.value = '';
+        this.categoryInput.value = 'login';
+        this.previousCategory = 'login';
+        this.closeCustomTypePanel();
+        this.refreshCategoryOptions();
+        this.refreshGroupOptions();
+        this.renderBannerPresets();
+        this.renderAppearance();
         this.updatePasswordStrength();
         this.renderFileState();
         this.hideError();
@@ -274,13 +656,23 @@ export class CredentialsApp {
         this.existingBlobId = item.blob_id || null;
         this.clearAttachment = false;
         this.fileLabel = item.blob_id ? (item.metadata?.original_name || '') : '';
+        this.logo = parsed.logo || null;
+        this.bannerMode = parsed.appearance.mode;
+        this.bannerColor = parsed.appearance.color || BANNER_COLORS[0];
+        this.bannerImage = parsed.appearance.image || null;
         this.modalTitle.textContent = t('Editar credencial');
         this.form.reset();
         this.idInput.value = item.id;
         this.versionInput.value = String(item.version || '');
         this.blobInput.value = item.blob_id || '';
         this.titleInput.value = item.metadata?.title || '';
-        this.categoryInput.value = parsed.category;
+        this.refreshCategoryOptions();
+        if (parsed.category === 'custom' && parsed.categoryLabel) {
+            this.categoryInput.value = `custom:${customTypeKey(parsed.categoryLabel)}`;
+        } else {
+            this.categoryInput.value = parsed.category;
+        }
+        this.previousCategory = this.categoryInput.value;
         this.usernameInput.value = parsed.username;
         this.passwordInput.value = parsed.password;
         this.passwordInput.type = 'password';
@@ -289,6 +681,11 @@ export class CredentialsApp {
         this.totpInput.value = parsed.totp ? totpToUri(parsed.totp) : '';
         this.tagsInput.value = parsed.tags.join(', ');
         this.notesInput.value = parsed.notes;
+        this.groupInput.value = parsed.group;
+        this.closeCustomTypePanel();
+        this.refreshGroupOptions();
+        this.renderBannerPresets();
+        this.renderAppearance();
         this.updatePasswordStrength();
         this.renderFileState();
         this.hideError();
@@ -308,9 +705,15 @@ export class CredentialsApp {
         this.existingBlobId = null;
         this.clearAttachment = false;
         this.fileLabel = '';
+        this.logo = null;
+        this.bannerMode = 'none';
+        this.bannerColor = BANNER_COLORS[0];
+        this.bannerImage = null;
+        this.closeCustomTypePanel();
         this.form?.reset();
         this.hideError();
         this.renderFileState();
+        this.renderAppearance();
     }
 
     renderFileState() {
@@ -389,23 +792,76 @@ export class CredentialsApp {
             return;
         }
 
+        const selectedCategory = this.categoryInput.value;
+        if (selectedCategory === '__new__') {
+            this.showError(t('Escribe el nombre del tipo y pulsa “Usar este tipo”.'));
+            return;
+        }
+
+        let category = selectedCategory;
+        let categoryLabel = '';
+        let categoryIcon = '';
+        if (selectedCategory.startsWith('custom:')) {
+            const customType = this.customTypes.get(selectedCategory.slice(7));
+            if (!customType) {
+                this.showError(t('Elige un tipo de cuenta válido.'));
+                return;
+            }
+            category = 'custom';
+            categoryLabel = customType.label;
+            categoryIcon = customType.icon || 'key';
+        }
+
+        const credential = {
+            ...(this.baseMetadata.credential || {}),
+            category,
+            username: this.usernameInput.value.trim(),
+            password,
+            url: this.urlInput.value.trim(),
+            notes: this.notesInput.value.trim(),
+            tags: splitList(this.tagsInput.value),
+            favorite: previous?.favorite === true,
+            password_changed_at: passwordChangedAt,
+            totp: totp || null,
+        };
+
+        if (category === 'custom') {
+            credential.category_label = categoryLabel;
+            credential.category_icon = categoryIcon;
+        } else {
+            delete credential.category_label;
+            delete credential.category_icon;
+        }
+
+        const group = (this.groupInput?.value || '').trim();
+        if (group) {
+            credential.group = group;
+        } else {
+            delete credential.group;
+        }
+
+        if (this.logo) {
+            credential.logo = this.logo;
+        } else {
+            delete credential.logo;
+        }
+
+        if (this.bannerMode !== 'none' && (this.bannerColor || this.bannerImage)) {
+            credential.appearance = {
+                mode: this.bannerMode,
+                color: this.bannerColor || '',
+                image: this.bannerImage || '',
+            };
+        } else {
+            delete credential.appearance;
+        }
+
         const metadata = {
             ...this.baseMetadata,
             title,
             type: 'credential',
             expires_at: this.baseMetadata.expires_at || null,
-            credential: {
-                ...(this.baseMetadata.credential || {}),
-                category: this.categoryInput.value,
-                username: this.usernameInput.value.trim(),
-                password,
-                url: this.urlInput.value.trim(),
-                notes: this.notesInput.value.trim(),
-                tags: splitList(this.tagsInput.value),
-                favorite: previous?.favorite === true,
-                password_changed_at: passwordChangedAt,
-                totp: totp || null,
-            },
+            credential,
         };
 
         if (file) {
@@ -559,8 +1015,18 @@ export class CredentialsApp {
         }
 
         const query = this.search.trim().toLowerCase();
-        const filtered = this.items
-            .filter((item) => item.state !== 'transferred')
+        const all = this.items.filter((item) => item.state !== 'transferred');
+        const groups = [...new Set(all.map((item) => credentialFromItem(item).group).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, locale()));
+
+        if (this.groupFilter !== 'all' && this.groupFilter !== '__none__' && !groups.includes(this.groupFilter)) {
+            this.groupFilter = 'all';
+        }
+
+        this.refreshGroupOptions();
+        this.renderGroupFilters(all, groups);
+
+        const filtered = all
             .filter((item) => {
                 const parsed = credentialFromItem(item);
                 if (this.filter === 'favorite' && !parsed.favorite) {
@@ -569,12 +1035,20 @@ export class CredentialsApp {
                 if (this.filter === 'totp' && !parsed.totp) {
                     return false;
                 }
+                if (this.groupFilter === '__none__' && parsed.group) {
+                    return false;
+                }
+                if (this.groupFilter !== 'all' && this.groupFilter !== '__none__' && parsed.group !== this.groupFilter) {
+                    return false;
+                }
                 if (!query) {
                     return true;
                 }
                 return [
                     item.metadata?.title,
                     parsed.username,
+                    parsed.group,
+                    typeLabelFor(parsed),
                     ...parsed.tags,
                     parsed.notes,
                     ...(parsed.customFields || []).map((field) => field?.label),
@@ -589,7 +1063,6 @@ export class CredentialsApp {
                 return String(a.metadata?.title || '').localeCompare(String(b.metadata?.title || ''), locale());
             });
 
-        const all = this.items.filter((item) => item.state !== 'transferred');
         const counts = {
             all: all.length,
             favorite: all.filter((item) => credentialFromItem(item).favorite).length,
@@ -614,11 +1087,75 @@ export class CredentialsApp {
         this.list.replaceChildren();
         this.totpConfigs.clear();
 
-        for (const item of filtered) {
-            this.list.appendChild(this.renderCard(item));
+        const grouped = this.filter === 'all' && this.groupFilter === 'all' && !query;
+        if (grouped) {
+            const buckets = new Map();
+            for (const item of filtered) {
+                const group = credentialFromItem(item).group;
+                const key = group || '';
+                if (!buckets.has(key)) {
+                    buckets.set(key, []);
+                }
+                buckets.get(key).push(item);
+            }
+
+            const ordered = [...buckets.keys()]
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b, locale()));
+            if (buckets.has('')) {
+                ordered.push('');
+            }
+
+            for (const group of ordered) {
+                const heading = el(
+                    'li',
+                    'mp-credential-group-heading',
+                    group
+                        ? `${group} · ${buckets.get(group).length}`
+                        : `${t('Sin grupo')} · ${buckets.get('').length}`,
+                );
+                this.list.appendChild(heading);
+                for (const item of buckets.get(group)) {
+                    this.list.appendChild(this.renderCard(item));
+                }
+            }
+        } else {
+            for (const item of filtered) {
+                this.list.appendChild(this.renderCard(item));
+            }
         }
 
         this.updateTotpCodes();
+    }
+
+    renderGroupFilters(all, groups) {
+        if (!this.groupFilters) {
+            return;
+        }
+
+        const ungrouped = all.filter((item) => !credentialFromItem(item).group).length;
+        this.groupFilters.replaceChildren();
+        this.groupFilters.hidden = groups.length === 0 && ungrouped === 0;
+
+        const makeButton = (value, label, count) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'mp-filter min-h-10 shrink-0 px-4 py-1.5 text-[14px]';
+            button.dataset.credentialGroupFilter = value;
+            button.setAttribute('aria-pressed', this.groupFilter === value ? 'true' : 'false');
+            button.appendChild(document.createTextNode(label));
+            const counter = el('span', 'ml-1.5 text-[12px] font-bold opacity-80', String(count));
+            button.appendChild(counter);
+            this.groupFilters.appendChild(button);
+        };
+
+        makeButton('all', t('Todos los grupos'), all.length);
+        for (const group of groups) {
+            makeButton(group, group, all.filter((item) => credentialFromItem(item).group === group).length);
+        }
+        if (ungrouped > 0) {
+            makeButton('__none__', t('Sin grupo'), ungrouped);
+        }
     }
 
     renderCard(item) {
@@ -629,10 +1166,18 @@ export class CredentialsApp {
         const head = el('div', 'mp-credential-card__head');
         const identity = el('div', 'mp-credential-card__identity');
         const tile = el('span', 'mp-credential-card__tile');
-        tile.appendChild(icon(CATEGORY_ICONS[parsed.category] || 'key', 'text-[24px]'));
+        if (parsed.logo) {
+            const logo = document.createElement('img');
+            logo.src = parsed.logo;
+            logo.alt = '';
+            logo.className = 'h-8 w-8 object-contain';
+            tile.appendChild(logo);
+        } else {
+            tile.appendChild(icon(typeIconSymbol(parsed), 'text-[24px]'));
+        }
         const names = el('div', 'min-w-0');
         names.appendChild(el('p', 'mp-credential-card__title', item.metadata?.title || t('Credencial')));
-        names.appendChild(el('p', 'mp-credential-card__subtitle', t(CATEGORY_LABELS[parsed.category] || 'Acceso general')));
+        names.appendChild(el('p', 'mp-credential-card__subtitle', typeLabelFor(parsed)));
         identity.append(tile, names);
         head.appendChild(identity);
 
@@ -643,14 +1188,16 @@ export class CredentialsApp {
         favorite.setAttribute('aria-label', parsed.favorite ? t('Quitar de favoritas') : t('Marcar como favorita'));
         favorite.appendChild(icon(parsed.favorite ? 'star' : 'star_border', parsed.favorite ? 'text-[22px] text-secondary' : 'text-[22px]'));
         head.appendChild(favorite);
-        card.appendChild(head);
 
-        if (parsed.tags.length > 0) {
-            const tags = el('div', 'mt-3 flex flex-wrap gap-1.5');
-            for (const tag of parsed.tags.slice(0, 6)) {
-                tags.appendChild(el('span', 'mp-badge mp-badge-neutral', tag));
-            }
-            card.appendChild(tags);
+        const tags = el('div', 'mt-3 flex flex-wrap gap-1.5');
+        if (parsed.group) {
+            const groupBadge = el('span', 'mp-badge mp-badge-primary');
+            groupBadge.appendChild(icon('folder', 'text-[15px]'));
+            groupBadge.appendChild(document.createTextNode(parsed.group));
+            tags.appendChild(groupBadge);
+        }
+        for (const tag of parsed.tags.slice(0, 6)) {
+            tags.appendChild(el('span', 'mp-badge mp-badge-neutral', tag));
         }
 
         const body = el('div', 'mp-credential-card__body');
@@ -671,7 +1218,6 @@ export class CredentialsApp {
             notes.appendChild(el('p', 'mp-credential-row__value whitespace-pre-wrap font-sans text-on-surface-variant', parsed.notes));
             body.appendChild(notes);
         }
-        card.appendChild(body);
 
         const actions = el('div', 'mp-credential-actions');
         actions.appendChild(this.actionButton(t('Copiar usuario'), 'copy-username', 'content_copy', parsed.username));
@@ -687,10 +1233,43 @@ export class CredentialsApp {
             actions.appendChild(this.actionButton(t('Descargar adjunto'), 'download', 'download', true));
         }
         actions.appendChild(this.actionButton(t('Eliminar'), 'delete', 'delete', true, 'mp-btn-danger'));
-        card.appendChild(actions);
 
-        if (item.state === 'transferred') {
-            card.appendChild(el('p', 'mt-3 text-sm font-semibold text-on-surface-variant', t('Transferida a otra cuenta')));
+        const hasAppearance = parsed.appearance.mode !== 'none'
+            && (parsed.appearance.color || parsed.appearance.image);
+
+        const appendRest = (container) => {
+            if (tags.childElementCount > 0) {
+                container.appendChild(tags);
+            }
+            container.appendChild(body);
+            container.appendChild(actions);
+            if (item.state === 'transferred') {
+                container.appendChild(el('p', 'mt-3 text-sm font-semibold text-on-surface-variant', t('Transferida a otra cuenta')));
+            }
+        };
+
+        if (hasAppearance) {
+            card.style.setProperty('--credential-appearance-color', parsed.appearance.color || BANNER_COLORS[0]);
+            if (parsed.appearance.image) {
+                card.style.setProperty('--credential-appearance-image', `url("${parsed.appearance.image}")`);
+            }
+
+            if (parsed.appearance.mode === 'banner') {
+                card.classList.add('has-banner');
+                const banner = el('div', 'mp-credential-card__banner');
+                banner.appendChild(head);
+                card.appendChild(banner);
+                appendRest(card);
+            } else {
+                card.classList.add('has-background');
+                const content = el('div', 'mp-credential-card__content');
+                content.appendChild(head);
+                appendRest(content);
+                card.appendChild(content);
+            }
+        } else {
+            card.appendChild(head);
+            appendRest(card);
         }
 
         return card;

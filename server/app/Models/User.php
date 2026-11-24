@@ -16,12 +16,18 @@ use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'locale', 'simple_mode', 'is_admin', 'settings', 'email_two_factor_enabled', 'avatar_path'])]
+#[Fillable(['name', 'email', 'password', 'birth_date', 'locale', 'simple_mode', 'easy_mode', 'is_admin', 'settings', 'email_two_factor_enabled', 'avatar_path'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'avatar_path'])]
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
+
+    public const SENIOR_AGE = 51;
+
+    public const MINIMUM_AGE = 18;
+
+    public const MAXIMUM_AGE = 120;
 
     protected static function booted(): void
     {
@@ -38,12 +44,51 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'birth_date' => 'date',
             'simple_mode' => 'boolean',
+            'easy_mode' => 'boolean',
             'is_admin' => 'boolean',
             'email_two_factor_enabled' => 'boolean',
             'settings' => 'array',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    protected function age(): Attribute
+    {
+        return Attribute::get(fn (): ?int => $this->birth_date?->age);
+    }
+
+    protected function ageGroup(): Attribute
+    {
+        return Attribute::get(function (): string {
+            $age = $this->age;
+
+            if ($age === null) {
+                return 'unknown';
+            }
+
+            if ($age < self::MINIMUM_AGE) {
+                return 'minor';
+            }
+
+            return $age >= self::SENIOR_AGE ? 'senior' : 'adult';
+        });
+    }
+
+    protected function isSenior(): Attribute
+    {
+        return Attribute::get(fn (): bool => $this->age_group === 'senior');
+    }
+
+    public function usesEasyMode(): bool
+    {
+        return $this->easy_mode ?? $this->is_senior;
+    }
+
+    public function usesLargeText(): bool
+    {
+        return $this->simple_mode || $this->usesEasyMode();
     }
 
     protected function avatarUrl(): Attribute

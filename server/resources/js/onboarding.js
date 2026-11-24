@@ -20,6 +20,7 @@ const recoverySave = document.getElementById('recovery-save');
 const recoveryError = document.getElementById('recovery-error');
 const recoveryLength = document.getElementById('recovery-length');
 const recoveryLengthWarning = document.getElementById('recovery-length-warning');
+const emailRecoveryOptIn = document.getElementById('email-recovery-opt-in');
 const done = document.getElementById('onboarding-done');
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -46,6 +47,14 @@ function seal(message, key) {
 
 function formatDigits(digits) {
     return digits.match(/.{1,4}/g)?.join(' ') ?? digits;
+}
+
+function combined(nonce, ciphertext) {
+    const bytes = new Uint8Array(nonce.length + ciphertext.length);
+    bytes.set(nonce, 0);
+    bytes.set(ciphertext, nonce.length);
+
+    return bytes;
 }
 
 function showError(element, message) {
@@ -208,6 +217,19 @@ async function createVault(event) {
             identity_private_keys_encrypted: toB64(privateKeysCombined),
         };
 
+        let emailRecoverySecret = null;
+
+        if (emailRecoveryOptIn?.checked) {
+            emailRecoverySecret = sodium.randombytes_buf(32);
+            const emailWrapped = seal(masterKey, emailRecoverySecret);
+            pendingPayload.email_recovery_secret = toB64(emailRecoverySecret);
+            pendingPayload.email_recovery_wrapped_master_key = toB64(
+                combined(emailWrapped.nonce, emailWrapped.ciphertext),
+            );
+            pendingPayload.email_recovery_version = 1;
+            pendingPayload.email_recovery_enabled_at = new Date().toISOString();
+        }
+
         recoveryCode.textContent = formatDigits(recoveryDigits);
         recoveryDescription.textContent = tf(
             'Esta clave de :count dígitos es la única forma de recuperar tu bóveda si pierdes la computadora y el celular. Escríbela en papel y guárdala en un lugar seguro.',
@@ -222,6 +244,9 @@ async function createVault(event) {
         sodium.memzero(recoveryKek);
         sodium.memzero(encryptionKeypair.privateKey);
         sodium.memzero(signingKeypair.privateKey);
+        if (emailRecoverySecret) {
+            sodium.memzero(emailRecoverySecret);
+        }
         sodium.memzero(masterKey);
 
         form.hidden = true;

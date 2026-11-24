@@ -1231,6 +1231,8 @@ private fun PassCardHeader(pass: UiPass, badge: String, dark: Boolean = true) {
 @Composable
 private fun PassCardBody(pass: UiPass, compact: Boolean = false, dark: Boolean = true) {
     val fields = pass.fields
+    val boardingStart = fields["boarding_start"] ?: fields["boarding"].orEmpty()
+    val boardingEnd = fields["boarding_end"].orEmpty()
     if (pass.category == "flight") {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1274,7 +1276,7 @@ private fun PassCardBody(pass: UiPass, compact: Boolean = false, dark: Boolean =
                     color = if (dark) Color.White else MpColors.OnSurface,
                 )
                 Text(
-                    text = fields["boarding"].orEmpty(),
+                    text = boardingStart,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (dark) Color.White.copy(alpha = 0.7f) else MpColors.OnSurfaceVariant,
                 )
@@ -1289,9 +1291,54 @@ private fun PassCardBody(pass: UiPass, compact: Boolean = false, dark: Boolean =
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 PassMeta(stringResource(R.string.gate), fields["gate"] ?: "—", dark)
+                PassMeta(stringResource(R.string.terminal), fields["terminal"] ?: "—", dark)
                 PassMeta(stringResource(R.string.seat), fields["seat"] ?: "—", dark)
                 PassMeta(stringResource(R.string.zone), fields["zone"] ?: "—", dark)
-                PassMeta(stringResource(R.string.boarding), fields["boarding"] ?: "—", dark)
+            }
+            if (boardingStart.isNotBlank() || boardingEnd.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    PassMeta(stringResource(R.string.boarding_start), boardingStart.ifBlank { "—" }, dark)
+                    PassMeta(stringResource(R.string.boarding_end), boardingEnd.ifBlank { "—" }, dark)
+                }
+            }
+        }
+    } else if (pass.category == "transit") {
+        Text(
+            text = listOf(fields["route"], fields["date"], fields["time"])
+                .filterNot { it.isNullOrBlank() }
+                .joinToString(" · "),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (dark) Color.White.copy(alpha = 0.84f) else MpColors.OnSurfaceVariant,
+        )
+        if (!compact) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .background(Color.Black.copy(alpha = if (dark) 0.16f else 0.04f), RoundedCornerShape(12.dp))
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                PassMeta(stringResource(R.string.terminal), fields["terminal"] ?: "—", dark)
+                PassMeta(stringResource(R.string.platform), fields["platform"] ?: "—", dark)
+                PassMeta(stringResource(R.string.carriage), fields["carriage"] ?: "—", dark)
+                PassMeta(stringResource(R.string.seat), fields["seat"] ?: "—", dark)
+            }
+            if (boardingStart.isNotBlank() || boardingEnd.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    PassMeta(stringResource(R.string.boarding_start), boardingStart.ifBlank { "—" }, dark)
+                    PassMeta(stringResource(R.string.boarding_end), boardingEnd.ifBlank { "—" }, dark)
+                }
             }
         }
     } else if (pass.category == "event") {

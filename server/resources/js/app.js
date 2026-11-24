@@ -1,3 +1,29 @@
+if (document.body?.dataset.easy) {
+    document.cookie = `mypass_easy=${document.body.dataset.easy}; Max-Age=31536000; Path=/; SameSite=Lax`;
+}
+
+document.addEventListener('click', (event) => {
+    const easyToggle = event.target.closest('[data-easy-toggle]');
+
+    if (!easyToggle) {
+        return;
+    }
+
+    const enabled = !document.body.classList.contains('easy-mode');
+    document.body.classList.toggle('easy-mode', enabled);
+    document.body.classList.toggle('simple-mode', enabled);
+    easyToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+
+    const label = easyToggle.querySelector('[data-easy-toggle-label]');
+    if (label) {
+        label.textContent = enabled
+            ? (window.mypassT ? window.mypassT('Modo normal') : 'Modo normal')
+            : (window.mypassT ? window.mypassT('Modo fácil') : 'Modo fácil');
+    }
+
+    document.cookie = `mypass_easy=${enabled ? '1' : '0'}; Max-Age=31536000; Path=/; SameSite=Lax`;
+});
+
 document.addEventListener('click', (event) => {
     const toggle = event.target.closest('[data-toggle-password]');
 
@@ -20,6 +46,14 @@ document.addEventListener('click', (event) => {
         icon.textContent = show ? 'visibility_off' : 'visibility';
     }
 });
+
+if (document.querySelector('[data-date-wheel]')) {
+    import('./date-wheel')
+        .then(({ initDateWheels }) => initDateWheels())
+        .catch((error) => {
+            console.error('No se pudo cargar el selector de fecha', error);
+        });
+}
 
 if (document.getElementById('onboarding-app')) {
     import('./onboarding').catch((error) => {

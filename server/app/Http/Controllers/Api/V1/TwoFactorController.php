@@ -146,6 +146,9 @@ class TwoFactorController extends Controller
             'avatar_url' => $user->avatar_url,
             'locale' => $user->locale,
             'simple_mode' => $user->simple_mode,
+            'easy_mode' => $user->usesEasyMode(),
+            'age_group' => $user->age_group,
+            'birth_date' => $user->birth_date?->toDateString(),
             'has_two_factor' => $user->two_factor_secret !== null,
         ];
     }

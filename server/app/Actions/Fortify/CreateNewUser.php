@@ -3,6 +3,8 @@
 namespace App\Actions\Fortify;
 
 use App\Models\User;
+use App\Rules\AdultBirthDate;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -32,14 +34,19 @@ class CreateNewUser implements CreatesNewUsers
                 Rule::unique(User::class),
             ],
             'password' => $this->passwordRules(),
+            'birth_date' => ['required', 'date_format:Y-m-d', new AdultBirthDate],
         ])->validate();
+
+        $isSenior = Carbon::parse($input['birth_date'])->age >= User::SENIOR_AGE;
 
         return User::create([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => Hash::make($input['password']),
+            'birth_date' => $input['birth_date'],
             'locale' => session('locale') === 'en' ? 'en' : 'es-MX',
-            'simple_mode' => true,
+            'simple_mode' => $isSenior,
+            'easy_mode' => null,
         ]);
     }
 }

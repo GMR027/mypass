@@ -111,6 +111,17 @@
                     </p>
                 </div>
 
+                <label class="flex items-start gap-3 rounded-xl border border-primary/25 bg-primary-fixed/30 p-4">
+                    <input id="email-recovery-opt-in" type="checkbox" class="mp-checkbox mt-0.5"
+                           @checked(auth()->user()->usesEasyMode())>
+                    <span class="text-[16px] leading-relaxed text-on-surface">
+                        <strong class="block font-semibold">{{ __('Recuperar mi bóveda con mi correo') }}</strong>
+                        <span class="mp-hint mt-1 block">
+                            {{ __('Recomendado para ti. Si olvidas tu llave, te enviamos un código a tu correo y puedes abrir la bóveda. El servidor guarda una copia recuperable de la llave maestra. Puedes desactivarlo después.') }}
+                        </span>
+                    </span>
+                </label>
+
                 <p id="onboarding-error" class="mp-alert mp-alert-error" role="alert" hidden></p>
 
                 <button id="onboarding-create" type="submit" class="mp-btn mp-btn-primary w-full sm:w-auto">

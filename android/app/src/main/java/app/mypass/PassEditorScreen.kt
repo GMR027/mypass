@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.io.ByteArrayOutputStream
+import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
@@ -68,6 +69,8 @@ private data class PassFieldDefinition(
     val key: String,
     val label: String,
     val placeholder: String = "",
+    val isDate: Boolean = false,
+    val isTime: Boolean = false,
 )
 
 private val themeColors = listOf(
@@ -337,14 +340,35 @@ fun PassEditorScreen(state: UiState, viewModel: MainViewModel) {
                             style = MaterialTheme.typography.titleMedium,
                         )
                         definitions.forEach { definition ->
-                            MpTextField(
-                                value = fields[definition.key].orEmpty(),
-                                onValueChange = { value ->
-                                    fields = fields.toMutableMap().apply { put(definition.key, value) }
-                                },
-                                label = definition.label,
-                                placeholder = definition.placeholder,
-                            )
+                            val update = { value: String ->
+                                fields = fields.toMutableMap().apply { put(definition.key, value) }
+                            }
+
+                            if (definition.isDate) {
+                                MpDateField(
+                                    value = fields[definition.key].orEmpty(),
+                                    onValueChange = update,
+                                    label = definition.label,
+                                    defaultDate = if (definition.key == "birth") {
+                                        LocalDate.now().minusYears(30)
+                                    } else {
+                                        null
+                                    },
+                                )
+                            } else if (definition.isTime) {
+                                MpTimeField(
+                                    value = fields[definition.key].orEmpty(),
+                                    onValueChange = update,
+                                    label = definition.label,
+                                )
+                            } else {
+                                MpTextField(
+                                    value = fields[definition.key].orEmpty(),
+                                    onValueChange = update,
+                                    label = definition.label,
+                                    placeholder = definition.placeholder,
+                                )
+                            }
                         }
                     }
                 }
@@ -854,17 +878,19 @@ private fun fieldDefinitions(category: String): List<PassFieldDefinition> {
             PassFieldDefinition("origin", stringResource(R.string.origin), "MAD"),
             PassFieldDefinition("destination", stringResource(R.string.destination), "MEX"),
             PassFieldDefinition("flight", stringResource(R.string.flight_number), "IB 6401"),
-            PassFieldDefinition("date", stringResource(R.string.departure_date), "2026-11-28"),
-            PassFieldDefinition("departure", stringResource(R.string.departure_time), "17:45"),
-            PassFieldDefinition("boarding", stringResource(R.string.boarding_time), "17:05"),
-            PassFieldDefinition("seat", stringResource(R.string.seat), "2A"),
+            PassFieldDefinition("date", stringResource(R.string.departure_date), "2026-11-28", isDate = true),
+            PassFieldDefinition("departure", stringResource(R.string.departure_time), "17:45", isTime = true),
+            PassFieldDefinition("boarding_start", stringResource(R.string.boarding_start), "17:05", isTime = true),
+            PassFieldDefinition("boarding_end", stringResource(R.string.boarding_end), "17:25", isTime = true),
             PassFieldDefinition("gate", stringResource(R.string.gate), "H12"),
+            PassFieldDefinition("terminal", stringResource(R.string.terminal), "T2"),
+            PassFieldDefinition("seat", stringResource(R.string.seat), "2A"),
             PassFieldDefinition("zone", stringResource(R.string.zone), "1"),
             PassFieldDefinition("pnr", stringResource(R.string.booking_code), "ABC123"),
         )
         "event" -> listOf(
             PassFieldDefinition("location", stringResource(R.string.location), stringResource(R.string.stadium_placeholder)),
-            PassFieldDefinition("date", stringResource(R.string.event_date), "2026-11-28"),
+            PassFieldDefinition("date", stringResource(R.string.event_date), "2026-11-28", isDate = true),
             PassFieldDefinition("time", stringResource(R.string.event_time), "20:30"),
             PassFieldDefinition("gate", stringResource(R.string.access_gate), "6"),
             PassFieldDefinition("section", stringResource(R.string.section), "Golden Circle"),
@@ -873,21 +899,24 @@ private fun fieldDefinitions(category: String): List<PassFieldDefinition> {
         )
         "transit" -> listOf(
             PassFieldDefinition("route", stringResource(R.string.route), "Madrid → Barcelona"),
-            PassFieldDefinition("date", stringResource(R.string.travel_date), "2026-11-28"),
-            PassFieldDefinition("time", stringResource(R.string.departure_time), "17:45"),
+            PassFieldDefinition("date", stringResource(R.string.travel_date), "2026-11-28", isDate = true),
+            PassFieldDefinition("time", stringResource(R.string.departure_time), "17:45", isTime = true),
+            PassFieldDefinition("boarding_start", stringResource(R.string.boarding_start), "17:05", isTime = true),
+            PassFieldDefinition("boarding_end", stringResource(R.string.boarding_end), "17:25", isTime = true),
+            PassFieldDefinition("terminal", stringResource(R.string.terminal), "Terminal 1"),
             PassFieldDefinition("platform", stringResource(R.string.platform), "3"),
             PassFieldDefinition("carriage", stringResource(R.string.carriage), "5"),
             PassFieldDefinition("seat", stringResource(R.string.seat), "12B"),
         )
         "id" -> listOf(
             PassFieldDefinition("number", stringResource(R.string.document_number), "ABC123456"),
-            PassFieldDefinition("birth", stringResource(R.string.birth_date), "1990-01-01"),
-            PassFieldDefinition("expires", stringResource(R.string.valid_until), "2030-01-01"),
+            PassFieldDefinition("birth", stringResource(R.string.birth_date), "1990-01-01", isDate = true),
+            PassFieldDefinition("expires", stringResource(R.string.valid_until), "2030-01-01", isDate = true),
         )
         else -> listOf(
             PassFieldDefinition("number", stringResource(R.string.member_number), "MP-000123"),
             PassFieldDefinition("level", stringResource(R.string.level), stringResource(R.string.level_placeholder)),
-            PassFieldDefinition("expires", stringResource(R.string.valid_until), "2030-01-01"),
+            PassFieldDefinition("expires", stringResource(R.string.valid_until), "2030-01-01", isDate = true),
         )
     }
 }
