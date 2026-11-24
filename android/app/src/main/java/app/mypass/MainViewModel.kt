@@ -45,6 +45,7 @@ private const val AVATAR_CACHE_FILE = "profile-avatar"
 private const val MAX_AVATAR_SOURCE_BYTES = 20 * 1024 * 1024
 private const val MAX_AVATAR_UPLOAD_BYTES = 4 * 1024 * 1024
 private const val MAX_AVATAR_EDGE_PX = 512
+private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
 
 enum class Screen {
     Loading,
@@ -64,6 +65,7 @@ enum class Screen {
     Family,
     Scan,
     Settings,
+    Notifications,
     Viewer,
 }
 
@@ -297,10 +299,20 @@ data class UiState(
     val medicalDraft: MedicalDraft? = null,
     val scanForPass: Boolean = false,
     val scanSourcePath: String? = null,
+    val updateState: UpdateState = UpdateState.Idle,
+    val dismissedUpdateCode: Int = 0,
+    val lastUpdateCheck: Long = 0L,
+    val showUpdateDialog: Boolean = false,
+    val expiryReadIds: Set<String> = emptySet(),
+    val notificationsReturnScreen: Screen = Screen.Home,
+    val notificationRefresh: Long = 0L,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val app: Application = application
     private val store = VaultStore(application)
+    private val updateStore = UpdateStore(application)
+    private val notificationStore = NotificationStore(application)
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -309,12 +321,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pairingPrivateKey: PrivateKey? = null
     private var pairingPublicKey: String? = null
     private var pollJob: Job? = null
+    private var updateJob: Job? = null
     private var viewerFile: File? = null
     private var identityPublicKey: ByteArray? = null
     private var identityPrivateKey: ByteArray? = null
 
     init {
         val cachedAvatar = avatarCacheFile().takeIf { it.exists() }
+        val pendingRelease = updateStore.pendingRelease()
+        val pendingPath = updateStore.pendingPath()?.let(::File)
+        val initialUpdate = when {
+            pendingRelease == null || pendingPath == null || !pendingPath.isFile -> {
+                if (pendingRelease != null) {
+                    updateStore.clearPending()
+                }
+                UpdateState.Idle
+            }
+            pendingRelease.versionCode <= BuildConfig.VERSION_CODE -> {
+                pendingPath?.delete()
+                updateStore.clearPending()
+                UpdateState.Idle
+            }
+            AppUpdater.canInstall(app) -> {
+                UpdateState.Ready(pendingRelease, pendingPath.absolutePath)
+            }
+            else -> {
+                UpdateState.NeedsPermission(pendingRelease, pendingPath.absolutePath)
+            }
+        }
 
         _state.value = UiState(
             screen = when {
@@ -329,6 +363,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             avatarUrl = store.avatarUrl(),
             avatarPath = cachedAvatar?.absolutePath,
             avatarVersion = cachedAvatar?.lastModified() ?: 0L,
+            updateState = initialUpdate,
+            dismissedUpdateCode = updateStore.dismissedVersion(),
+            lastUpdateCheck = updateStore.lastCheck(),
+            expiryReadIds = notificationStore.readExpiryIds(),
         )
     }
 
@@ -1382,12 +1420,371 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun markAllNotificationsRead() {
+        markExpiryNotificationsSeen()
+        if (_state.value.updateState.release != null) {
+            dismissUpdate()
+        }
         val token = store.token() ?: return
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 ApiClient.markAllNotificationsRead(token)
                 loadNotifications(token)
             }
+        }
+    }
+
+    fun openNotifications() {
+        val current = _state.value.screen
+        val returnScreen = if (current == Screen.Notifications) {
+            _state.value.notificationsReturnScreen
+        } else if (current in setOf(
+                Screen.Home,
+                Screen.Vault,
+                Screen.Passes,
+                Screen.Credentials,
+                Screen.Medical,
+                Screen.Settings,
+            )
+        ) {
+            current
+        } else {
+            Screen.Home
+        }
+
+        _state.value = _state.value.copy(
+            screen = Screen.Notifications,
+            notificationsReturnScreen = returnScreen,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun closeNotifications() {
+        _state.value = _state.value.copy(
+            screen = _state.value.notificationsReturnScreen,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun onNotificationsOpened() {
+        refreshNotificationsAndUpdates()
+    }
+
+    fun refreshNotificationsAndUpdates() {
+        markExpiryNotificationsSeen()
+        refreshNotifications()
+        checkForUpdates(manual = false)
+    }
+
+    fun markExpiryNotificationsSeen() {
+        val ids = _state.value.items.mapNotNull { item ->
+            val expiresAt = item.expiresAt ?: return@mapNotNull null
+            val days = expiryDays(expiresAt) ?: return@mapNotNull null
+            if (days <= 7) expiryNotificationId(item.id, expiresAt) else null
+        }.toSet()
+
+        if (ids.isEmpty()) {
+            return
+        }
+
+        notificationStore.markExpirySeen(ids)
+        _state.value = _state.value.copy(expiryReadIds = notificationStore.readExpiryIds())
+    }
+
+    fun openNotificationEntry(entry: NotificationEntry) {
+        when (entry.kind) {
+            NotificationKind.Update -> openUpdateDialog()
+
+            NotificationKind.Expired,
+            NotificationKind.Expiring,
+            -> {
+                markExpiryEntrySeen(entry.id)
+                val item = _state.value.items.firstOrNull { it.id == entry.itemId } ?: return
+                when {
+                    item.credential != null -> openCredentials()
+                    item.medical != null -> openMedical()
+                    item.pass != null -> openPasses()
+                    else -> openItem(item)
+                }
+            }
+
+            NotificationKind.Activity -> {
+                entry.activityId?.let(::markNotificationRead)
+                when (entry.activityType) {
+                    "contact_request",
+                    "contact_accepted",
+                    -> openFamily()
+
+                    "share_received",
+                    "share_accepted",
+                    "document_request",
+                    -> openPasses()
+
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    fun checkForUpdatesManually() {
+        checkForUpdates(manual = true)
+    }
+
+    fun onAppResumed() {
+        val current = _state.value.updateState
+        if (current is UpdateState.NeedsPermission && AppUpdater.canInstall(app)) {
+            _state.value = _state.value.copy(
+                updateState = UpdateState.Ready(current.release, current.path),
+            )
+        }
+
+        _state.value = _state.value.copy(notificationRefresh = System.currentTimeMillis())
+        checkForUpdates(manual = false)
+    }
+
+    private fun checkForUpdates(manual: Boolean) {
+        if (updateJob?.isActive == true) {
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val previous = _state.value.updateState
+        if (previous is UpdateState.Downloading) {
+            return
+        }
+        if (!manual &&
+            previous !is UpdateState.Ready &&
+            previous !is UpdateState.NeedsPermission &&
+            updateStore.lastCheck() > 0L &&
+            now - updateStore.lastCheck() < UPDATE_CHECK_INTERVAL_MS
+        ) {
+            return
+        }
+
+        _state.value = _state.value.copy(
+            updateState = if (previous is UpdateState.Ready || previous is UpdateState.NeedsPermission) {
+                previous
+            } else {
+                UpdateState.Checking
+            },
+        )
+
+        updateJob = viewModelScope.launch(Dispatchers.IO) {
+            runCatching { ApiClient.appVersion() }
+                .onSuccess { raw ->
+                    val release = AppRelease.fromJson(raw)
+                    if (release == null) {
+                        error(text(R.string.updates_check_failed, text(R.string.error_check_connection)))
+                    }
+
+                    val checkedAt = System.currentTimeMillis()
+                    updateStore.setLastCheck(checkedAt)
+                    val pending = updateStore.pendingRelease()
+                    val pendingPath = updateStore.pendingPath()?.let(::File)
+                    val pendingMatches = pending?.versionCode == release.versionCode &&
+                        pendingPath != null &&
+                        pendingPath.isFile
+
+                    val nextState = when {
+                        release.versionCode <= BuildConfig.VERSION_CODE -> {
+                            pendingPath?.delete()
+                            updateStore.clearPending()
+                            UpdateState.UpToDate
+                        }
+
+                        pendingMatches && AppUpdater.canInstall(app) -> {
+                            UpdateState.Ready(release, pendingPath!!.absolutePath)
+                        }
+
+                        pendingMatches -> {
+                            UpdateState.NeedsPermission(release, pendingPath!!.absolutePath)
+                        }
+
+                        else -> {
+                            updateStore.clearPending()
+                            UpdateState.Available(release)
+                        }
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(
+                            updateState = nextState,
+                            lastUpdateCheck = checkedAt,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    withContext(Dispatchers.Main) {
+                        _state.value = _state.value.copy(
+                            updateState = if (manual || previous is UpdateState.Available) {
+                                UpdateState.Failed(
+                                    previous.release,
+                                    text(
+                                        R.string.updates_check_failed,
+                                        error.message ?: text(R.string.error_check_connection),
+                                    ),
+                                )
+                            } else {
+                                previous
+                            },
+                        )
+                    }
+                }
+        }
+    }
+
+    fun downloadUpdate() {
+        val current = _state.value.updateState
+        val release = current.release ?: return
+        if (current is UpdateState.Downloading) {
+            return
+        }
+
+        updateStore.dismiss(release.versionCode)
+        _state.value = _state.value.copy(
+            dismissedUpdateCode = release.versionCode,
+            updateState = UpdateState.Downloading(
+                release = release,
+                downloadedBytes = 0L,
+                totalBytes = release.sizeBytes,
+            ),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var lastProgressAt = 0L
+
+            runCatching {
+                val file = AppUpdater.download(app, release) { downloaded, total ->
+                    val timestamp = System.currentTimeMillis()
+                    if (timestamp - lastProgressAt >= 150L || (total > 0L && downloaded >= total)) {
+                        lastProgressAt = timestamp
+                        viewModelScope.launch(Dispatchers.Main) {
+                            val live = _state.value.updateState
+                            if (live is UpdateState.Downloading &&
+                                live.release.versionCode == release.versionCode
+                            ) {
+                                _state.value = _state.value.copy(
+                                    updateState = live.copy(
+                                        downloadedBytes = downloaded,
+                                        totalBytes = if (total > 0L) total else release.sizeBytes,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (!AppUpdater.signatureMatches(app, file, release.versionCode)) {
+                    file.delete()
+                    error(text(R.string.updates_signature_error))
+                }
+
+                file
+            }.onSuccess { file ->
+                updateStore.savePending(release, file.absolutePath)
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        updateState = if (AppUpdater.canInstall(app)) {
+                            UpdateState.Ready(release, file.absolutePath)
+                        } else {
+                            UpdateState.NeedsPermission(release, file.absolutePath)
+                        },
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        updateState = UpdateState.Failed(
+                            release,
+                            text(
+                                R.string.updates_failed,
+                                error.message ?: text(R.string.error_check_connection),
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val current = _state.value.updateState
+        val release = current.release ?: return
+        val path = when (current) {
+            is UpdateState.Ready -> current.path
+            is UpdateState.NeedsPermission -> current.path
+            else -> return
+        }
+
+        if (!AppUpdater.canInstall(app)) {
+            _state.value = _state.value.copy(
+                updateState = UpdateState.NeedsPermission(release, path),
+                showUpdateDialog = false,
+            )
+            return
+        }
+
+        runCatching { AppUpdater.install(app, File(path)) }
+            .onSuccess { launched ->
+                if (launched) {
+                    _state.value = _state.value.copy(
+                        status = text(R.string.updates_installing),
+                        showUpdateDialog = false,
+                    )
+                } else {
+                    _state.value = _state.value.copy(
+                        updateState = UpdateState.Failed(
+                            release,
+                            text(R.string.updates_failed, text(R.string.error_check_connection)),
+                        ),
+                        showUpdateDialog = false,
+                    )
+                }
+            }
+            .onFailure { error ->
+                _state.value = _state.value.copy(
+                    updateState = UpdateState.Failed(
+                        release,
+                        text(
+                            R.string.updates_failed,
+                            error.message ?: text(R.string.error_check_connection),
+                        ),
+                    ),
+                    showUpdateDialog = false,
+                )
+            }
+    }
+
+    fun openInstallPermissionSettings() {
+        AppUpdater.openInstallPermissionSettings(app)
+    }
+
+    fun dismissUpdate() {
+        val release = _state.value.updateState.release ?: return
+        updateStore.dismiss(release.versionCode)
+        _state.value = _state.value.copy(dismissedUpdateCode = release.versionCode)
+    }
+
+    fun openUpdateDialog() {
+        if (_state.value.updateState.release != null) {
+            _state.value = _state.value.copy(showUpdateDialog = true)
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _state.value = _state.value.copy(showUpdateDialog = false)
+    }
+
+    private fun markExpiryEntrySeen(id: String) {
+        notificationStore.markExpirySeen(setOf(id))
+        _state.value = _state.value.copy(expiryReadIds = notificationStore.readExpiryIds())
+    }
+
+    private fun refreshNotifications() {
+        val token = store.token() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { loadNotifications(token) }
         }
     }
 

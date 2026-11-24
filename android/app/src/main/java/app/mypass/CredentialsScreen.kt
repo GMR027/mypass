@@ -127,6 +127,7 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
             onLock = viewModel::lock,
             onSettings = viewModel::openSettings,
             onLogout = viewModel::logout,
+            onNotifications = viewModel::openNotifications,
         )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = if (state.simpleMode) 560.dp else 320.dp),
@@ -422,6 +423,8 @@ private fun CredentialValueRow(
             style = MaterialTheme.typography.labelMedium,
             color = MpColors.OnSurfaceVariant,
             modifier = Modifier.weight(0.7f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = value,
@@ -555,10 +558,12 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             MpButton(
-                                text = stringResource(R.string.generate_password),
+                                text = stringResource(R.string.generate),
                                 onClick = { password = PasswordGenerator.generate(24) },
                                 variant = MpButtonVariant.Secondary,
                                 modifier = Modifier.weight(1f),
+                                compact = true,
+                                maxLines = 1,
                             )
                             Text(
                                 text = stringResource(
@@ -635,15 +640,21 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                                 onClick = { picker.launch("*/*") },
                                 variant = MpButtonVariant.Secondary,
                                 modifier = Modifier.weight(1f),
+                                compact = true,
+                                maxLines = 1,
                             )
                             if (attachmentName != null) {
-                                TextButton(onClick = {
-                                    attachmentUri = null
-                                    attachmentName = null
-                                    clearAttachment = true
-                                }) {
-                                    Text(stringResource(R.string.remove), color = MpColors.Error)
-                                }
+                                MpButton(
+                                    text = stringResource(R.string.remove),
+                                    onClick = {
+                                        attachmentUri = null
+                                        attachmentName = null
+                                        clearAttachment = true
+                                    },
+                                    variant = MpButtonVariant.Quiet,
+                                    compact = true,
+                                    maxLines = 1,
+                                )
                             }
                         }
                         attachmentName?.let {

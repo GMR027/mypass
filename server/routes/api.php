@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AppVersionController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BlobController;
 use App\Http\Controllers\Api\V1\ContactController;
@@ -21,6 +22,10 @@ Route::prefix('v1')->group(function () {
         'version' => '0.3.0',
         'time' => now()->toIso8601String(),
     ]));
+
+    Route::get('/app/version', [AppVersionController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('api.app.version');
 
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);

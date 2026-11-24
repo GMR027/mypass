@@ -129,6 +129,11 @@ object ApiClient {
         return JSONObject(response).getJSONArray("data")
     }
 
+    fun appVersion(): JSONObject {
+        val response = request("GET", "/app/version", null, null, null)
+        return JSONObject(response)
+    }
+
     fun listNotifications(token: String): JSONObject {
         val response = request("GET", "/notifications", token, null, null)
         return JSONObject(response)
@@ -355,7 +360,7 @@ object ApiClient {
             .put("wrapped_master_key", wrappedMasterKey)
             .put("pin_salt", pinSalt)
             .put("pin_params", params)
-            .put("app_version", "0.3.0")
+            .put("app_version", BuildConfig.VERSION_NAME)
         val response = request("POST", "/devices", token, body.toString().toByteArray(), "application/json")
         return JSONObject(response).getJSONObject("data").getString("id")
     }

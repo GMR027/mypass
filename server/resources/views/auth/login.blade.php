@@ -89,7 +89,7 @@
             <div class="min-w-0 flex-1">
                 <p class="font-semibold text-primary">{{ __('Lleva My Pass en tu Android') }}</p>
                 <p class="mt-1 text-sm leading-relaxed text-on-surface-variant">{{ __('Descarga la app y vincula tu bóveda con un código de un solo uso.') }}</p>
-                <a href="{{ route('app.download', ['v' => '3']) }}" class="mp-btn mp-btn-secondary mt-3 w-full" download>
+                <a href="{{ route('app.download', ['v' => $androidVersionCode]) }}" class="mp-btn mp-btn-secondary mt-3 w-full" download>
                     <x-icon name="download" class="text-[19px]" />
                     {{ __('Descargar APK') }}
                 </a>

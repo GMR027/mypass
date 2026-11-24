@@ -114,6 +114,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
             onLock = viewModel::lock,
             onSettings = viewModel::openSettings,
             onLogout = viewModel::logout,
+            onNotifications = viewModel::openNotifications,
         )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = if (state.simpleMode) 560.dp else 340.dp),
@@ -343,7 +344,12 @@ private fun MedicalAction(text: String, onClick: () -> Unit, primary: Boolean = 
             contentColor = if (primary) MpColors.Primary else MpColors.OnSurfaceVariant,
         ),
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium)
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -533,15 +539,21 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
                                 onClick = { picker.launch("*/*") },
                                 variant = MpButtonVariant.Secondary,
                                 modifier = Modifier.weight(1f),
+                                compact = true,
+                                maxLines = 1,
                             )
                             if (attachmentName != null) {
-                                TextButton(onClick = {
-                                    attachmentUri = null
-                                    attachmentName = null
-                                    clearAttachment = true
-                                }) {
-                                    Text(stringResource(R.string.remove), color = MpColors.Error)
-                                }
+                                MpButton(
+                                    text = stringResource(R.string.remove),
+                                    onClick = {
+                                        attachmentUri = null
+                                        attachmentName = null
+                                        clearAttachment = true
+                                    },
+                                    variant = MpButtonVariant.Quiet,
+                                    compact = true,
+                                    maxLines = 1,
+                                )
                             }
                         }
                         attachmentName?.let {

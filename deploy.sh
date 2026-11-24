@@ -31,6 +31,8 @@ TAG_FILE="$ROOT_DIR/.deploy-tag"
 HOST="mypass.iguzman.com.mx"
 DUMP_FILE="${MYPASS_DUMP:-$ROOT_DIR/../mypass-2026-11-22.sql}"
 APK_FILE="${MYPASS_APK:-$ROOT_DIR/android/app/build/outputs/apk/release/app-release.apk}"
+VERSION_FILE="$ROOT_DIR/android/version.properties"
+NOTES_FILE="$ROOT_DIR/android/release-notes.json"
 
 IMPORT_DUMP=0
 TAG=""
@@ -116,6 +118,86 @@ if [[ "$IMPORT_DUMP" = "1" && ! -f "$DUMP_FILE" ]]; then
     exit 1
 fi
 
+# --- Validación del APK -----------------------------------------------------
+# El APK se publica en /downloads/mypass.apk. Si se compiló con la URL local
+# por defecto, la app instalada falla con "failed to connect 127.0.0.1:38022".
+apk_api_base_url() {
+    python3 - "$1" <<'PY'
+import re, sys, zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as apk:
+    dex = b"".join(
+        apk.read(name)
+        for name in apk.namelist()
+        if re.fullmatch(r"classes\d*\.dex", name)
+    )
+url = re.search(rb"https?://[^\x00-\x20\"']+/api/v1", dex)
+print(url.group(0).decode() if url else "")
+PY
+}
+
+apk_version_property() {
+    sed -n "s/^$1=//p" "$VERSION_FILE" 2>/dev/null | tail -1
+}
+
+sdk_dir() {
+    if [[ -n "${ANDROID_HOME:-}" ]]; then
+        printf '%s\n' "$ANDROID_HOME"
+        return
+    fi
+    sed -n 's/^sdk.dir=//p' "$ROOT_DIR/android/local.properties" 2>/dev/null | tail -1
+}
+
+APKANALYZER=""
+SDK_DIR="$(sdk_dir)"
+if [[ -n "$SDK_DIR" && -x "$SDK_DIR/cmdline-tools/latest/bin/apkanalyzer" ]]; then
+    APKANALYZER="$SDK_DIR/cmdline-tools/latest/bin/apkanalyzer"
+fi
+
+APK_VERSION_CODE="$(apk_version_property versionCode)"
+APK_VERSION_NAME="$(apk_version_property versionName)"
+MIN_SUPPORTED_VERSION_CODE="$(apk_version_property minSupportedVersionCode)"
+[[ "$MIN_SUPPORTED_VERSION_CODE" =~ ^[0-9]+$ ]] || MIN_SUPPORTED_VERSION_CODE=0
+
+if [[ -f "$APK_FILE" ]]; then
+    APK_URL="$(apk_api_base_url "$APK_FILE")"
+    if [[ "$APK_URL" != "https://$HOST/api/v1" ]]; then
+        rojo "El APK apunta a '${APK_URL:-una URL desconocida}', no al clúster."
+        rojo "Recompílalo antes de desplegar:"
+        rojo "  cd android && ./gradlew assembleRelease -Pmypass.apiBaseUrl=https://$HOST/api/v1"
+        exit 1
+    fi
+
+    if [[ -n "$APKANALYZER" ]]; then
+        APK_VERSION_CODE="$("$APKANALYZER" manifest version-code "$APK_FILE")"
+        APK_VERSION_NAME="$("$APKANALYZER" manifest version-name "$APK_FILE")"
+    else
+        amarillo "    apkanalyzer no disponible; se usa $VERSION_FILE para la versión."
+    fi
+
+    if [[ ! "$APK_VERSION_CODE" =~ ^[0-9]+$ || -z "$APK_VERSION_NAME" ]]; then
+        rojo "No se pudo determinar la versión del APK."
+        exit 1
+    fi
+
+    PUBLISHED_VERSION_CODE=""
+    PUBLISHED_MANIFEST="$(kubectl get pod -n "$NAMESPACE" -l app=mypass \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    if [[ -n "$PUBLISHED_MANIFEST" ]]; then
+        PUBLISHED_VERSION_CODE="$(kubectl exec -n "$NAMESPACE" "$PUBLISHED_MANIFEST" -- \
+            cat /var/www/html/storage/app/private/downloads/version.json 2>/dev/null \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("versionCode", ""))' 2>/dev/null || true)"
+    fi
+
+    if [[ -n "$PUBLISHED_VERSION_CODE" && "$APK_VERSION_CODE" -le "$PUBLISHED_VERSION_CODE" ]]; then
+        if [[ "${MYPASS_ALLOW_SAME_VERSION:-0}" != "1" ]]; then
+            rojo "El APK tiene versionCode $APK_VERSION_CODE, pero ya está publicada la $PUBLISHED_VERSION_CODE."
+            rojo "Incrementa versionCode en android/version.properties y vuelve a compilar."
+            exit 1
+        fi
+    fi
+fi
+
 # --- Validación del chart ---------------------------------------------------
 verde "==> Validando el chart..."
 helm lint "$CHART_DIR" -f "$CHART_DIR/values.yaml" -f "$VALUES_LOCAL" >/dev/null
@@ -188,20 +270,62 @@ helm_deploy() {
 }
 
 publish_apk() {
-    local apk="$1" pod
+    local apk="$1" pod manifest
 
     if [[ ! -f "$apk" ]]; then
         amarillo "    No hay APK en $apk; /downloads/mypass.apk quedará 404."
         return 0
     fi
 
+    manifest="$(dirname "$apk")/version.json"
+    python3 - "$apk" "$APK_VERSION_CODE" "$APK_VERSION_NAME" "$HOST" "$NOTES_FILE" \
+        "$MIN_SUPPORTED_VERSION_CODE" "$manifest" <<'PY'
+import hashlib
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+apk, code, name, host, notes_path, min_code, out_path = sys.argv[1:8]
+
+digest = hashlib.sha256()
+with open(apk, "rb") as handle:
+    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        digest.update(chunk)
+
+notes = {}
+if notes_path and os.path.isfile(notes_path):
+    with open(notes_path, encoding="utf-8") as handle:
+        notes = json.load(handle)
+
+data = {
+    "versionCode": int(code),
+    "versionName": name,
+    "apkUrl": f"https://{host}/downloads/mypass.apk?v={code}",
+    "sha256": digest.hexdigest(),
+    "sizeBytes": os.path.getsize(apk),
+    "minSupportedVersionCode": int(min_code or 0),
+    "publishedAt": datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+    "notes": notes,
+}
+
+with open(out_path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, ensure_ascii=False, indent=2)
+    handle.write("\n")
+PY
+
     pod="$(kubectl get pod -n "$NAMESPACE" -l app=mypass -o jsonpath='{.items[0].metadata.name}')"
     kubectl exec -n "$NAMESPACE" "$pod" -- sh -c \
         'mkdir -p /var/www/html/storage/app/private/downloads'
     kubectl cp "$apk" "$NAMESPACE/$pod:/var/www/html/storage/app/private/downloads/mypass.apk"
+    kubectl cp "$manifest" "$NAMESPACE/$pod:/var/www/html/storage/app/private/downloads/version.json"
     kubectl exec -n "$NAMESPACE" "$pod" -- sh -c \
-        'chown www-data:www-data /var/www/html/storage/app/private/downloads/mypass.apk && chmod 644 /var/www/html/storage/app/private/downloads/mypass.apk'
-    verde "    APK publicado en https://$HOST/downloads/mypass.apk"
+        'chown www-data:www-data /var/www/html/storage/app/private/downloads/mypass.apk /var/www/html/storage/app/private/downloads/version.json && chmod 644 /var/www/html/storage/app/private/downloads/mypass.apk /var/www/html/storage/app/private/downloads/version.json'
+    verde "    APK publicado en https://$HOST/downloads/mypass.apk (v$APK_VERSION_CODE)"
+    verde "    Manifiesto publicado en https://$HOST/api/v1/app/version"
 }
 
 # --- Deploy -----------------------------------------------------------------

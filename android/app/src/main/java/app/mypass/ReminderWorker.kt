@@ -12,9 +12,6 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.time.LocalDate
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 
 class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -32,8 +29,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         var soon = 0
 
         for (item in VaultStore(context).allItems()) {
-            val date = parseDate(item.expiresAt) ?: continue
-            val days = ChronoUnit.DAYS.between(today, date)
+            val days = expiryDays(item.expiresAt, today) ?: continue
             if (days < 0) {
                 expired += 1
             } else if (days <= 7) {
@@ -89,21 +85,5 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
         manager.notify(2001, notification)
         return Result.success()
-    }
-
-    private fun parseDate(value: String?): LocalDate? {
-        if (value.isNullOrBlank()) {
-            return null
-        }
-
-        return runCatching {
-            if (value.contains('T')) {
-                OffsetDateTime.parse(value)
-                    .atZoneSameInstant(ZoneId.systemDefault())
-                    .toLocalDate()
-            } else {
-                LocalDate.parse(value.take(10))
-            }
-        }.getOrNull()
     }
 }

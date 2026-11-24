@@ -154,6 +154,45 @@ JAVA_HOME="$HOME/.local/opt/jdk-21" ./gradlew assembleRelease \
 
 Ese valor queda dentro de `BuildConfig.API_BASE_URL` y no necesita `adb reverse`. Usa HTTPS con un certificado válido: la configuración de red del APK solo permite tráfico sin cifrar hacia `localhost` y `127.0.0.1`.
 
+`deploy.sh` publica ese mismo APK en `/downloads/mypass.apk`, así que antes de desplegar verifica la URL grabada dentro del APK y aborta si apunta a `127.0.0.1:38022`: un APK con la URL local no puede conectarse al clúster desde el teléfono.
+
+### Versión y actualizaciones
+
+La versión de la app vive en `android/version.properties`:
+
+```properties
+versionCode=10
+versionName=0.4.6
+minSupportedVersionCode=0
+```
+
+Hay que incrementar `versionCode` en cada release; `deploy.sh` rechaza publicar una versión igual o menor que la que ya está en el clúster. `versionName` es el texto visible y `minSupportedVersionCode` permite marcar una actualización como obligatoria (0 la desactiva).
+
+Al desplegar se publican el APK y un manifiesto `version.json` con SHA-256, tamaño, notas y URL versionada. La app consulta:
+
+```text
+GET https://mypass.iguzman.com.mx/api/v1/app/version
+```
+
+El chequeo automático se hace al abrir o volver a la app, como máximo una vez cada 24 horas. También se puede forzar desde `Ajustes → Actualizaciones`. Cuando hay una versión nueva:
+
+- Aparece la campana de notificaciones en la barra superior.
+- La tarjeta de notificaciones de Inicio muestra la novedad.
+- Ajustes permite descargar e instalar el APK dentro de la app.
+
+Android siempre muestra su propia confirmación de instalación; al ser una app fuera de Play Store no se puede instalar en silencio. Si es la primera vez, hay que permitir `Instalar apps desconocidas` para My Pass. La actualización conserva los datos porque usa la misma firma y no se desinstala.
+
+Las notas de cada release se editan en `android/release-notes.json` (español e inglés). Flujo habitual:
+
+```bash
+# 1. Edita android/version.properties y android/release-notes.json
+cd android
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew assembleRelease \
+  -Pmypass.apiBaseUrl=https://mypass.iguzman.com.mx/api/v1
+cd ..
+./deploy.sh
+```
+
 La tablet tiene Android 13 y MIUI 14. MIUI bloquea la instalación de apps de desarrolladores no verificados durante las primeras 24 horas. Hay que esperar y activar:
 
 `Ajustes → Opciones de desarrollador → Apps de desarrolladores no verificados`

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -102,6 +103,7 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
     val firstName = state.name.substringBefore(" ").ifBlank {
         state.email.substringBefore("@")
     }.ifBlank { stringResource(R.string.app_name) }
+    val notificationItems = notificationEntries(state)
     var presentingItem by remember { mutableStateOf<UiItem?>(null) }
     val todayLabel = remember {
         LocalDate.now()
@@ -119,6 +121,7 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
             onLock = viewModel::lock,
             onSettings = viewModel::openSettings,
             onLogout = viewModel::logout,
+            onNotifications = viewModel::openNotifications,
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -246,11 +249,12 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                 item { ExpiryBanner(count = expiring) }
             }
 
-            if (state.notifications.isNotEmpty()) {
+            if (notificationItems.isNotEmpty()) {
                 item {
                     NotificationsCard(
-                        notifications = state.notifications,
-                        onRead = viewModel::markNotificationRead,
+                        entries = notificationItems,
+                        onOpenEntry = viewModel::openNotificationEntry,
+                        onViewAll = viewModel::openNotifications,
                         onReadAll = viewModel::markAllNotificationsRead,
                     )
                 }
@@ -359,6 +363,8 @@ private fun NextPassHero(
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.86f),
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     Spacer(modifier = Modifier.weight(1f))
@@ -366,6 +372,8 @@ private fun NextPassHero(
                         text = if (passCount == 1) stringResource(R.string.home_pass_count_one, passCount) else stringResource(R.string.home_pass_count, passCount),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.58f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
 
@@ -490,7 +498,7 @@ private fun QuickActionDock(
                     onClick = onPasses,
                 )
                 QuickActionItem(
-                    title = stringResource(R.string.scan_pass),
+                    title = stringResource(R.string.scan),
                     icon = Icons.Filled.Add,
                     modifier = Modifier.weight(1f),
                     onClick = onScan,
@@ -539,94 +547,15 @@ private fun QuickActionItem(
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = MpColors.OnSurfaceVariant,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp),
         )
-    }
-}
-
-@Composable
-private fun NotificationsCard(
-    notifications: List<UiNotification>,
-    onRead: (String) -> Unit,
-    onReadAll: () -> Unit,
-) {
-    val unread = notifications.count { !it.read }
-
-    MpCard(modifier = Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.notifications_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                if (unread > 0) {
-                    MpBadge(
-                        text = unread.toString(),
-                        tone = MpBadgeTone.Primary,
-                    )
-                }
-            }
-
-            notifications.take(3).forEach { notification ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable {
-                            if (!notification.read) {
-                                onRead(notification.id)
-                            }
-                        }
-                        .padding(vertical = 6.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (!notification.read) {
-                        Box(
-                            modifier = Modifier
-                                .padding(top = 6.dp)
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(MpColors.Primary),
-                        )
-                    }
-                    Text(
-                        text = notificationMessage(notification),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (notification.read) MpColors.OnSurfaceVariant else MpColors.OnSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-
-            if (unread > 0) {
-                TextButton(onClick = onReadAll) {
-                    Text(stringResource(R.string.mark_all_read), color = MpColors.Primary)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun notificationMessage(notification: UiNotification): String {
-    val someone = stringResource(R.string.someone)
-    val document = stringResource(R.string.document)
-    val name = notification.from.ifBlank { someone }
-    val documentType = notification.documentType.ifBlank { document }
-
-    return when (notification.type) {
-        "contact_request" -> stringResource(R.string.notif_contact_request, name)
-        "contact_accepted" -> stringResource(R.string.notif_contact_accepted, name)
-        "share_received" -> stringResource(R.string.notif_share_received, name)
-        "share_accepted" -> stringResource(R.string.notif_share_accepted, name)
-        "document_request" -> stringResource(R.string.notif_document_request, name, documentType)
-        else -> stringResource(R.string.notif_default)
     }
 }
 
@@ -732,6 +661,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
             onLock = viewModel::lock,
             onSettings = viewModel::openSettings,
             onLogout = viewModel::logout,
+            onNotifications = viewModel::openNotifications,
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -766,20 +696,24 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MpButton(
-                            text = stringResource(R.string.scan_pass),
+                            text = stringResource(R.string.scan),
                             onClick = { viewModel.openScanner(true) },
                             icon = Icons.Filled.Add,
                             enabled = !state.busy,
                             modifier = Modifier.weight(1f),
+                            compact = true,
+                            maxLines = 1,
                         )
                         MpButton(
-                            text = stringResource(R.string.import_file),
+                            text = stringResource(R.string.import_short),
                             onClick = {
                                 importLauncher.launch(arrayOf("application/pdf", "image/*"))
                             },
                             variant = MpButtonVariant.Secondary,
                             enabled = !state.busy,
                             modifier = Modifier.weight(1f),
+                            compact = true,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -1059,12 +993,16 @@ private fun PassDetailCard(
                         variant = MpButtonVariant.Quiet,
                         enabled = hasContacts && item.pass?.options?.get("share") != false,
                         modifier = Modifier.weight(1f),
+                        compact = true,
+                        maxLines = 1,
                     )
                     MpButton(
-                        text = stringResource(R.string.edit_pass),
+                        text = stringResource(R.string.edit),
                         onClick = onEdit,
                         variant = MpButtonVariant.Secondary,
                         modifier = Modifier.weight(1f),
+                        compact = true,
+                        maxLines = 1,
                     )
                 }
                 if (!hasContacts) {
@@ -1283,6 +1221,8 @@ private fun PassCardHeader(pass: UiPass, badge: String, dark: Boolean = true) {
                 style = MaterialTheme.typography.labelSmall,
                 color = if (dark) Color.White else MpColors.OnSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

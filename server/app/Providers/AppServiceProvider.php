@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -35,7 +36,16 @@ class AppServiceProvider extends ServiceProvider
                 }
             }
 
+            $androidVersionCode = 0;
+            $versionPath = 'downloads/version.json';
+
+            if (Storage::disk('local')->exists($versionPath)) {
+                $version = json_decode(Storage::disk('local')->get($versionPath), true);
+                $androidVersionCode = (int) ($version['versionCode'] ?? 0);
+            }
+
             $view->with('jsTranslations', $translations);
+            $view->with('androidVersionCode', $androidVersionCode);
         });
     }
 }

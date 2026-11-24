@@ -13,6 +13,20 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+val versionPropertiesFile = rootProject.file("version.properties")
+val versionProperties = Properties().apply {
+    check(versionPropertiesFile.exists()) { "Falta android/version.properties" }
+    FileInputStream(versionPropertiesFile).use { load(it) }
+}
+val appVersionCode = versionProperties.getProperty("versionCode")
+    ?.trim()
+    ?.toIntOrNull()
+    ?: error("versionCode inválido en android/version.properties")
+val appVersionName = versionProperties.getProperty("versionName")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: error("versionName inválido en android/version.properties")
+
 android {
     namespace = "app.mypass"
     compileSdk {
@@ -25,8 +39,8 @@ android {
         applicationId = "app.mypass"
         minSdk = 33
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         val apiBaseUrl = (project.findProperty("mypass.apiBaseUrl") as String?)
             ?.trim()

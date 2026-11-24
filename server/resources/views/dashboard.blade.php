@@ -175,7 +175,7 @@
                 <p class="mp-body-sm mt-1">{{ __('Descarga la APK y vincula este dispositivo con un código de un solo uso.') }}</p>
             </div>
         </div>
-        <a href="{{ route('app.download', ['v' => '3']) }}" class="mp-btn mp-btn-secondary shrink-0" download>
+        <a href="{{ route('app.download', ['v' => $androidVersionCode]) }}" class="mp-btn mp-btn-secondary shrink-0" download>
             <x-icon name="download" class="text-[19px]" />
             {{ __('Descargar APK') }}
         </a>

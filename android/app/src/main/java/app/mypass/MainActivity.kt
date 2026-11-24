@@ -78,6 +78,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
@@ -192,7 +193,8 @@ class MainActivity : FragmentActivity() {
                                 state.screen == Screen.Credentials ||
                                 state.screen == Screen.CredentialEditor ||
                                 state.screen == Screen.Medical ||
-                                state.screen == Screen.MedicalEditor,
+                                state.screen == Screen.MedicalEditor ||
+                                state.screen == Screen.Notifications,
                         ) {
                             when (state.screen) {
                                 Screen.Viewer -> viewModel.closeViewer()
@@ -200,6 +202,7 @@ class MainActivity : FragmentActivity() {
                                 Screen.PassEditor -> viewModel.discardPassDraft()
                                 Screen.CredentialEditor -> viewModel.discardCredentialDraft()
                                 Screen.MedicalEditor -> viewModel.discardMedicalDraft()
+                                Screen.Notifications -> viewModel.closeNotifications()
                                 Screen.Credentials, Screen.Medical -> viewModel.backToVault()
                                 else -> viewModel.backToHome()
                             }
@@ -214,6 +217,11 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         handler.removeCallbacks(lockRunnable)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.onAppResumed()
     }
 
     override fun onStop() {
@@ -286,6 +294,7 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
                     Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
                     Screen.Scan -> ScannerScreen(state = state, viewModel = viewModel)
                     Screen.Settings -> SettingsScreen(state = state, viewModel = viewModel)
+                    Screen.Notifications -> NotificationsScreen(state = state, viewModel = viewModel)
                     Screen.Viewer -> ViewerScreen(state = state, viewModel = viewModel)
                 }
             }
@@ -300,6 +309,10 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
                 MpBottomBar(screen = state.screen, viewModel = viewModel)
             }
         }
+    }
+
+    if (state.showUpdateDialog) {
+        UpdateDialog(state = state, viewModel = viewModel)
     }
 }
 
@@ -1047,6 +1060,7 @@ private fun VaultScreen(
             onLock = viewModel::lock,
             onSettings = viewModel::openSettings,
             onLogout = viewModel::logout,
+            onNotifications = viewModel::openNotifications,
         )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = if (state.simpleMode) 560.dp else 300.dp),
@@ -1639,6 +1653,7 @@ private fun ContactCard(
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
                     MpBadge(
                         text = when (contact.status) {
@@ -1659,19 +1674,23 @@ private fun ContactCard(
             }
             if (contact.status == "pending") {
                 MpButton(
-                    text = stringResource(R.string.accept_contact),
+                    text = stringResource(R.string.accept),
                     onClick = onAccept,
                     variant = MpButtonVariant.Secondary,
-                    modifier = Modifier.widthIn(max = 160.dp),
+                    modifier = Modifier.widthIn(max = 140.dp),
+                    compact = true,
+                    maxLines = 1,
                 )
             }
         }
         if (contact.status == "accepted") {
             TextButton(onClick = onBlock) {
                 Text(
-                    text = stringResource(R.string.block_contact),
+                    text = stringResource(R.string.block),
                     color = MpColors.Error,
                     style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -1695,7 +1714,13 @@ private fun OutgoingShareCard(share: UiShare, onCancel: () -> Unit) {
                     )
                 }
                 TextButton(onClick = onCancel) {
-                    Text(stringResource(R.string.cancel_send), color = MpColors.Error)
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = MpColors.Error,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
@@ -1821,6 +1846,7 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
             onLock = viewModel::lock,
             onSettings = viewModel::openSettings,
             onLogout = viewModel::logout,
+            onNotifications = viewModel::openNotifications,
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -1938,6 +1964,8 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                             text = stringResource(R.string.open_family),
                             onClick = viewModel::openFamily,
                             variant = MpButtonVariant.Quiet,
+                            compact = true,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -2053,6 +2081,10 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
             }
 
             item {
+                UpdateSettingsCard(state = state, viewModel = viewModel)
+            }
+
+            item {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.account_title), style = MaterialTheme.typography.titleMedium)
@@ -2074,14 +2106,6 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                 }
             }
 
-            item {
-                Text(
-                    text = stringResource(R.string.version, "0.3.0"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
         }
     }
 }
@@ -2175,11 +2199,13 @@ internal fun MpTopBar(
     onLock: () -> Unit,
     onSettings: () -> Unit,
     onLogout: () -> Unit,
+    onNotifications: () -> Unit,
 ) {
     var accountMenuOpen by remember { mutableStateOf(false) }
     val accountLabel = state.name.ifBlank { state.email }.ifBlank { "M" }
     val accountMenuLabel = stringResource(R.string.account_menu)
     val avatarPhoto = rememberAvatarBitmap(state.avatarPath, state.avatarVersion)
+    val unreadNotifications = notificationEntries(state).count { !it.read }
 
     Column(
         modifier = Modifier
@@ -2194,6 +2220,37 @@ internal fun MpTopBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TopBarBrand(modifier = Modifier.weight(1f))
+            Box {
+                MpIconButton(
+                    icon = Icons.Filled.Notifications,
+                    contentDescription = if (unreadNotifications > 0) {
+                        stringResource(R.string.notifications_unread_count, unreadNotifications)
+                    } else {
+                        stringResource(R.string.notifications_title)
+                    },
+                    onClick = onNotifications,
+                    container = Color.White,
+                    tint = MpColors.OnSurfaceVariant,
+                    shape = CircleShape,
+                )
+                if (unreadNotifications > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-3).dp, y = 3.dp)
+                            .size(18.dp)
+                            .background(MpColors.Error, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (unreadNotifications > 9) "9+" else unreadNotifications.toString(),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                        )
+                    }
+                }
+            }
             MpIconButton(
                 icon = Icons.Filled.Lock,
                 contentDescription = stringResource(R.string.lock),
@@ -2409,7 +2466,13 @@ fun SubScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         MpIconButton(Icons.Filled.ArrowBack, stringResource(R.string.back), onBack)
-        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         action?.invoke()
     }
 }
@@ -2435,7 +2498,14 @@ private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
                 selected = screen == Screen.Home,
                 onClick = { if (screen != Screen.Home) viewModel.backToHome() },
                 icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                label = { Text(stringResource(R.string.home)) },
+                label = {
+                    Text(
+                        stringResource(R.string.home),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 colors = bottomBarColors(),
             )
             NavigationBarItem(
@@ -2447,7 +2517,14 @@ private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
                         contentDescription = null,
                     )
                 },
-                label = { Text(stringResource(R.string.passes)) },
+                label = {
+                    Text(
+                        stringResource(R.string.passes),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 colors = bottomBarColors(),
             )
             NavigationBarItem(
@@ -2458,14 +2535,28 @@ private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
                     }
                 },
                 icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-                label = { Text(stringResource(R.string.vault)) },
+                label = {
+                    Text(
+                        stringResource(R.string.vault),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 colors = bottomBarColors(),
             )
             NavigationBarItem(
                 selected = screen == Screen.Settings,
                 onClick = { if (screen != Screen.Settings) viewModel.openSettings() },
                 icon = { Icon(Icons.Filled.Person, contentDescription = null) },
-                label = { Text(stringResource(R.string.profile)) },
+                label = {
+                    Text(
+                        stringResource(R.string.profile),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 colors = bottomBarColors(),
             )
         }
@@ -2486,7 +2577,14 @@ internal fun MpFilterChip(text: String, selected: Boolean, onClick: () -> Unit) 
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        label = {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
         shape = CircleShape,
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = MpColors.Primary,

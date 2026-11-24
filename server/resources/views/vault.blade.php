@@ -426,7 +426,7 @@
 
                             <p class="mp-hint mt-3">
                                 {{ __('¿Aún no tienes la app?') }}
-                                <a href="{{ route('app.download', ['v' => '3']) }}" class="font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary" download>
+                                <a href="{{ route('app.download', ['v' => $androidVersionCode]) }}" class="font-semibold text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary" download>
                                     {{ __('Descargar APK para Android') }}
                                 </a>
                             </p>

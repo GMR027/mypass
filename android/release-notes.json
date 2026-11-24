@@ -1,0 +1,12 @@
+{
+  "es": [
+    "Centro de notificaciones con campana, vencimientos y actividad.",
+    "Aviso y actualización de la app desde Ajustes.",
+    "Ajustes visuales: botones uniformes, textos sin desbordes y accesos rápidos alineados."
+  ],
+  "en": [
+    "Notification center with bell, expirations and activity.",
+    "In-app update notice and installation from Settings.",
+    "Visual polish: consistent buttons, no overflowing text and aligned quick actions."
+  ]
+}

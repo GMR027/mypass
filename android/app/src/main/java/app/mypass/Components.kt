@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -135,11 +136,18 @@ fun MpButton(
     icon: ImageVector? = null,
     leadingIcon: (@Composable () -> Unit)? = null,
     fillWidth: Boolean = false,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
+    compact: Boolean = false,
+    maxLines: Int = 2,
+    contentPadding: PaddingValues? = null,
 ) {
     val buttonModifier = modifier
         .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
         .heightIn(min = 56.dp)
+    val resolvedPadding = contentPadding ?: if (compact) {
+        PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+    } else {
+        PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    }
     val content: @Composable () -> Unit = {
         if (loading) {
             CircularProgressIndicator(
@@ -160,7 +168,13 @@ fun MpButton(
             leadingIcon()
             Spacer(modifier = Modifier.width(10.dp))
         }
-        Text(text = text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 
     when (variant) {
@@ -189,7 +203,7 @@ fun MpButton(
                     pressedElevation = 0.dp,
                     disabledElevation = 0.dp,
                 ),
-                contentPadding = contentPadding,
+                contentPadding = resolvedPadding,
             ) { content() }
         }
 
@@ -203,7 +217,7 @@ fun MpButton(
                 contentColor = MpColors.OnSurface,
                 disabledContentColor = MpColors.OnSurface.copy(alpha = 0.4f),
             ),
-            contentPadding = contentPadding,
+            contentPadding = resolvedPadding,
         ) { content() }
 
         MpButtonVariant.Quiet -> FilledTonalButton(
@@ -217,7 +231,7 @@ fun MpButton(
                 disabledContainerColor = MpColors.SurfaceLow.copy(alpha = 0.5f),
                 disabledContentColor = MpColors.OnSurface.copy(alpha = 0.4f),
             ),
-            contentPadding = contentPadding,
+            contentPadding = resolvedPadding,
         ) { content() }
 
         MpButtonVariant.Danger -> FilledTonalButton(
@@ -231,7 +245,7 @@ fun MpButton(
                 disabledContainerColor = MpColors.ErrorContainer.copy(alpha = 0.5f),
                 disabledContentColor = MpColors.OnErrorContainer.copy(alpha = 0.4f),
             ),
-            contentPadding = contentPadding,
+            contentPadding = resolvedPadding,
         ) { content() }
 
         MpButtonVariant.Destructive -> Button(
@@ -245,7 +259,7 @@ fun MpButton(
                 disabledContainerColor = MpColors.Error.copy(alpha = 0.35f),
                 disabledContentColor = Color.White.copy(alpha = 0.8f),
             ),
-            contentPadding = contentPadding,
+            contentPadding = resolvedPadding,
         ) { content() }
     }
 }
@@ -258,8 +272,20 @@ fun MpTextButton(
     enabled: Boolean = true,
     color: Color = MpColors.Primary,
 ) {
-    TextButton(onClick = onClick, modifier = modifier, enabled = enabled) {
-        Text(text = text, color = if (enabled) color else color.copy(alpha = 0.4f))
+    TextButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 48.dp),
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (enabled) color else color.copy(alpha = 0.4f),
+        )
     }
 }
 
@@ -543,7 +569,9 @@ fun MpPasswordField(
             ) {
                 Text(
                     text = stringResource(if (visible) R.string.hide_password else R.string.show_password),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         },
