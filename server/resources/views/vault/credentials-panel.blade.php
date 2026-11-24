@@ -65,13 +65,13 @@
     <ul id="credential-list" class="mp-credential-list mt-5"></ul>
 </section>
 
-<dialog id="credential-modal" class="mp-dialog mp-dialog--wide">
+<dialog id="credential-modal" class="mp-dialog mp-dialog--wide mp-credential-dialog">
     <form id="credential-form" class="mp-dialog-panel max-w-3xl" novalidate>
         <input type="hidden" id="credential-item-id">
         <input type="hidden" id="credential-item-version">
         <input type="hidden" id="credential-blob-id">
 
-        <div class="flex items-start justify-between gap-4">
+        <div class="mp-credential-dialog-header flex items-start justify-between gap-4">
             <div>
                 <span class="mp-eyebrow">{{ __('Bóveda segura') }}</span>
                 <h2 id="credential-modal-title" class="mp-title-lg mt-1">{{ __('Nueva credencial') }}</h2>
@@ -231,7 +231,7 @@
             </div>
         </div>
 
-        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div class="mp-credential-dialog-footer mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button id="credential-cancel" type="button" class="mp-btn mp-btn-secondary">{{ __('Cancelar') }}</button>
             <button id="credential-save" type="submit" class="mp-btn mp-btn-primary">
                 <x-icon name="lock" class="text-[20px]" />

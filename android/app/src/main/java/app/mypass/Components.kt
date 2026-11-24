@@ -1,7 +1,7 @@
 package app.mypass
 
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import android.graphics.Bitmap
 import android.text.format.DateFormat
 import androidx.compose.foundation.BorderStroke
@@ -17,12 +17,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -50,8 +55,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +70,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -80,11 +89,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneId
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.abs
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 enum class MpButtonVariant {
     Primary,
@@ -571,7 +585,6 @@ fun MpDateField(
     minDate: LocalDate? = null,
     maxDate: LocalDate? = null,
 ) {
-    val context = LocalContext.current
     val parsed = remember(value) {
         runCatching { LocalDate.parse(value.take(10)) }.getOrNull()
     }
@@ -580,31 +593,18 @@ fun MpDateField(
     ) ?: value
     var showPicker by remember { mutableStateOf(false) }
 
-    LaunchedEffect(showPicker) {
-        if (!showPicker) {
-            return@LaunchedEffect
-        }
-
-        val initial = parsed ?: defaultDate ?: LocalDate.now()
-        val dialog = DatePickerDialog(
-            context,
-            { _, year, month, day ->
+    if (showPicker) {
+        MpDateWheelDialog(
+            initial = parsed ?: defaultDate ?: LocalDate.now(),
+            minDate = minDate,
+            maxDate = maxDate,
+            title = label,
+            onDismiss = { showPicker = false },
+            onConfirm = { date ->
                 showPicker = false
-                onValueChange(LocalDate.of(year, month + 1, day).toString())
+                onValueChange(date.toString())
             },
-            initial.year,
-            initial.monthValue - 1,
-            initial.dayOfMonth,
         )
-        dialog.setTitle(label)
-        minDate?.let {
-            dialog.datePicker.minDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
-        maxDate?.let {
-            dialog.datePicker.maxDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
-        dialog.setOnDismissListener { showPicker = false }
-        dialog.show()
     }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -638,6 +638,233 @@ fun MpDateField(
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
             ) {
                 Text(stringResource(R.string.clear_date), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+fun MpDateWheelDialog(
+    initial: LocalDate,
+    minDate: LocalDate?,
+    maxDate: LocalDate?,
+    title: String,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate) -> Unit,
+) {
+    val lower = minDate ?: initial.minusYears(120)
+    val upper = maxDate ?: initial.plusYears(10)
+    val minYear = minOf(lower.year, upper.year)
+    val maxYear = maxOf(lower.year, upper.year)
+    val years = (maxYear downTo minYear).toList()
+    var year by remember { mutableIntStateOf(initial.year.coerceIn(minYear, maxYear)) }
+    var month by remember { mutableIntStateOf(initial.monthValue.coerceIn(1, 12)) }
+    var day by remember { mutableIntStateOf(initial.dayOfMonth) }
+    val maxDay = YearMonth.of(year, month).lengthOfMonth()
+
+    LaunchedEffect(maxDay) {
+        if (day > maxDay) {
+            day = maxDay
+        }
+    }
+
+    val selectedDate = LocalDate.of(year, month, day.coerceAtMost(maxDay))
+    val summary = selectedDate.format(
+        DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault()),
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.42f)),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = Color(0xFFF4F4F6),
+            ) {
+                Column(
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.day).uppercase(Locale.getDefault()),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MpColors.OnSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = stringResource(R.string.month).uppercase(Locale.getDefault()),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MpColors.OnSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = stringResource(R.string.year).uppercase(Locale.getDefault()),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MpColors.OnSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(14.dp)),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            MpWheelPicker(
+                                items = (1..maxDay).map { String.format(Locale.US, "%02d", it) },
+                                selectedIndex = (day - 1).coerceIn(0, maxDay - 1),
+                                label = stringResource(R.string.day),
+                                onSelected = { day = (it + 1).coerceIn(1, maxDay) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            MpWheelPicker(
+                                items = (1..12).map { String.format(Locale.US, "%02d", it) },
+                                selectedIndex = (month - 1).coerceIn(0, 11),
+                                label = stringResource(R.string.month),
+                                onSelected = { month = it + 1 },
+                                modifier = Modifier.weight(1f),
+                            )
+                            MpWheelPicker(
+                                items = years.map { it.toString() },
+                                selectedIndex = years.indexOf(year).coerceAtLeast(0),
+                                label = stringResource(R.string.year),
+                                onSelected = { year = years.getOrElse(it) { year } },
+                                modifier = Modifier.weight(1.15f),
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    MpButton(
+                        text = stringResource(R.string.done),
+                        onClick = { onConfirm(selectedDate) },
+                        fillWidth = true,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MpWheelPicker(
+    items: List<String>,
+    selectedIndex: Int,
+    label: String,
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0)))
+    val fling = rememberSnapFlingBehavior(lazyListState = state)
+    val centerIndex by remember {
+        derivedStateOf {
+            val layoutInfo = state.layoutInfo
+            val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+            layoutInfo.visibleItemsInfo.minByOrNull { item ->
+                abs((item.offset + item.size / 2) - center)
+            }?.index ?: selectedIndex
+        }
+    }
+
+    LaunchedEffect(centerIndex) {
+        onSelected(centerIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0)))
+    }
+
+    LaunchedEffect(selectedIndex, items.size) {
+        val target = selectedIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0))
+        if (!state.isScrollInProgress && state.firstVisibleItemIndex != target) {
+            state.scrollToItem(target)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .height(220.dp)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        LazyColumn(
+            state = state,
+            flingBehavior = fling,
+            contentPadding = PaddingValues(vertical = 88.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            itemsIndexed(items) { index, item ->
+                val distance = abs(index - centerIndex)
+                val alpha = when (distance) {
+                    0 -> 1f
+                    1 -> 0.36f
+                    else -> 0.18f
+                }
+                val scale = when (distance) {
+                    0 -> 1f
+                    1 -> 0.9f
+                    else -> 0.8f
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = item,
+                        fontSize = if (distance == 0) 25.sp else 20.sp,
+                        fontWeight = if (distance == 0) FontWeight.Bold else FontWeight.Medium,
+                        color = if (distance == 0) Color(0xFF111114) else Color(0xFFB5B8BF),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.graphicsLayer(
+                            alpha = alpha,
+                            scaleX = scale,
+                            scaleY = scale,
+                        ),
+                    )
+                }
             }
         }
     }

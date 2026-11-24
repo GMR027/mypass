@@ -1,7 +1,7 @@
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
 
-const ITEM_HEIGHT = 44;
+const ITEM_HEIGHT = 48;
 
 function pad(value) {
     return String(value).padStart(2, '0');
@@ -41,16 +41,12 @@ function parseIso(value) {
     };
 }
 
-function monthNames(locale) {
-    const formatter = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'es-MX', {
+function formatLongDate(locale, year, month, day) {
+    return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'es-MX', {
+        day: 'numeric',
         month: 'long',
-    });
-
-    return Array.from({ length: 12 }, (_, index) => {
-        const name = formatter.format(new Date(2020, index, 1));
-
-        return name.charAt(0).toUpperCase() + name.slice(1);
-    });
+        year: 'numeric',
+    }).format(new Date(year, month - 1, day));
 }
 
 class DateWheel {
@@ -62,21 +58,24 @@ class DateWheel {
         this.maxAge = Number.parseInt(root.dataset.maxAge || '120', 10);
         this.seniorAge = Number.parseInt(root.dataset.seniorAge || '51', 10);
         this.hidden = root.querySelector('[data-wheel-input]');
+        this.trigger = root.querySelector('[data-wheel-trigger]');
+        this.display = root.querySelector('[data-wheel-display]');
+        this.summary = root.querySelector('[data-wheel-summary]');
         this.ageBox = root.querySelector('[data-wheel-age]');
+        this.dialog = root.querySelector('[data-wheel-dialog]');
+        this.closeButton = root.querySelector('[data-wheel-close]');
+        this.confirmButton = root.querySelector('[data-wheel-confirm]');
+        this.errorBox = root.querySelector('[data-wheel-error]');
         this.toggle = root.querySelector('[data-wheel-toggle]');
         this.nativeWrap = root.querySelector('[data-wheel-native]');
         this.native = root.querySelector('[data-wheel-native-input]');
         this.columns = {};
-        this.state = {
-            day: null,
-            month: null,
-            year: null,
-        };
+        this.state = { day: null, month: null, year: null };
+        this.originalState = null;
         this.timers = {};
         this.required = this.hidden?.required ?? false;
         this.nativeVisible = false;
         this.valid = false;
-        this.months = monthNames(this.locale);
         this.currentYear = new Date().getFullYear();
         this.years = Array.from(
             { length: this.maxAge - this.minAge + 1 },
@@ -101,28 +100,17 @@ class DateWheel {
     }
 
     render() {
-        this.renderColumn('day', [
-            { value: '', label: '—' },
-            ...Array.from({ length: 31 }, (_, index) => ({
-                value: String(index + 1),
-                label: String(index + 1),
-            })),
-        ]);
-
+        this.renderColumn('day', this.dayEntries(31));
         this.renderColumn('month', [
             { value: '', label: '—' },
-            ...this.months.map((label, index) => ({
+            ...Array.from({ length: 12 }, (_, index) => ({
                 value: String(index + 1),
-                label,
+                label: pad(index + 1),
             })),
         ]);
-
         this.renderColumn('year', [
             { value: '', label: '—' },
-            ...this.years.map((year) => ({
-                value: String(year),
-                label: String(year),
-            })),
+            ...this.years.map((year) => ({ value: String(year), label: String(year) })),
         ]);
 
         this.setInitialPositions();
@@ -130,19 +118,14 @@ class DateWheel {
         this.updateAge();
     }
 
-    centerSelectedColumns() {
-        for (const key of ['day', 'month', 'year']) {
-            const column = this.columns[key];
-            if (!column) {
-                continue;
-            }
-
-            column.element.scrollTop = column.index * ITEM_HEIGHT;
-            const item = column.items[column.index];
-            if (item) {
-                column.element.setAttribute('aria-activedescendant', item.id);
-            }
-        }
+    dayEntries(max) {
+        return [
+            { value: '', label: '—' },
+            ...Array.from({ length: max }, (_, index) => ({
+                value: String(index + 1),
+                label: pad(index + 1),
+            })),
+        ];
     }
 
     renderColumn(key, entries) {
@@ -168,17 +151,11 @@ class DateWheel {
     }
 
     setInitialPositions() {
-        const state = this.state;
-        let day = state.day;
-        let month = state.month;
-        let year = state.year;
-
-        if (month && year && day) {
-            day = Math.min(day, daysInMonth(year, month));
-        }
+        const { day, month, year } = this.state;
+        const safeDay = day && month && year ? Math.min(day, daysInMonth(year, month)) : day;
 
         for (const key of ['day', 'month', 'year']) {
-            const value = key === 'day' ? day : (key === 'month' ? month : year);
+            const value = key === 'day' ? safeDay : (key === 'month' ? month : year);
             const index = value
                 ? this.columns[key].items.findIndex((item) => item.dataset.value === String(value))
                 : 0;
@@ -186,6 +163,21 @@ class DateWheel {
         }
 
         requestAnimationFrame(() => this.centerSelectedColumns());
+    }
+
+    centerSelectedColumns() {
+        for (const key of ['day', 'month', 'year']) {
+            const column = this.columns[key];
+            if (!column) {
+                continue;
+            }
+
+            column.element.scrollTop = column.index * ITEM_HEIGHT;
+            const item = column.items[column.index];
+            if (item) {
+                column.element.setAttribute('aria-activedescendant', item.id);
+            }
+        }
     }
 
     bind() {
@@ -204,20 +196,34 @@ class DateWheel {
             column.element.addEventListener('focus', () => this.markActive(key));
         }
 
-        this.toggle?.addEventListener('click', () => this.toggleNative());
+        this.trigger?.addEventListener('click', () => this.openDialog());
+        this.closeButton?.addEventListener('click', () => this.closeDialog(true));
+        this.confirmButton?.addEventListener('click', () => this.confirmDialog());
+        this.dialog?.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            this.closeDialog(true);
+        });
+        this.dialog?.addEventListener('click', (event) => {
+            if (event.target === this.dialog) {
+                this.closeDialog(true);
+            }
+        });
+
+        this.toggle?.addEventListener('click', () => this.setNativeVisible(!this.nativeVisible));
 
         this.native?.addEventListener('change', () => {
             const date = parseIso(this.native.value);
-
-            if (!date) {
-                this.state = { day: null, month: null, year: null };
-            } else {
+            if (date) {
                 this.state = date;
+                this.setInitialPositions();
+                this.syncValue();
+                this.updateAge();
+            } else if (!this.native.value) {
+                this.state = { day: null, month: null, year: null };
+                this.setInitialPositions();
+                this.syncValue();
+                this.updateAge();
             }
-
-            this.setInitialPositions();
-            this.syncValue();
-            this.updateAge();
         });
 
         const form = this.root.closest('form');
@@ -229,16 +235,108 @@ class DateWheel {
             }
 
             event.preventDefault();
-            if (this.ageBox) {
-                this.ageBox.textContent = this.hidden?.value
-                    ? t('Revisa la fecha de nacimiento: debes tener al menos 18 años.')
-                    : t('Elige tu fecha de nacimiento.');
-                this.ageBox.classList.add('text-error');
-                this.ageBox.classList.remove('text-primary');
-            }
-            this.root.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            this.openDialog();
+            this.showError(this.hidden?.value
+                ? t('Revisa la fecha de nacimiento: debes tener al menos 18 años.')
+                : t('Elige tu fecha de nacimiento.'));
             this.columns.day?.element.focus({ preventScroll: true });
         });
+    }
+
+    openDialog() {
+        if (!this.dialog || this.dialog.open) {
+            return;
+        }
+
+        this.originalState = { ...this.state };
+        this.hideError();
+        this.setNativeVisible(false);
+        this.dialog.showModal();
+        this.trigger?.setAttribute('aria-expanded', 'true');
+        requestAnimationFrame(() => {
+            this.centerSelectedColumns();
+            this.columns.day?.element.focus({ preventScroll: true });
+            this.updateAge();
+        });
+    }
+
+    closeDialog(restore) {
+        if (!this.dialog?.open) {
+            return;
+        }
+
+        if (restore && this.originalState) {
+            this.state = { ...this.originalState };
+            this.setInitialPositions();
+            this.syncValue();
+            this.updateAge();
+        }
+
+        this.setNativeVisible(false);
+        this.dialog.close();
+        this.trigger?.setAttribute('aria-expanded', 'false');
+        this.trigger?.focus({ preventScroll: true });
+    }
+
+    confirmDialog() {
+        this.hideError();
+
+        if (this.nativeVisible && this.native) {
+            const date = parseIso(this.native.value);
+            if (date) {
+                this.state = date;
+            }
+        }
+
+        this.setNativeVisible(false);
+        this.syncValue();
+        this.updateAge();
+
+        if (!this.valid) {
+            this.showError(this.hidden?.value
+                ? t('Revisa la fecha de nacimiento: debes tener al menos 18 años.')
+                : t('Elige tu fecha de nacimiento.'));
+            return;
+        }
+
+        this.originalState = { ...this.state };
+        this.dialog.close();
+        this.trigger?.setAttribute('aria-expanded', 'false');
+        this.trigger?.focus({ preventScroll: true });
+    }
+
+    setNativeVisible(visible) {
+        if (!this.nativeWrap || !this.native) {
+            return;
+        }
+
+        this.nativeVisible = visible;
+        this.nativeWrap.classList.toggle('hidden', !visible);
+        this.toggle?.setAttribute('aria-expanded', visible ? 'true' : 'false');
+
+        const label = this.toggle?.querySelector('[data-wheel-toggle-label]');
+        if (label) {
+            label.textContent = visible ? t('Usar la rueda') : t('Escribir la fecha');
+        }
+
+        if (visible) {
+            this.native.name = this.name;
+            this.native.required = this.required;
+            if (this.hidden) {
+                this.hidden.disabled = true;
+            }
+            if (this.hidden?.value) {
+                this.native.value = this.hidden.value;
+            }
+            this.native.focus();
+            return;
+        }
+
+        this.native.removeAttribute('name');
+        this.native.required = false;
+        if (this.hidden) {
+            this.hidden.disabled = false;
+        }
     }
 
     scrollToIndex(key, index) {
@@ -322,6 +420,7 @@ class DateWheel {
         column.items.forEach((item, itemIndex) => {
             const selected = itemIndex === index;
             item.dataset.selected = selected ? 'true' : 'false';
+            item.dataset.distance = String(Math.min(Math.abs(itemIndex - index), 3));
             item.setAttribute('aria-selected', selected ? 'true' : 'false');
         });
 
@@ -356,13 +455,7 @@ class DateWheel {
         const selected = day && day <= max ? day : max;
 
         if (column.items.length !== max + 1) {
-            this.renderColumn('day', [
-                { value: '', label: '—' },
-                ...Array.from({ length: max }, (_, index) => ({
-                    value: String(index + 1),
-                    label: String(index + 1),
-                })),
-            ]);
+            this.renderColumn('day', this.dayEntries(max));
         }
 
         this.state.day = selected;
@@ -387,9 +480,22 @@ class DateWheel {
         if (year && month && day && day <= daysInMonth(year, month)) {
             this.hidden.value = formatIso(year, month, day);
             this.root.dataset.complete = 'true';
+            const display = formatLongDate(this.locale, year, month, day);
+            if (this.display) {
+                this.display.textContent = display;
+            }
+            if (this.summary) {
+                this.summary.textContent = display;
+            }
         } else {
             this.hidden.value = '';
             this.root.dataset.complete = 'false';
+            if (this.display) {
+                this.display.textContent = t('Elegir fecha');
+            }
+            if (this.summary) {
+                this.summary.textContent = t('Elige tu fecha de nacimiento.');
+            }
         }
 
         this.hidden.disabled = this.nativeVisible;
@@ -446,42 +552,17 @@ class DateWheel {
         this.root.closest('form')?.classList.toggle('mp-form-easy', isSenior);
     }
 
-    toggleNative() {
-        if (!this.nativeWrap || !this.native) {
+    showError(message) {
+        if (!this.errorBox) {
             return;
         }
+        this.errorBox.textContent = message;
+        this.errorBox.hidden = false;
+    }
 
-        const willShow = this.nativeWrap.classList.contains('hidden');
-        this.nativeVisible = willShow;
-        this.nativeWrap.classList.toggle('hidden', !willShow);
-        this.toggle?.setAttribute('aria-expanded', willShow ? 'true' : 'false');
-
-        const label = this.toggle?.querySelector('span');
-        if (label) {
-            label.textContent = willShow
-                ? t('Prefiero usar la rueda')
-                : t('Prefiero escribir la fecha');
-        }
-
-        if (willShow) {
-            this.native.name = this.name;
-            this.native.required = this.required;
-            if (this.hidden) {
-                this.hidden.disabled = true;
-            }
-
-            if (this.hidden?.value) {
-                this.native.value = this.hidden.value;
-            }
-
-            this.native.focus();
-            return;
-        }
-
-        this.native.removeAttribute('name');
-        this.native.required = false;
-        if (this.hidden) {
-            this.hidden.disabled = false;
+    hideError() {
+        if (this.errorBox) {
+            this.errorBox.hidden = true;
         }
     }
 }

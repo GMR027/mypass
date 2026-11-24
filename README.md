@@ -166,8 +166,8 @@ Ese valor queda dentro de `BuildConfig.API_BASE_URL` y no necesita `adb reverse`
 La versión de la app vive en `android/version.properties`:
 
 ```properties
-versionCode=12
-versionName=0.6.0
+versionCode=13
+versionName=0.6.1
 minSupportedVersionCode=0
 ```
 

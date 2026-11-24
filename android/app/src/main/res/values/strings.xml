@@ -21,6 +21,10 @@
     <string name="open_vault">Abrir mi bóveda</string>
     <string name="choose_time">Elegir hora</string>
     <string name="clear_time">Limpiar hora</string>
+    <string name="day">Día</string>
+    <string name="month">Mes</string>
+    <string name="year">Año</string>
+    <string name="done">Listo</string>
     <string name="choose_date">Elegir fecha</string>
     <string name="clear_date">Limpiar fecha</string>
     <string name="unlock">Desbloquear</string>

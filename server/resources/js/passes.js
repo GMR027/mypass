@@ -317,8 +317,48 @@ function themeColor(pass) {
     return pass.themeColor || THEME_COLORS[pass.theme] || '#0c2340';
 }
 
+function stackSummary(pass) {
+    const fields = pass.fields || {};
+
+    if (pass.category === 'flight') {
+        return [
+            fields.origin && fields.destination ? `${fields.origin} → ${fields.destination}` : '',
+            fields.date ? formatDate(fields.date) : '',
+            fields.gate ? tf('Puerta :gate', { gate: fields.gate }) : '',
+            fields.terminal ? tf('Terminal :terminal', { terminal: fields.terminal }) : '',
+        ].filter(Boolean).join(' · ');
+    }
+
+    if (pass.category === 'transit') {
+        return [
+            fields.route,
+            fields.date ? formatDate(fields.date) : '',
+            fields.terminal ? tf('Terminal :terminal', { terminal: fields.terminal }) : '',
+            fields.platform ? tf('Andén :platform', { platform: fields.platform }) : '',
+        ].filter(Boolean).join(' · ');
+    }
+
+    if (pass.category === 'event') {
+        return [
+            fields.location,
+            fields.date ? formatDate(fields.date) : '',
+            fields.gate ? tf('Puerta :gate', { gate: fields.gate }) : '',
+        ].filter(Boolean).join(' · ');
+    }
+
+    return [pass.holder, fields.number, fields.expires ? formatDate(fields.expires) : ''].filter(Boolean).join(' · ');
+}
+
 function createPassCardElement(item, options = {}) {
-    const { interactive = true, selected = false, compact = false, preview = false, badge = null, highlight = false } = options;
+    const {
+        interactive = true,
+        selected = false,
+        compact = false,
+        preview = false,
+        badge = null,
+        highlight = false,
+        headerOnly = false,
+    } = options;
     const pass = passFromItem(item);
     const node = document.createElement(interactive ? 'button' : 'article');
     if (interactive) {
@@ -329,6 +369,7 @@ function createPassCardElement(item, options = {}) {
         selected ? 'is-selected' : '',
         compact ? 'mp-pass-card--compact' : '',
         highlight ? 'mp-pass-card--highlight' : '',
+        headerOnly ? 'mp-pass-card--stack-header' : '',
     ].filter(Boolean).join(' ');
     node.dataset.category = pass.category;
     node.dataset.passId = item.id;
@@ -357,6 +398,15 @@ function createPassCardElement(item, options = {}) {
     identity.append(tile, names);
     header.append(identity, el('span', 'mp-pass-card__chip shrink-0', badge || badgeFor(pass)));
     body.appendChild(header);
+
+    if (headerOnly) {
+        const summary = stackSummary(pass);
+        if (summary) {
+            body.appendChild(el('p', 'mp-pass-card__stack-summary mt-1.5 truncate', summary));
+        }
+        node.appendChild(body);
+        return node;
+    }
 
     if (pass.category === 'flight') {
         const route = el('div', 'mp-pass-card__route mt-3');
@@ -877,6 +927,7 @@ class WalletApp {
                 selected,
                 badge: next?.item.id === entry.item.id ? t('Próximo') : null,
                 highlight: next?.item.id === entry.item.id,
+                headerOnly: this.view === 'stack' && !selected,
             });
             card.style.zIndex = selected ? String(40) : String(30 - index);
             card.addEventListener('click', () => this.select(entry.item.id));

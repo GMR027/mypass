@@ -2641,6 +2641,14 @@ function switchTab(tab) {
     } catch {
         // La navegación sigue funcionando aunque el navegador bloquee history.
     }
+
+    if (window.innerWidth < 1024) {
+        const anchor = document.getElementById('vault-app');
+        if (anchor) {
+            const top = anchor.getBoundingClientRect().top + window.scrollY - 88;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        }
+    }
 }
 
 async function saveVaultItem({

@@ -21,6 +21,10 @@
     <string name="open_vault">Open my vault</string>
     <string name="choose_time">Choose time</string>
     <string name="clear_time">Clear time</string>
+    <string name="day">Day</string>
+    <string name="month">Month</string>
+    <string name="year">Year</string>
+    <string name="done">Done</string>
     <string name="choose_date">Choose date</string>
     <string name="clear_date">Clear date</string>
     <string name="unlock">Unlock</string>

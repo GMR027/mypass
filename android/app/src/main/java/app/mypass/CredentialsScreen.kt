@@ -14,8 +14,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,6 +27,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -77,6 +81,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.min
@@ -225,7 +230,7 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = if (state.simpleMode) 560.dp else 320.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 96.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -238,28 +243,54 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                         onMedical = viewModel::openMedical,
                     )
                     MpStatusBanner(state.status, state.error)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.credentials_title),
-                                style = MaterialTheme.typography.headlineSmall,
-                            )
-                            Text(
-                                text = stringResource(R.string.credentials_subtitle),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MpColors.OnSurfaceVariant,
-                            )
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val compact = maxWidth < 520.dp
+                        if (compact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.credentials_title),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.credentials_subtitle),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MpColors.OnSurfaceVariant,
+                                    )
+                                }
+                                MpButton(
+                                    text = stringResource(R.string.add_credential),
+                                    onClick = viewModel::newCredential,
+                                    icon = Icons.Filled.Add,
+                                    enabled = !state.busy,
+                                    fillWidth = true,
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.credentials_title),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.credentials_subtitle),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MpColors.OnSurfaceVariant,
+                                    )
+                                }
+                                MpButton(
+                                    text = stringResource(R.string.add_credential),
+                                    onClick = viewModel::newCredential,
+                                    icon = Icons.Filled.Add,
+                                    enabled = !state.busy,
+                                )
+                            }
                         }
-                        MpButton(
-                            text = stringResource(R.string.add_credential),
-                            onClick = viewModel::newCredential,
-                            icon = Icons.Filled.Add,
-                            enabled = !state.busy,
-                        )
                     }
                     MpTextField(
                         value = search,
@@ -379,28 +410,68 @@ private fun CredentialCard(
     val hasAppearance = credential.appearanceMode != "none"
         && (credential.appearanceColor.isNotBlank() || bannerBitmap != null)
 
-    val body: @Composable () -> Unit = {
-        CredentialBody(
-            item = item,
-            credential = credential,
-            now = now,
-            context = context,
-            revealPassword = revealPassword,
-            onToggleReveal = { revealPassword = !revealPassword },
-            onEdit = onEdit,
-            onDelete = onDelete,
-            onOpenAttachment = onOpenAttachment,
-        )
-    }
-
-    if (!hasAppearance) {
-        MpCard(modifier = Modifier.fillMaxWidth()) {
-            CredentialHead(item, credential, dark = false, onFavorite = onFavorite)
-            body()
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 420.dp
+        val padding = if (compact) 16.dp else 20.dp
+        val body: @Composable () -> Unit = {
+            CredentialBody(
+                item = item,
+                credential = credential,
+                now = now,
+                context = context,
+                revealPassword = revealPassword,
+                compact = compact,
+                onToggleReveal = { revealPassword = !revealPassword },
+                onEdit = onEdit,
+                onDelete = onDelete,
+                onOpenAttachment = onOpenAttachment,
+            )
         }
-    } else if (credential.appearanceMode == "banner") {
-        MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
-            Column {
+
+        if (!hasAppearance) {
+            MpCard(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(padding),
+            ) {
+                CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
+                body()
+            }
+        } else if (credential.appearanceMode == "banner") {
+            MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(bannerColor),
+                    ) {
+                        bannerBitmap?.let {
+                            Image(
+                                bitmap = it.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier.matchParentSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(Color.Black.copy(alpha = 0.24f), Color.Black.copy(alpha = 0.5f)),
+                                    ),
+                                ),
+                        )
+                        Column(modifier = Modifier.padding(padding)) {
+                            CredentialHead(item, credential, dark = true, compact = compact, onFavorite = onFavorite)
+                        }
+                    }
+                    Column(modifier = Modifier.padding(padding)) {
+                        body()
+                    }
+                }
+            }
+        } else {
+            MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -414,48 +485,16 @@ private fun CredentialCard(
                             contentScale = ContentScale.Crop,
                         )
                     }
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(Color.Black.copy(alpha = 0.24f), Color.Black.copy(alpha = 0.5f)),
-                                ),
-                            ),
-                    )
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        CredentialHead(item, credential, dark = true, onFavorite = onFavorite)
-                    }
-                }
-                Column(modifier = Modifier.padding(20.dp)) {
-                    body()
-                }
-            }
-        }
-    } else {
-        MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(bannerColor),
-            ) {
-                bannerBitmap?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier.matchParentSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
-                            .padding(16.dp),
-                    ) {
-                        CredentialHead(item, credential, dark = false, onFavorite = onFavorite)
-                        body()
+                    Column(modifier = Modifier.padding(if (compact) 12.dp else 16.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
+                                .padding(padding),
+                        ) {
+                            CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
+                            body()
+                        }
                     }
                 }
             }
@@ -468,45 +507,50 @@ private fun CredentialHead(
     item: UiItem,
     credential: UiCredential,
     dark: Boolean,
+    compact: Boolean,
     onFavorite: () -> Unit,
 ) {
     val logoBitmap = remember(credential.logo) { credential.logo?.let(::decodeDataUrl) }
+    val tileSize = if (compact) 44 else 50
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp),
     ) {
         if (logoBitmap != null) {
             Image(
                 bitmap = logoBitmap.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(50.dp)
+                    .size(tileSize.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (dark) Color.White.copy(alpha = 0.16f) else MpColors.SurfaceLow)
-                    .padding(7.dp),
+                    .padding(if (compact) 6.dp else 7.dp),
                 contentScale = ContentScale.Fit,
             )
         } else {
             MpIconTile(
                 icon = credentialIconVector(credentialTypeIcon(credential)),
-                size = 50,
+                size = tileSize,
                 background = if (dark) Color.White.copy(alpha = 0.16f) else MpColors.PrimaryFixed,
                 tint = if (dark) Color.White else MpColors.Primary,
             )
         }
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = item.title,
-                style = MaterialTheme.typography.titleLarge,
+                style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
                 color = if (dark) Color.White else MpColors.OnSurface,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = credentialTypeLabel(credential),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (dark) Color.White.copy(alpha = 0.78f) else MpColors.OnSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (credential.group.isNotBlank()) {
                 Text(
@@ -548,6 +592,7 @@ private fun CredentialBody(
     now: Long,
     context: Context,
     revealPassword: Boolean,
+    compact: Boolean,
     onToggleReveal: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -559,8 +604,8 @@ private fun CredentialBody(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(top = if (compact) 10.dp else 14.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
     ) {
         CredentialValueRow(
             label = stringResource(R.string.username),
@@ -592,57 +637,118 @@ private fun CredentialBody(
                     Totp.code(config, now) to Totp.secondsLeft(config.period, now)
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    text = "TOTP",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MpColors.OnSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = totp?.first ?: "••• •••",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = MpColors.Primary,
-                )
-                Text(
-                    text = stringResource(R.string.totp_seconds, totp?.second ?: 0),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MpColors.OnSurfaceVariant,
-                )
-                TextButton(onClick = {
-                    totp?.first?.let {
-                        SensitiveClipboard.copy(context, "TOTP", it)
+            if (compact) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "TOTP",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MpColors.OnSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = totp?.first ?: "••• •••",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MpColors.Primary,
+                        )
+                        Text(
+                            text = stringResource(R.string.totp_seconds, totp?.second ?: 0),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
                     }
-                }) {
-                    Text(stringResource(R.string.copy))
+                    TextButton(
+                        onClick = {
+                            totp?.first?.let {
+                                SensitiveClipboard.copy(context, "TOTP", it)
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                    ) {
+                        Text(stringResource(R.string.copy))
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "TOTP",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MpColors.OnSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = totp?.first ?: "••• •••",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = MpColors.Primary,
+                    )
+                    Text(
+                        text = stringResource(R.string.totp_seconds, totp?.second ?: 0),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MpColors.OnSurfaceVariant,
+                    )
+                    TextButton(onClick = {
+                        totp?.first?.let {
+                            SensitiveClipboard.copy(context, "TOTP", it)
+                        }
+                    }) {
+                        Text(stringResource(R.string.copy))
+                    }
                 }
             }
         }
         if (credential.url.isNotBlank()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = credential.url,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                TextButton(onClick = {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(credential.url)))
+            if (compact) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = credential.url,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MpColors.OnSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TextButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(credential.url)))
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                    ) {
+                        Text(stringResource(R.string.open))
                     }
-                }) {
-                    Text(stringResource(R.string.open))
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = credential.url,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MpColors.OnSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(credential.url)))
+                        }
+                    }) {
+                        Text(stringResource(R.string.open))
+                    }
                 }
             }
         }
@@ -686,30 +792,62 @@ private fun CredentialValueRow(
     onCopy: () -> Unit,
     extra: (@Composable () -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MpColors.OnSurfaceVariant,
-            modifier = Modifier.weight(0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
-            modifier = Modifier.weight(2f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        extra?.invoke()
-        TextButton(onClick = onCopy) {
-            Text(stringResource(R.string.copy))
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp
+        if (compact) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MpColors.OnSurfaceVariant,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    extra?.invoke()
+                    TextButton(
+                        onClick = onCopy,
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                    ) {
+                        Text(stringResource(R.string.copy))
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MpColors.OnSurfaceVariant,
+                    modifier = Modifier.weight(0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
+                    modifier = Modifier.weight(2f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                extra?.invoke()
+                TextButton(onClick = onCopy) {
+                    Text(stringResource(R.string.copy))
+                }
+            }
         }
     }
 }
@@ -806,7 +944,7 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
     )
     val strength = remember(password) { PasswordGenerator.strength(password) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         SubScreenHeader(
             title = stringResource(if (source.isNew) R.string.new_credential else R.string.edit_credential),
             onBack = viewModel::discardCredentialDraft,
@@ -821,9 +959,9 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
         )
         LazyVerticalGrid(
             columns = GridCells.Fixed(1),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { MpStatusBanner(state.status, state.error) }
 
@@ -1249,16 +1387,23 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                 }
             }
 
-            item {
-                MpButton(
-                    text = stringResource(R.string.save_credential),
-                    onClick = { viewModel.saveCredential(draft) },
-                    icon = Icons.Filled.Lock,
-                    enabled = !state.busy,
-                    loading = state.busy,
-                    fillWidth = true,
-                )
-            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MpColors.Surface)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MpButton(
+                text = stringResource(R.string.save_credential),
+                onClick = { viewModel.saveCredential(draft) },
+                icon = Icons.Filled.Lock,
+                enabled = !state.busy,
+                loading = state.busy,
+                fillWidth = true,
+            )
         }
 
         if (showCustomTypeDialog) {
@@ -1266,7 +1411,12 @@ fun CredentialEditorScreen(state: UiState, viewModel: MainViewModel) {
                 onDismissRequest = { showCustomTypeDialog = false },
                 title = { Text(stringResource(R.string.create_account_type)) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         MpTextField(
                             value = customTypeName,
                             onValueChange = { customTypeName = it.take(40) },

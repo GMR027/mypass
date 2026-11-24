@@ -1,18 +1,14 @@
 {
   "es": [
-    "Registro con fecha de nacimiento, modo fácil automático a partir de los 51 años y recuperación por correo.",
-    "Equipo de confianza para abrir la bóveda con un clic y recuperación desde Android con un PIN nuevo.",
-    "Pases de vuelo y transporte con terminal, puerta e inicio y cierre de abordaje.",
-    "Credenciales con logo, banner o fondo, tipos de cuenta personalizados y grupos.",
-    "Fechas y horas de pases con los selectores del sistema.",
-    "Notificaciones de vencimiento con el icono de My Pass."
+    "Rueda de fecha rediseñada, con números grandes y un resumen claro para elegir tu cumpleaños.",
+    "Credenciales más cómodas en el teléfono: tarjetas adaptativas, editor a pantalla completa y botones que ya no se amontonan.",
+    "La pila de pases muestra solo el encabezado de los pases cerrados; toca uno para verlo completo.",
+    "Pestañas de la bóveda en una cuadrícula clara y editor de credenciales a pantalla completa en la web móvil."
   ],
   "en": [
-    "Sign-up with date of birth, automatic easy mode from age 51 and email recovery.",
-    "Trusted device to open the vault in one click and Android recovery with a new PIN.",
-    "Flight and transit passes with terminal, gate and boarding start/end.",
-    "Credentials with logo, banner or background, custom account types and groups.",
-    "Pass dates and times use the system pickers.",
-    "Expiry notifications show the My Pass icon."
+    "Redesigned date wheel with large numbers and a clear summary for picking your birthday.",
+    "More comfortable credentials on phones: adaptive cards, a full-screen editor and buttons that no longer crowd together.",
+    "The pass stack shows only the header of closed passes; tap one to see it in full.",
+    "Vault tabs in a clear grid and a full-screen credential editor on mobile web."
   ]
 }
