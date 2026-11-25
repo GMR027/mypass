@@ -5,6 +5,7 @@ import {
     splitList,
 } from './vault-secrets';
 import { downloadMedicalCalendar, medicalCalendar } from './calendar';
+import { createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -119,6 +120,8 @@ export class MedicalApp {
         this.fileLabel = '';
         this.wakeLock = null;
         this.presentingItem = null;
+        this.selectedMedicalId = null;
+        this.flippedMedicalId = null;
         this.bind();
     }
 
@@ -231,6 +234,8 @@ export class MedicalApp {
     reset() {
         this.items = [];
         this.search = '';
+        this.selectedMedicalId = null;
+        this.flippedMedicalId = null;
         this.closePresentation();
         this.close();
         this.render();
@@ -654,8 +659,17 @@ export class MedicalApp {
     }
 
     handleListClick(event) {
+        const targetCard = event.target.closest('[data-medical-id]');
         const action = event.target.closest('[data-medical-action]');
         if (!action) {
+            if (targetCard?.classList.contains('mp-deck-card--compact')) {
+                const targetItem = this.items.find((candidate) => candidate.id === targetCard.dataset.medicalId);
+                if (targetItem) {
+                    this.selectedMedicalId = targetItem.id;
+                    this.flippedMedicalId = null;
+                    this.render();
+                }
+            }
             return;
         }
 
@@ -720,21 +734,89 @@ export class MedicalApp {
             this.emptyCopy.textContent = t('Prueba con otra búsqueda.');
         }
 
-        this.list.replaceChildren();
-        for (const item of filtered) {
-            this.list.appendChild(this.renderCard(item));
+        if (this.selectedMedicalId && !filtered.some((item) => item.id === this.selectedMedicalId)) {
+            this.selectedMedicalId = null;
+            this.flippedMedicalId = null;
         }
+        if (this.flippedMedicalId && this.flippedMedicalId !== this.selectedMedicalId) {
+            this.flippedMedicalId = null;
+        }
+
+        this.list.replaceChildren();
+        const deck = el('div', 'mp-deck');
+        filtered.forEach((item, index) => {
+            const selected = item.id === this.selectedMedicalId;
+            const card = selected ? this.renderFlipCard(item) : this.renderCompactCard(item);
+            card.style.setProperty('--deck-index', String(index));
+            deck.appendChild(card);
+            if (selected) {
+                window.requestAnimationFrame(() => syncDeckHeight(card));
+            }
+        });
+        this.list.appendChild(deck);
     }
 
-    renderCard(item) {
+    renderCompactCard(item) {
         const medical = medicalFromItem(item);
-        const contacts = medical.emergencyContacts.filter((contact) => contact.name || contact.phone);
-        const contact = contacts[0];
+        const content = el('div', 'flex flex-col');
+        content.appendChild(this.medicalHeader(item, medical));
+        content.appendChild(el(
+            'p',
+            'mt-3 text-[13px] text-on-surface-variant',
+            `${t('Grupo sanguíneo')}: ${medical.bloodType || '—'} · ${t('Donante')}: ${medical.organDonor ? t('Sí') : t('No')}`,
+        ));
+
+        const card = createCompactCard({
+            className: 'mp-medical-card',
+            dataset: { medicalId: item.id },
+            content,
+        });
+        return card;
+    }
+
+    renderFlipCard(item) {
+        const medical = medicalFromItem(item);
+        const front = el('div', 'flex h-full flex-col');
+        front.appendChild(this.medicalHeader(item, medical));
+        const frontGrid = el('div', 'mp-medical-card__grid');
+        frontGrid.appendChild(this.stat(t('Grupo sanguíneo'), medical.bloodType || '—'));
+        frontGrid.appendChild(this.stat(t('Donante'), medical.organDonor ? t('Sí') : t('No')));
+        front.appendChild(frontGrid);
+        front.appendChild(this.flipRow(t('Ver reverso'), 'flip'));
+
+        const back = el('div', 'flex h-full flex-col');
+        back.appendChild(this.medicalHeader(item, medical));
+        back.appendChild(this.medicalGrid(item, medical));
+        back.appendChild(this.medicalActions(item, medical));
+        if (medical.notes) {
+            back.appendChild(el('p', 'relative z-10 mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-on-surface-variant', medical.notes));
+        }
+        back.appendChild(this.flipRow(t('Volver al frente'), 'undo'));
+
+        const card = createFlipCard({
+            faceClassName: 'mp-medical-card',
+            dataset: { medicalId: item.id },
+            front,
+            back,
+            flipped: this.flippedMedicalId === item.id,
+        });
+        card.classList.add('is-selected');
+
+        card.querySelectorAll('[data-deck-flip]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const next = !card.classList.contains('is-flipped');
+                setDeckFlipped(card, next);
+                this.flippedMedicalId = next ? item.id : null;
+            });
+        });
+
+        return card;
+    }
+
+    medicalHeader(item, medical) {
         const expired = isExpired(item.expires_at);
-
-        const card = el('li', 'mp-medical-card mp-fade-in');
-        card.dataset.medicalId = item.id;
-
         const head = el('div', 'mp-medical-card__head');
         const names = el('div', 'min-w-0');
         names.appendChild(el('p', 'mp-medical-card__title', item.metadata?.title || t('Carnet médico')));
@@ -743,8 +825,11 @@ export class MedicalApp {
         const badge = el('span', 'mp-badge mp-badge-primary shrink-0');
         badge.textContent = expired ? t('Vencido') : t('Carnet médico');
         head.appendChild(badge);
-        card.appendChild(head);
+        return head;
+    }
 
+    medicalGrid(item, medical) {
+        const contact = medical.emergencyContacts.filter((entry) => entry.name || entry.phone)[0];
         const grid = el('div', 'mp-medical-card__grid');
         grid.appendChild(this.stat(t('Grupo sanguíneo'), medical.bloodType || '—'));
         grid.appendChild(this.stat(t('Donante'), medical.organDonor ? t('Sí') : t('No')));
@@ -799,8 +884,10 @@ export class MedicalApp {
                 true,
             ));
         }
-        card.appendChild(grid);
+        return grid;
+    }
 
+    medicalActions(item, medical) {
         const actions = el('div', 'mp-medical-card__actions');
         actions.appendChild(this.actionButton(t('Presentar carnet'), 'present', 'badge'));
         actions.appendChild(this.actionButton(t('Editar'), 'edit', 'edit'));
@@ -814,13 +901,18 @@ export class MedicalApp {
             actions.appendChild(this.actionButton(t('Adjunto'), 'download', 'download'));
         }
         actions.appendChild(this.actionButton(t('Eliminar'), 'delete', 'delete', 'mp-btn-quiet'));
-        card.appendChild(actions);
+        return actions;
+    }
 
-        if (medical.notes) {
-            card.appendChild(el('p', 'relative z-10 mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-on-surface-variant', medical.notes));
-        }
-
-        return card;
+    flipRow(label, iconName) {
+        const row = el('div', 'mt-auto flex justify-end pt-4');
+        const button = el('button', 'mp-deck-flip');
+        button.type = 'button';
+        button.dataset.deckFlip = 'true';
+        button.appendChild(icon(iconName, 'text-[18px]'));
+        button.appendChild(document.createTextNode(label));
+        row.appendChild(button);
+        return row;
     }
 
     stat(label, value, wide = false) {

@@ -1767,6 +1767,211 @@ html.dark .mp-pass-card__mobile-code .text-outline {
         max-width: min(960px, calc(100% - 2rem));
     }
 
+    .mp-deck-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .mp-deck-group {
+        display: block;
+        list-style: none;
+    }
+
+    .mp-deck {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        gap: 0;
+    }
+
+    .mp-deck-card {
+        position: relative;
+        display: block;
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        z-index: calc(10 + var(--deck-index, 0));
+        transform-origin: 50% 0;
+        transition:
+            transform 340ms cubic-bezier(0.3, 0.9, 0.3, 1),
+            box-shadow 300ms ease,
+            margin 340ms cubic-bezier(0.3, 0.9, 0.3, 1);
+    }
+
+    .mp-deck-card--compact {
+        cursor: pointer;
+    }
+
+    .mp-deck > .mp-deck-card + .mp-deck-card {
+        margin-top: -0.9rem;
+    }
+
+    .mp-deck-card.is-selected {
+        margin-top: 0.9rem;
+        z-index: 60;
+        transform: none;
+    }
+
+    .mp-deck-card.is-selected:first-child {
+        margin-top: 0;
+    }
+
+    .mp-deck-card.is-selected + .mp-deck-card {
+        margin-top: 0.9rem;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .mp-deck-card--compact:hover,
+        .mp-deck-card--compact:focus-visible {
+            z-index: 70;
+            transform: translateY(-8px) scale(1.008);
+        }
+
+        .mp-deck-card--compact:hover ~ .mp-deck-card,
+        .mp-deck-card--compact:focus-visible ~ .mp-deck-card {
+            transform: translateY(0.85rem);
+        }
+
+        .mp-deck-card.is-selected:hover {
+            transform: translateY(-3px);
+        }
+    }
+
+    .mp-deck-card--flip {
+        height: var(--deck-height, 14rem);
+        perspective: 1600px;
+        transition:
+            height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 340ms cubic-bezier(0.3, 0.9, 0.3, 1);
+    }
+
+    .mp-deck-inner {
+        position: relative;
+        height: 100%;
+        transform-style: preserve-3d;
+        transition: transform 680ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .mp-deck-card.is-flipped .mp-deck-inner {
+        transform: rotateY(180deg);
+    }
+
+    .mp-deck-face {
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        min-height: 100%;
+        overflow: hidden;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+    }
+
+    .mp-deck-face--back {
+        transform: rotateY(180deg);
+    }
+
+    .mp-deck-face.mp-medical-card,
+    .mp-deck-face.mp-card,
+    .mp-deck-face.mp-credential-card {
+        position: absolute;
+        height: auto;
+    }
+
+    .mp-deck-card:not(.is-flipped) .mp-deck-face--back,
+    .mp-deck-card.is-flipped .mp-deck-face--front {
+        pointer-events: none;
+    }
+
+    .mp-deck-flip {
+        display: inline-flex;
+        flex-shrink: 0;
+        min-height: 2.75rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--color-primary-fixed) 55%, transparent);
+        padding: 0.55rem 0.9rem;
+        color: var(--color-primary);
+        font-size: 0.78rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+        transition: background 160ms ease, border-color 160ms ease;
+    }
+
+    .mp-deck-flip:hover {
+        border-color: color-mix(in srgb, var(--color-primary) 32%, transparent);
+        background: color-mix(in srgb, var(--color-primary-fixed) 78%, transparent);
+    }
+
+    .mp-deck-flip .material-symbols-outlined {
+        font-size: 18px;
+    }
+
+    .mp-deck-card--compact .mp-credential-card,
+    .mp-deck-face .mp-credential-card,
+    .mp-deck-card--compact.mp-medical-card,
+    .mp-deck-face .mp-medical-card {
+        height: auto;
+    }
+
+    .mp-credential-card--compact {
+        padding: 1rem;
+    }
+
+    .mp-credential-card--compact.has-banner {
+        padding-top: 0;
+    }
+
+    .mp-credential-card--compact .mp-credential-card__banner {
+        margin-inline: -1rem;
+    }
+
+    html.dark .mp-credential-card__content {
+        background: rgb(255 255 255 / 0.94);
+        color: #121c26;
+    }
+
+    html.dark .mp-credential-card__content .mp-credential-card__title,
+    html.dark .mp-credential-card__content .mp-credential-row__value,
+    html.dark .mp-credential-card__content .text-on-surface {
+        color: #121c26;
+    }
+
+    html.dark .mp-credential-card__content .mp-credential-card__subtitle,
+    html.dark .mp-credential-card__content .mp-credential-row__label,
+    html.dark .mp-credential-card__content .text-on-surface-variant {
+        color: #475569;
+    }
+
+    html.dark .mp-credential-card__content .mp-credential-card__body {
+        background: #f1f5f9;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .mp-deck-card,
+        .mp-deck-card--compact:hover,
+        .mp-deck-card--compact:focus-visible,
+        .mp-deck-card--compact:hover ~ .mp-deck-card,
+        .mp-deck-card--compact:focus-visible ~ .mp-deck-card,
+        .mp-deck-inner {
+            transition: box-shadow 200ms ease;
+            transform: none;
+        }
+    }
+
     .mp-credential-list,
     .mp-medical-list {
         @apply grid gap-4 xl:grid-cols-2;

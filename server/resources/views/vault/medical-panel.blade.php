@@ -45,7 +45,7 @@
         <p id="medical-empty-copy" class="mp-hint mt-1">{{ __('Agrega tus datos de emergencia y tu seguro para tenerlos a mano.') }}</p>
     </div>
 
-    <ul id="medical-list" class="mp-medical-list mt-5"></ul>
+    <div id="medical-list" class="mp-deck-list mt-5"></div>
 </section>
 
 <dialog id="medical-modal" class="mp-dialog mp-dialog--wide">

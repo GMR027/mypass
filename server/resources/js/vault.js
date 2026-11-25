@@ -4,6 +4,7 @@ import { WalletApp } from './passes';
 import { PassGenerator } from './pass-generator';
 import { CredentialsApp, credentialFromItem, isCredentialItem } from './credentials';
 import { MedicalApp, medicalFromItem, isMedicalItem } from './medical';
+import { createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => window.mypassT ? window.mypassT(key) : key;
 const tf = (key, values) => window.mypassTF ? window.mypassTF(key, values) : key;
@@ -179,6 +180,8 @@ let editingItem = null;
 let outgoingShares = [];
 let currentFilter = 'all';
 let currentSearch = '';
+let selectedDocumentId = null;
+let flippedDocumentId = null;
 let searchIndex = [];
 let pendingSharedFiles = [];
 let shareRequestInFlight = false;
@@ -2607,77 +2610,172 @@ function renderItems() {
     itemList.replaceChildren();
     renderExpiryBanner();
 
-    for (const item of filteredItems) {
-        const li = el('li', 'mp-card flex flex-col p-5');
-        li.dataset.itemId = item.id;
+    if (selectedDocumentId && !filteredItems.some((item) => item.id === selectedDocumentId)) {
+        selectedDocumentId = null;
+        flippedDocumentId = null;
+    }
+    if (flippedDocumentId && flippedDocumentId !== selectedDocumentId) {
+        flippedDocumentId = null;
+    }
 
-        const header = el('div', 'flex items-start gap-3');
-        const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
-        tile.appendChild(icon(typeIcon(item.type), 'text-[24px]'));
-
-        const text = el('div', 'min-w-0 flex-1');
-        text.appendChild(el('p', 'text-sm font-semibold text-primary', typeLabel(item.type)));
-        text.appendChild(el('h3', 'mt-0.5 truncate text-[19px] font-semibold text-on-surface', item.metadata.title || t('Sin título')));
-
-        const badges = el('div', 'mt-2 flex flex-wrap items-center gap-1.5');
-        if (item.state === 'transferred') {
-            badges.appendChild(el('span', 'mp-badge mp-badge-neutral', t('Transferido')));
+    const deck = el('div', 'mp-deck');
+    filteredItems.forEach((item, index) => {
+        const selected = item.id === selectedDocumentId;
+        const card = selected ? documentFlipCard(item) : documentCompactCard(item);
+        card.style.setProperty('--deck-index', String(index));
+        deck.appendChild(card);
+        if (selected) {
+            window.requestAnimationFrame(() => syncDeckHeight(card));
         }
+    });
+    itemList.appendChild(deck);
+}
 
-        if (item.expires_at) {
-            const date = expiryDate(item.expires_at);
-            if (!Number.isNaN(date.getTime())) {
-                const days = Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-                if (days < 0) {
-                    badges.appendChild(el('span', 'mp-badge mp-badge-danger', tf('Venció el :date', { date: date.toLocaleDateString(dateLocale()) })));
-                } else if (days <= 30) {
-                    badges.appendChild(el('span', 'mp-badge mp-badge-warning', tf('Vence en :days días', { days })));
-                } else {
-                    badges.appendChild(el('span', 'mp-badge mp-badge-neutral', tf('Vigente hasta :date', { date: date.toLocaleDateString(dateLocale()) })));
-                }
+function documentHeader(item) {
+    const header = el('div', 'flex items-start gap-3');
+    const tile = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
+    tile.appendChild(icon(typeIcon(item.type), 'text-[24px]'));
+
+    const text = el('div', 'min-w-0 flex-1');
+    text.appendChild(el('p', 'text-sm font-semibold text-primary', typeLabel(item.type)));
+    text.appendChild(el('h3', 'mt-0.5 truncate text-[19px] font-semibold text-on-surface', item.metadata.title || t('Sin título')));
+
+    const badges = el('div', 'mt-2 flex flex-wrap items-center gap-1.5');
+    if (item.state === 'transferred') {
+        badges.appendChild(el('span', 'mp-badge mp-badge-neutral', t('Transferido')));
+    }
+
+    if (item.expires_at) {
+        const date = expiryDate(item.expires_at);
+        if (!Number.isNaN(date.getTime())) {
+            const days = Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+            if (days < 0) {
+                badges.appendChild(el('span', 'mp-badge mp-badge-danger', tf('Venció el :date', { date: date.toLocaleDateString(dateLocale()) })));
+            } else if (days <= 30) {
+                badges.appendChild(el('span', 'mp-badge mp-badge-warning', tf('Vence en :days días', { days })));
+            } else {
+                badges.appendChild(el('span', 'mp-badge mp-badge-neutral', tf('Vigente hasta :date', { date: date.toLocaleDateString(dateLocale()) })));
             }
         }
-
-        text.appendChild(badges);
-        header.append(tile, text);
-        li.appendChild(header);
-
-        const actions = el('div', 'mt-5 flex flex-wrap gap-2 border-t border-outline-variant/50 pt-4');
-
-        if (item.blob_id) {
-            const view = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Ver'));
-            view.type = 'button';
-            view.addEventListener('click', () => viewItem(item, view));
-            actions.appendChild(view);
-        }
-
-        const edit = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Editar'));
-        edit.type = 'button';
-        edit.addEventListener('click', () => openEditItem(item));
-        actions.appendChild(edit);
-
-        if (acceptedContacts.length > 0 && item.state !== 'transferred') {
-            const share = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Enviar'));
-            share.type = 'button';
-            share.addEventListener('click', () => openShareModal(item));
-            actions.appendChild(share);
-        }
-
-        if (item.blob_id) {
-            const download = el('button', 'mp-btn mp-btn-quiet mp-btn-sm', t('Descargar'));
-            download.type = 'button';
-            download.addEventListener('click', () => downloadItem(item, download));
-            actions.appendChild(download);
-        }
-
-        const remove = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Eliminar'));
-        remove.type = 'button';
-        remove.addEventListener('click', () => deleteItem(item, remove));
-        actions.appendChild(remove);
-
-        li.appendChild(actions);
-        itemList.appendChild(li);
     }
+
+    text.appendChild(badges);
+    header.append(tile, text);
+    return header;
+}
+
+function documentActions(item) {
+    const actions = el('div', 'mt-4 flex flex-wrap gap-2 border-t border-outline-variant/50 pt-4');
+
+    if (item.blob_id) {
+        const view = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Ver'));
+        view.type = 'button';
+        view.addEventListener('click', () => viewItem(item, view));
+        actions.appendChild(view);
+    }
+
+    const edit = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Editar'));
+    edit.type = 'button';
+    edit.addEventListener('click', () => openEditItem(item));
+    actions.appendChild(edit);
+
+    if (acceptedContacts.length > 0 && item.state !== 'transferred') {
+        const share = el('button', 'mp-btn mp-btn-secondary mp-btn-sm', t('Enviar'));
+        share.type = 'button';
+        share.addEventListener('click', () => openShareModal(item));
+        actions.appendChild(share);
+    }
+
+    if (item.blob_id) {
+        const download = el('button', 'mp-btn mp-btn-quiet mp-btn-sm', t('Descargar'));
+        download.type = 'button';
+        download.addEventListener('click', () => downloadItem(item, download));
+        actions.appendChild(download);
+    }
+
+    const remove = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Eliminar'));
+    remove.type = 'button';
+    remove.addEventListener('click', () => deleteItem(item, remove));
+    actions.appendChild(remove);
+
+    return actions;
+}
+
+function documentPreview(item, limit = 110) {
+    const preview = item.metadata?.ocr_text?.trim() || item.metadata?.original_name || '';
+    return preview ? el('p', 'mt-2 truncate text-[13px] text-on-surface-variant', preview.slice(0, limit)) : null;
+}
+
+function deckFlipButton(label, iconName) {
+    const button = el('button', 'mp-deck-flip');
+    button.type = 'button';
+    button.dataset.deckFlip = 'true';
+    button.appendChild(icon(iconName, 'text-[18px]'));
+    button.appendChild(document.createTextNode(label));
+    return button;
+}
+
+function documentCompactCard(item) {
+    const content = el('div', 'p-4');
+    content.appendChild(documentHeader(item));
+    const preview = documentPreview(item);
+    if (preview) {
+        content.appendChild(preview);
+    }
+
+    const card = createCompactCard({
+        className: 'mp-card',
+        dataset: { itemId: item.id },
+        content,
+    });
+    card.addEventListener('click', () => {
+        selectedDocumentId = item.id;
+        flippedDocumentId = null;
+        renderItems();
+    });
+    return card;
+}
+
+function documentFlipCard(item) {
+    const front = el('div', 'p-5');
+    front.appendChild(documentHeader(item));
+    const preview = documentPreview(item, 180);
+    if (preview) {
+        front.appendChild(preview);
+    }
+    const frontRow = el('div', 'mt-4 flex justify-end');
+    frontRow.appendChild(deckFlipButton(t('Ver reverso'), 'flip'));
+    front.appendChild(frontRow);
+
+    const back = el('div', 'p-5');
+    back.appendChild(documentHeader(item));
+    if (item.metadata?.ocr_text?.trim()) {
+        back.appendChild(el('p', 'mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-on-surface-variant', item.metadata.ocr_text.trim().slice(0, 700)));
+    }
+    back.appendChild(documentActions(item));
+    const backRow = el('div', 'mt-4 flex justify-end');
+    backRow.appendChild(deckFlipButton(t('Volver al frente'), 'undo'));
+    back.appendChild(backRow);
+
+    const card = createFlipCard({
+        faceClassName: 'mp-card',
+        dataset: { itemId: item.id },
+        front,
+        back,
+        flipped: flippedDocumentId === item.id,
+    });
+
+    card.querySelectorAll('[data-deck-flip]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const next = !card.classList.contains('is-flipped');
+            setDeckFlipped(card, next);
+            flippedDocumentId = next ? item.id : null;
+        });
+    });
+
+    return card;
 }
 
 async function viewItem(item, button) {
@@ -3297,6 +3395,8 @@ function lock(reason = '') {
     outgoingShares = [];
     currentFilter = 'all';
     currentSearch = '';
+    selectedDocumentId = null;
+    flippedDocumentId = null;
     if (docSearch) {
         docSearch.value = '';
     }

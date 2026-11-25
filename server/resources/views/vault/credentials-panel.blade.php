@@ -62,7 +62,7 @@
         <p id="credentials-empty-copy" class="mp-hint mt-1">{{ __('Agrega tu primera cuenta y guarda su contraseña cifrada.') }}</p>
     </div>
 
-    <ul id="credential-list" class="mp-credential-list mt-5"></ul>
+    <div id="credential-list" class="mp-deck-list mt-5"></div>
 </section>
 
 <dialog id="credential-modal" class="mp-dialog mp-dialog--wide mp-credential-dialog">

@@ -390,7 +390,7 @@
                         <p id="items-empty-copy" class="mp-hint mt-1">{{ __('Agrega tu primer documento y quedará cifrado antes de salir de tu equipo.') }}</p>
                     </div>
 
-                    <ul id="item-list" class="mp-grid-docs mt-5"></ul>
+                    <div id="item-list" class="mp-deck-list mt-5"></div>
                 </section>
 
                 @include('vault.passes-panel')

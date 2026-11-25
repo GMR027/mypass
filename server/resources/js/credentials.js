@@ -11,6 +11,7 @@ import {
     totpSecondsLeft,
 } from './vault-secrets';
 import { bannerDataUrl, isImageDataUrl, logoDataUrl } from './media';
+import { createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -235,6 +236,8 @@ export class CredentialsApp {
         this.filter = 'all';
         this.search = '';
         this.groupFilter = 'all';
+        this.selectedCredentialId = null;
+        this.flippedCredentialId = null;
         this.editing = null;
         this.baseMetadata = {};
         this.existingBlobId = null;
@@ -477,6 +480,8 @@ export class CredentialsApp {
         this.search = '';
         this.filter = 'all';
         this.groupFilter = 'all';
+        this.selectedCredentialId = null;
+        this.flippedCredentialId = null;
         this.customTypes = new Map();
         this.totpConfigs.clear();
         this.revealTimers.forEach((timer) => clearTimeout(timer));
@@ -1021,8 +1026,18 @@ export class CredentialsApp {
     }
 
     handleListClick(event) {
+        const targetCard = event.target.closest('[data-credential-id]');
         const action = event.target.closest('[data-credential-action]');
+
         if (!action) {
+            if (targetCard?.classList.contains('mp-deck-card--compact')) {
+                const targetItem = this.items.find((candidate) => candidate.id === targetCard.dataset.credentialId);
+                if (targetItem) {
+                    this.selectedCredentialId = targetItem.id;
+                    this.flippedCredentialId = null;
+                    this.render();
+                }
+            }
             return;
         }
 
@@ -1160,6 +1175,14 @@ export class CredentialsApp {
                 return String(a.metadata?.title || '').localeCompare(String(b.metadata?.title || ''), locale());
             });
 
+        if (this.selectedCredentialId && !filtered.some((item) => item.id === this.selectedCredentialId)) {
+            this.selectedCredentialId = null;
+            this.flippedCredentialId = null;
+        }
+        if (this.flippedCredentialId && this.flippedCredentialId !== this.selectedCredentialId) {
+            this.flippedCredentialId = null;
+        }
+
         const counts = {
             all: all.length,
             favorite: all.filter((item) => credentialFromItem(item).favorite).length,
@@ -1185,6 +1208,20 @@ export class CredentialsApp {
         this.totpConfigs.clear();
 
         const grouped = this.filter === 'all' && this.groupFilter === 'all' && !query;
+        const appendDeck = (groupItems) => {
+            const deck = el('div', 'mp-deck');
+            groupItems.forEach((item, index) => {
+                const selected = item.id === this.selectedCredentialId;
+                const card = selected ? this.renderFlipCard(item) : this.renderCompactCard(item);
+                card.style.setProperty('--deck-index', String(index));
+                deck.appendChild(card);
+                if (selected) {
+                    window.requestAnimationFrame(() => syncDeckHeight(card));
+                }
+            });
+            return deck;
+        };
+
         if (grouped) {
             const buckets = new Map();
             for (const item of filtered) {
@@ -1205,21 +1242,21 @@ export class CredentialsApp {
 
             for (const group of ordered) {
                 const heading = el(
-                    'li',
+                    'div',
                     'mp-credential-group-heading',
                     group
                         ? `${group} · ${buckets.get(group).length}`
                         : `${t('Sin grupo')} · ${buckets.get('').length}`,
                 );
                 this.list.appendChild(heading);
-                for (const item of buckets.get(group)) {
-                    this.list.appendChild(this.renderCard(item));
-                }
+                const wrapper = el('div', 'mp-deck-group');
+                wrapper.appendChild(appendDeck(buckets.get(group)));
+                this.list.appendChild(wrapper);
             }
         } else {
-            for (const item of filtered) {
-                this.list.appendChild(this.renderCard(item));
-            }
+            const wrapper = el('div', 'mp-deck-group');
+            wrapper.appendChild(appendDeck(filtered));
+            this.list.appendChild(wrapper);
         }
 
         this.updateTotpCodes();
@@ -1255,11 +1292,111 @@ export class CredentialsApp {
         }
     }
 
-    renderCard(item) {
+    renderCompactCard(item) {
         const parsed = credentialFromItem(item);
-        const card = el('li', 'mp-credential-card mp-fade-in');
-        card.dataset.credentialId = item.id;
+        const head = this.renderCredentialHead(item, parsed, false);
+        const rest = [];
+        const tags = this.renderCredentialTags(parsed);
+        if (tags) {
+            rest.push(tags);
+        }
+        if (parsed.username) {
+            rest.push(el('p', 'mt-3 truncate text-[15px] text-on-surface-variant', parsed.username));
+        }
 
+        const content = this.credentialSurface(parsed, head, rest, true);
+        const card = createCompactCard({
+            dataset: { credentialId: item.id },
+            content,
+        });
+        return card;
+    }
+
+    renderFlipCard(item) {
+        const parsed = credentialFromItem(item);
+        const frontHead = this.renderCredentialHead(item, parsed, true);
+        const frontRest = [];
+        const frontTags = this.renderCredentialTags(parsed);
+        if (frontTags) {
+            frontRest.push(frontTags);
+        }
+        if (parsed.username) {
+            frontRest.push(el('p', 'mt-3 truncate text-[15px] text-on-surface-variant', parsed.username));
+        }
+        frontRest.push(this.flipRow(t('Ver reverso'), 'flip'));
+
+        const backHead = this.renderCredentialHead(item, parsed, true);
+        const backRest = [];
+        const backTags = this.renderCredentialTags(parsed);
+        if (backTags) {
+            backRest.push(backTags);
+        }
+        backRest.push(this.renderCredentialBody(item, parsed));
+        backRest.push(this.renderCredentialActions(item, parsed));
+        backRest.push(this.flipRow(t('Volver al frente'), 'undo'));
+
+        const front = this.credentialSurface(parsed, frontHead, frontRest);
+        const back = this.credentialSurface(parsed, backHead, backRest);
+        const card = createFlipCard({
+            dataset: { credentialId: item.id },
+            front,
+            back,
+            flipped: this.flippedCredentialId === item.id,
+        });
+        card.classList.add('is-selected');
+
+        card.querySelectorAll('[data-deck-flip]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const next = !card.classList.contains('is-flipped');
+                setDeckFlipped(card, next);
+                this.flippedCredentialId = next ? item.id : null;
+            });
+        });
+
+        return card;
+    }
+
+    credentialSurface(parsed, head, rest, compact = false) {
+        const hasAppearance = parsed.appearance.mode !== 'none'
+            && (parsed.appearance.color || parsed.appearance.image);
+        const card = el(
+            'div',
+            [
+                'mp-credential-card',
+                compact ? 'mp-credential-card--compact' : '',
+                hasAppearance ? `has-${parsed.appearance.mode}` : '',
+            ].filter(Boolean).join(' '),
+        );
+
+        if (hasAppearance) {
+            card.style.setProperty('--credential-appearance-color', parsed.appearance.color || BANNER_COLORS[0]);
+            if (parsed.appearance.image) {
+                card.style.setProperty('--credential-appearance-image', `url("${parsed.appearance.image}")`);
+            }
+
+            if (parsed.appearance.mode === 'banner') {
+                const banner = el('div', 'mp-credential-card__banner');
+                banner.appendChild(head);
+                card.appendChild(banner);
+                rest.forEach((node) => card.appendChild(node));
+                return card;
+            }
+
+            const content = el('div', 'mp-credential-card__content');
+            content.appendChild(head);
+            rest.forEach((node) => content.appendChild(node));
+            card.appendChild(content);
+            return card;
+        }
+
+        card.appendChild(head);
+        rest.forEach((node) => card.appendChild(node));
+        return card;
+    }
+
+    renderCredentialHead(item, parsed, withFavorite) {
         const head = el('div', 'mp-credential-card__head');
         const identity = el('div', 'mp-credential-card__identity');
         const tile = el('span', 'mp-credential-card__tile');
@@ -1278,13 +1415,27 @@ export class CredentialsApp {
         identity.append(tile, names);
         head.appendChild(identity);
 
-        const favorite = el('button', 'mp-btn mp-btn-quiet mp-btn-icon shrink-0');
-        favorite.type = 'button';
-        favorite.dataset.credentialAction = 'favorite';
-        favorite.setAttribute('aria-pressed', parsed.favorite ? 'true' : 'false');
-        favorite.setAttribute('aria-label', parsed.favorite ? t('Quitar de favoritas') : t('Marcar como favorita'));
-        favorite.appendChild(icon(parsed.favorite ? 'star' : 'star_border', parsed.favorite ? 'text-[22px] text-secondary' : 'text-[22px]'));
-        head.appendChild(favorite);
+        if (withFavorite) {
+            const favorite = el('button', 'mp-btn mp-btn-quiet mp-btn-icon shrink-0');
+            favorite.type = 'button';
+            favorite.dataset.credentialAction = 'favorite';
+            favorite.setAttribute('aria-pressed', parsed.favorite ? 'true' : 'false');
+            favorite.setAttribute('aria-label', parsed.favorite ? t('Quitar de favoritas') : t('Marcar como favorita'));
+            favorite.appendChild(icon(parsed.favorite ? 'star' : 'star_border', parsed.favorite ? 'text-[22px] text-secondary' : 'text-[22px]'));
+            head.appendChild(favorite);
+        } else if (parsed.favorite) {
+            const star = el('span', 'shrink-0 text-secondary');
+            star.appendChild(icon('star', 'text-[22px]'));
+            head.appendChild(star);
+        }
+
+        return head;
+    }
+
+    renderCredentialTags(parsed) {
+        if (!parsed.group && parsed.tags.length === 0) {
+            return null;
+        }
 
         const tags = el('div', 'mt-3 flex flex-wrap gap-1.5');
         if (parsed.group) {
@@ -1296,7 +1447,10 @@ export class CredentialsApp {
         for (const tag of parsed.tags.slice(0, 6)) {
             tags.appendChild(el('span', 'mp-badge mp-badge-neutral', tag));
         }
+        return tags;
+    }
 
+    renderCredentialBody(item, parsed) {
         const body = el('div', 'mp-credential-card__body');
         body.appendChild(this.renderRow(t('Usuario'), parsed.username || t('Sin usuario'), 'copy-username', parsed.username, false));
         body.appendChild(this.renderPasswordRow(item, parsed));
@@ -1315,7 +1469,10 @@ export class CredentialsApp {
             notes.appendChild(el('p', 'mp-credential-row__value whitespace-pre-wrap font-sans text-on-surface-variant', parsed.notes));
             body.appendChild(notes);
         }
+        return body;
+    }
 
+    renderCredentialActions(item, parsed) {
         const actions = el('div', 'mp-credential-actions');
         actions.appendChild(this.actionButton(t('Copiar usuario'), 'copy-username', 'content_copy', parsed.username));
         actions.appendChild(this.actionButton(t('Copiar contraseña'), 'copy-password', 'lock', parsed.password));
@@ -1330,46 +1487,18 @@ export class CredentialsApp {
             actions.appendChild(this.actionButton(t('Descargar adjunto'), 'download', 'download', true));
         }
         actions.appendChild(this.actionButton(t('Eliminar'), 'delete', 'delete', true, 'mp-btn-danger'));
+        return actions;
+    }
 
-        const hasAppearance = parsed.appearance.mode !== 'none'
-            && (parsed.appearance.color || parsed.appearance.image);
-
-        const appendRest = (container) => {
-            if (tags.childElementCount > 0) {
-                container.appendChild(tags);
-            }
-            container.appendChild(body);
-            container.appendChild(actions);
-            if (item.state === 'transferred') {
-                container.appendChild(el('p', 'mt-3 text-sm font-semibold text-on-surface-variant', t('Transferida a otra cuenta')));
-            }
-        };
-
-        if (hasAppearance) {
-            card.style.setProperty('--credential-appearance-color', parsed.appearance.color || BANNER_COLORS[0]);
-            if (parsed.appearance.image) {
-                card.style.setProperty('--credential-appearance-image', `url("${parsed.appearance.image}")`);
-            }
-
-            if (parsed.appearance.mode === 'banner') {
-                card.classList.add('has-banner');
-                const banner = el('div', 'mp-credential-card__banner');
-                banner.appendChild(head);
-                card.appendChild(banner);
-                appendRest(card);
-            } else {
-                card.classList.add('has-background');
-                const content = el('div', 'mp-credential-card__content');
-                content.appendChild(head);
-                appendRest(content);
-                card.appendChild(content);
-            }
-        } else {
-            card.appendChild(head);
-            appendRest(card);
-        }
-
-        return card;
+    flipRow(label, iconName) {
+        const row = el('div', 'mt-4 flex justify-end');
+        const button = el('button', 'mp-deck-flip');
+        button.type = 'button';
+        button.dataset.deckFlip = 'true';
+        button.appendChild(icon(iconName, 'text-[18px]'));
+        button.appendChild(document.createTextNode(label));
+        row.appendChild(button);
+        return row;
     }
 
     renderRow(label, value, actionName, copyValue, secret, display = null) {
