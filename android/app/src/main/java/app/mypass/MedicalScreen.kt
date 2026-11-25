@@ -8,6 +8,7 @@ import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +62,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
     var deleteTarget by remember { mutableStateOf<UiItem?>(null) }
     var shareTarget by remember { mutableStateOf<UiItem?>(null) }
     var presenting by remember { mutableStateOf<UiItem?>(null) }
+    var selectedMedicalId by remember { mutableStateOf<String?>(null) }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
 
     val all = remember(state.items) {
@@ -78,6 +81,14 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                 medical.conditions.any { it.contains(query, ignoreCase = true) }
         }
     }
+
+    LaunchedEffect(visible.map { it.id }) {
+        if (selectedMedicalId != null && visible.none { it.id == selectedMedicalId }) {
+            selectedMedicalId = null
+        }
+    }
+    val selectedMedicalIndex = visible.indexOfFirst { it.id == selectedMedicalId }
+        .takeIf { it >= 0 }
 
     deleteTarget?.let { item ->
         ConfirmDialog(
@@ -183,16 +194,27 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                     )
                 }
             } else {
-                gridItems(visible, key = { it.id }) { item ->
-                    MedicalCard(
-                        item = item,
-                        canShare = acceptedContacts.isNotEmpty(),
-                        onPresent = { presenting = item },
-                        onEdit = { viewModel.editMedicalCard(item) },
-                        onShare = { shareTarget = item },
-                        onOpenAttachment = { viewModel.openItem(item) },
-                        onDelete = { deleteTarget = item },
-                    )
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    MpCascadeStack(selectedIndex = selectedMedicalIndex) {
+                        visible.forEachIndexed { index, item ->
+                            if (index == selectedMedicalIndex) {
+                                MedicalFlipCard(
+                                    item = item,
+                                    canShare = acceptedContacts.isNotEmpty(),
+                                    onPresent = { presenting = item },
+                                    onEdit = { viewModel.editMedicalCard(item) },
+                                    onShare = { shareTarget = item },
+                                    onOpenAttachment = { viewModel.openItem(item) },
+                                    onDelete = { deleteTarget = item },
+                                )
+                            } else {
+                                MedicalCompactCard(
+                                    item = item,
+                                    onClick = { selectedMedicalId = item.id },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -200,7 +222,35 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
 }
 
 @Composable
-private fun MedicalCard(
+private fun MedicalCompactCard(
+    item: UiItem,
+    onClick: () -> Unit,
+) {
+    val medical = item.medical ?: return
+    MpCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        contentPadding = PaddingValues(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            MedicalHeader(item = item, medical = medical)
+            Text(
+                text = listOf(
+                    stringResource(R.string.blood_type) + ": " + medical.bloodType.ifBlank { "—" },
+                    stringResource(R.string.organ_donor) + ": " + stringResource(if (medical.organDonor) R.string.yes else R.string.no),
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MedicalFlipCard(
     item: UiItem,
     canShare: Boolean,
     onPresent: () -> Unit,
@@ -210,130 +260,206 @@ private fun MedicalCard(
     onDelete: () -> Unit,
 ) {
     val medical = item.medical ?: return
+
+    MpFlipCard(
+        itemKey = item.id,
+        shape = MaterialTheme.shapes.large,
+        containerColor = MpColors.Surface,
+        front = { onFlip ->
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MedicalHeader(item = item, medical = medical)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MedicalStat(
+                        label = stringResource(R.string.blood_type),
+                        value = medical.bloodType.ifBlank { "—" },
+                        modifier = Modifier.weight(1f),
+                    )
+                    MedicalStat(
+                        label = stringResource(R.string.organ_donor),
+                        value = stringResource(if (medical.organDonor) R.string.yes else R.string.no),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    MpFlipButton(
+                        text = stringResource(R.string.view_back),
+                        onClick = onFlip,
+                    )
+                }
+            }
+        },
+        back = { onFlipBack ->
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MedicalHeader(item = item, medical = medical)
+                MedicalDetails(
+                    item = item,
+                    medical = medical,
+                    canShare = canShare,
+                    onPresent = onPresent,
+                    onEdit = onEdit,
+                    onShare = onShare,
+                    onOpenAttachment = onOpenAttachment,
+                    onDelete = onDelete,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    MpFlipButton(
+                        text = stringResource(R.string.back_to_front),
+                        onClick = onFlipBack,
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun MedicalHeader(item: UiItem, medical: UiMedicalCard) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        MpIconTile(icon = Icons.Filled.Info, size = 50)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = medical.holder.ifBlank { stringResource(R.string.no_holder) },
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+            )
+        }
+        MpBadge(
+            text = stringResource(R.string.medical),
+            tone = MpBadgeTone.Primary,
+        )
+    }
+}
+
+@Composable
+private fun MedicalDetails(
+    item: UiItem,
+    medical: UiMedicalCard,
+    canShare: Boolean,
+    onPresent: () -> Unit,
+    onEdit: () -> Unit,
+    onShare: () -> Unit,
+    onOpenAttachment: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val contact = medical.contacts.firstOrNull { it.name.isNotBlank() || it.phone.isNotBlank() }
 
-    MpCard(modifier = Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                MpIconTile(icon = Icons.Filled.Info, size = 50)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = medical.holder.ifBlank { stringResource(R.string.no_holder) },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MpColors.OnSurfaceVariant,
-                    )
-                }
-                MpBadge(
-                    text = stringResource(R.string.medical),
-                    tone = MpBadgeTone.Primary,
-                )
-            }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MedicalStat(
+                label = stringResource(R.string.blood_type),
+                value = medical.bloodType.ifBlank { "—" },
+                modifier = Modifier.weight(1f),
+            )
+            MedicalStat(
+                label = stringResource(R.string.organ_donor),
+                value = stringResource(if (medical.organDonor) R.string.yes else R.string.no),
+                modifier = Modifier.weight(1f),
+            )
+        }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MedicalStat(
-                    label = stringResource(R.string.blood_type),
-                    value = medical.bloodType.ifBlank { "—" },
-                    modifier = Modifier.weight(1f),
-                )
-                MedicalStat(
-                    label = stringResource(R.string.organ_donor),
-                    value = stringResource(if (medical.organDonor) R.string.yes else R.string.no),
-                    modifier = Modifier.weight(1f),
-                )
-            }
+        if (medical.allergies.isNotEmpty()) {
+            MedicalStat(
+                label = stringResource(R.string.allergies),
+                value = medical.allergies.joinToString(", "),
+            )
+        }
+        if (medical.conditions.isNotEmpty() || medical.medications.isNotEmpty()) {
+            MedicalStat(
+                label = stringResource(R.string.conditions_medications),
+                value = listOf(
+                    medical.conditions.joinToString(", "),
+                    medical.medications.joinToString(", "),
+                ).filter { it.isNotBlank() }.joinToString(" · "),
+            )
+        }
+        val scheduledMeds = medical.medicationSchedule.filter { it.name.isNotBlank() }
+        if (scheduledMeds.isNotEmpty()) {
+            MedicalStat(
+                label = stringResource(R.string.medications_schedule_title),
+                value = scheduledMeds.joinToString(" · ") { medication ->
+                    listOf(
+                        medication.name,
+                        medication.dose,
+                        medication.times.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "(", postfix = ")"),
+                    ).filter { !it.isNullOrBlank() }.joinToString(" ")
+                },
+            )
+        }
+        val nextAppointment = medical.appointments
+            .filter { it.title.isNotBlank() && it.date.isNotBlank() }
+            .minByOrNull { "${it.date} ${it.time}" }
+        if (nextAppointment != null) {
+            MedicalStat(
+                label = stringResource(R.string.next_appointment),
+                value = listOf(
+                    nextAppointment.title,
+                    nextAppointment.date,
+                    nextAppointment.time,
+                    nextAppointment.location,
+                ).filter { it.isNotBlank() }.joinToString(" · "),
+            )
+        }
+        if (contact != null) {
+            MedicalStat(
+                label = stringResource(R.string.emergency_contact),
+                value = listOf(contact.name, contact.relation, contact.phone)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · "),
+            )
+        }
+        if (medical.insurance.provider.isNotBlank() || medical.insurance.policyNumber.isNotBlank()) {
+            MedicalStat(
+                label = stringResource(R.string.medical_insurance),
+                value = listOf(medical.insurance.provider, medical.insurance.policyNumber)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · "),
+            )
+        }
+        if (item.expiresAt != null) {
+            MedicalStat(
+                label = stringResource(R.string.valid_until),
+                value = item.expiresAt.take(10),
+            )
+        }
 
-            if (medical.allergies.isNotEmpty()) {
-                MedicalStat(
-                    label = stringResource(R.string.allergies),
-                    value = medical.allergies.joinToString(", "),
-                )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MedicalAction(stringResource(R.string.present_card), onPresent, primary = true)
+            MedicalAction(stringResource(R.string.edit), onEdit)
+            if (canShare) {
+                MedicalAction(stringResource(R.string.share), onShare)
             }
-            if (medical.conditions.isNotEmpty() || medical.medications.isNotEmpty()) {
-                MedicalStat(
-                    label = stringResource(R.string.conditions_medications),
-                    value = listOf(
-                        medical.conditions.joinToString(", "),
-                        medical.medications.joinToString(", "),
-                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                )
+            if (item.blobId != null) {
+                MedicalAction(stringResource(R.string.attachment), onOpenAttachment)
             }
-            val scheduledMeds = medical.medicationSchedule.filter { it.name.isNotBlank() }
-            if (scheduledMeds.isNotEmpty()) {
-                MedicalStat(
-                    label = stringResource(R.string.medications_schedule_title),
-                    value = scheduledMeds.joinToString(" · ") { medication ->
-                        listOf(
-                            medication.name,
-                            medication.dose,
-                            medication.times.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "(", postfix = ")"),
-                        ).filter { !it.isNullOrBlank() }.joinToString(" ")
-                    },
-                )
-            }
-            val nextAppointment = medical.appointments
-                .filter { it.title.isNotBlank() && it.date.isNotBlank() }
-                .minByOrNull { "${it.date} ${it.time}" }
-            if (nextAppointment != null) {
-                MedicalStat(
-                    label = stringResource(R.string.next_appointment),
-                    value = listOf(
-                        nextAppointment.title,
-                        nextAppointment.date,
-                        nextAppointment.time,
-                        nextAppointment.location,
-                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                )
-            }
-            if (contact != null) {
-                MedicalStat(
-                    label = stringResource(R.string.emergency_contact),
-                    value = listOf(contact.name, contact.relation, contact.phone)
-                        .filter { it.isNotBlank() }
-                        .joinToString(" · "),
-                )
-            }
-            if (medical.insurance.provider.isNotBlank() || medical.insurance.policyNumber.isNotBlank()) {
-                MedicalStat(
-                    label = stringResource(R.string.medical_insurance),
-                    value = listOf(medical.insurance.provider, medical.insurance.policyNumber)
-                        .filter { it.isNotBlank() }
-                        .joinToString(" · "),
-                )
-            }
-            if (item.expiresAt != null) {
-                MedicalStat(
-                    label = stringResource(R.string.valid_until),
-                    value = item.expiresAt.take(10),
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                MedicalAction(stringResource(R.string.present_card), onPresent, primary = true)
-                MedicalAction(stringResource(R.string.edit), onEdit)
-                if (canShare) {
-                    MedicalAction(stringResource(R.string.share), onShare)
-                }
-                if (item.blobId != null) {
-                    MedicalAction(stringResource(R.string.attachment), onOpenAttachment)
-                }
-                TextButton(onClick = onDelete) {
-                    Text(stringResource(R.string.delete), color = MpColors.Error)
-                }
+            TextButton(onClick = onDelete) {
+                Text(stringResource(R.string.delete), color = MpColors.Error)
             }
         }
     }

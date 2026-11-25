@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -63,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -823,14 +825,19 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
-                    items(others, key = { it.id }) { item ->
-                        PassCompactCard(
-                            item = item,
-                            onClick = {
-                                selectedId = item.id
-                                viewModel.recordRecentItem(item.id)
-                            },
-                        )
+                    item {
+                        MpCascadeStack {
+                            others.forEach { item ->
+                                PassCompactCard(
+                                    item = item,
+                                    headerOnly = true,
+                                    onClick = {
+                                        selectedId = item.id
+                                        viewModel.recordRecentItem(item.id)
+                                    },
+                                )
+                            }
+                        }
                     }
                 } else if (filtered.isEmpty()) {
                     item {
@@ -930,170 +937,479 @@ private fun PassDetailCard(
     onDelete: () -> Unit,
 ) {
     val pass = item.pass ?: return
-    val context = LocalContext.current
     val payload = remember(item.id, pass.codePayload) { passPayload(item, pass) }
     val bitmap = remember(payload, pass.codeFormat) {
         Barcode.generate(payload, pass.codeFormat, 720)
     }
     val background = Modifier.passCardBackground(pass)
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
+    MpFlipCard(
+        itemKey = item.id,
         shape = RoundedCornerShape(22.dp),
-        color = Color.Transparent,
+        containerColor = Color.Transparent,
+        border = null,
         shadowElevation = 10.dp,
-    ) {
-        Column {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(background)
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                PassCardHeader(
-                    pass = pass,
-                    badge = if (isNext) {
-                        "${categoryLabel(pass.category)} · ${stringResource(R.string.home_next_badge)}"
-                    } else {
-                        categoryLabel(pass.category)
-                    },
-                )
-                PassCardBody(pass = pass)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = item.holderOrTitle(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.82f),
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = item.id.take(8).uppercase(Locale.US),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.62f),
-                    )
-                }
-            }
+        front = { onFlip ->
+            PassDetailFront(
+                item = item,
+                pass = pass,
+                isNext = isNext,
+                background = background,
+                onFlip = onFlip,
+            )
+        },
+        back = { onFlipBack ->
+            PassDetailBack(
+                item = item,
+                pass = pass,
+                bitmap = bitmap,
+                background = background,
+                hasContacts = hasContacts,
+                onFlip = onFlipBack,
+                onPresent = onPresent,
+                onShare = onShare,
+                onEdit = onEdit,
+                onDelete = onDelete,
+            )
+        },
+    )
+}
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = stringResource(R.string.pass_code),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(230.dp),
-                        contentScale = ContentScale.Fit,
-                    )
-                } else {
-                    MpIconTile(painter = painterResource(R.drawable.ic_qr_code), size = 72)
-                    Text(
-                        text = stringResource(R.string.pass_code_unavailable),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MpColors.ScanInk,
-                    )
-                }
-                Text(
-                    text = if (pass.codeSource == "decoded") {
-                        stringResource(R.string.pass_read_code)
-                    } else {
-                        stringResource(R.string.pass_generated_code)
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MpColors.ScanInk,
-                )
-                MpButton(
-                    text = stringResource(R.string.present_code),
-                    onClick = onPresent,
-                    enabled = pass.options["presentation"] != false,
-                    leadingIcon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_qr_code),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                    fillWidth = true,
-                )
-                if (PassLocation.query(pass) != null) {
-                    MpButton(
-                        text = stringResource(R.string.how_to_get_there),
-                        onClick = { PassLocation.open(context, pass) },
-                        variant = MpButtonVariant.Secondary,
-                        icon = Icons.Filled.Place,
-                        fillWidth = true,
-                    )
-                }
-                if (PassCalendar.canAdd(pass)) {
-                    MpButton(
-                        text = stringResource(R.string.add_to_calendar),
-                        onClick = {
-                            if (!PassCalendar.add(context, item, pass)) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    context.getString(R.string.calendar_not_available),
-                                    android.widget.Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-                        },
-                        variant = MpButtonVariant.Secondary,
-                        icon = Icons.Filled.DateRange,
-                        fillWidth = true,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MpButton(
-                        text = stringResource(R.string.share),
-                        onClick = onShare,
-                        variant = MpButtonVariant.Quiet,
-                        enabled = hasContacts && item.pass?.options?.get("share") != false,
-                        modifier = Modifier.weight(1f),
-                        compact = true,
-                        maxLines = 1,
-                    )
-                    MpButton(
-                        text = stringResource(R.string.edit),
-                        onClick = onEdit,
-                        variant = MpButtonVariant.Secondary,
-                        modifier = Modifier.weight(1f),
-                        compact = true,
-                        maxLines = 1,
-                    )
-                }
-                if (!hasContacts) {
-                    Text(
-                        text = stringResource(R.string.share_needs_contact),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MpColors.OnSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                TextButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, tint = MpColors.Error)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(stringResource(R.string.delete), color = MpColors.Error)
-                }
-            }
+@Composable
+private fun PassDetailFront(
+    item: UiItem,
+    pass: UiPass,
+    isNext: Boolean,
+    background: Modifier,
+    onFlip: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(background)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PassCardHeader(
+            pass = pass,
+            badge = if (isNext) {
+                "${categoryLabel(pass.category)} · ${stringResource(R.string.home_next_badge)}"
+            } else {
+                categoryLabel(pass.category)
+            },
+        )
+        PassCardBody(pass = pass)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = item.holderOrTitle(),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.82f),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = item.id.take(8).uppercase(Locale.US),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.62f),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.flip_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.weight(1f),
+            )
+            MpFlipButton(
+                text = stringResource(R.string.view_back),
+                onClick = onFlip,
+                dark = true,
+            )
         }
     }
 }
 
 @Composable
+private fun PassDetailBack(
+    item: UiItem,
+    pass: UiPass,
+    bitmap: Bitmap?,
+    background: Modifier,
+    hasContacts: Boolean,
+    onFlip: () -> Unit,
+    onPresent: () -> Unit,
+    onShare: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val context = LocalContext.current
+    val details = passFieldEntries(pass)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(background)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.back_of_pass),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.62f),
+            letterSpacing = 1.sp,
+        )
+        PassCardHeader(
+            pass = pass,
+            badge = categoryLabel(pass.category),
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White, RoundedCornerShape(14.dp))
+                .padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = stringResource(R.string.pass_code),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                MpIconTile(painter = painterResource(R.drawable.ic_qr_code), size = 64)
+                Text(
+                    text = stringResource(R.string.pass_code_unavailable),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.ScanInk,
+                )
+            }
+            Text(
+                text = if (pass.codeSource == "decoded") {
+                    stringResource(R.string.pass_read_code)
+                } else {
+                    stringResource(R.string.pass_generated_code)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MpColors.ScanInk,
+            )
+        }
+
+        if (details.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.all_data),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.62f),
+                letterSpacing = 1.sp,
+            )
+            details.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    row.forEach { (label, value) ->
+                        PassBackDetail(
+                            label = label,
+                            value = value,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (row.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        if (pass.notes.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.notes),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.62f),
+                letterSpacing = 1.sp,
+            )
+            Text(
+                text = pass.notes.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.78f),
+            )
+        }
+
+        PassDarkActionButton(
+            text = stringResource(R.string.present_code),
+            onClick = onPresent,
+            enabled = pass.options["presentation"] != false,
+            primary = true,
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_qr_code),
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp),
+                )
+            },
+        )
+
+        if (PassLocation.query(pass) != null) {
+            PassDarkActionButton(
+                text = stringResource(R.string.how_to_get_there),
+                onClick = { PassLocation.open(context, pass) },
+                leadingIcon = {
+                    Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(19.dp))
+                },
+            )
+        }
+
+        if (PassCalendar.canAdd(pass)) {
+            PassDarkActionButton(
+                text = stringResource(R.string.add_to_calendar),
+                onClick = {
+                    if (!PassCalendar.add(context, item, pass)) {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.calendar_not_available),
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(19.dp))
+                },
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PassDarkActionButton(
+                text = stringResource(R.string.share),
+                onClick = onShare,
+                enabled = hasContacts && pass.options["share"] != false,
+                modifier = Modifier.weight(1f),
+                leadingIcon = {
+                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+            )
+            PassDarkActionButton(
+                text = stringResource(R.string.edit),
+                onClick = onEdit,
+                modifier = Modifier.weight(1f),
+                leadingIcon = {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+            )
+        }
+
+        if (!hasContacts) {
+            Text(
+                text = stringResource(R.string.share_needs_contact),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.62f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = item.id.take(8).uppercase(Locale.US),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+            Text(
+                text = stringResource(R.string.protected_by_mypass),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+        }
+
+        TextButton(onClick = onDelete) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = null,
+                tint = Color(0xFFFFB4AB),
+                modifier = Modifier.size(19.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(stringResource(R.string.delete), color = Color(0xFFFFB4AB))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            MpFlipButton(
+                text = stringResource(R.string.back_to_front),
+                onClick = onFlip,
+                dark = true,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PassBackDetail(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        color = Color.Black.copy(alpha = 0.18f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = label.uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.58f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PassDarkActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    primary: Boolean = false,
+    leadingIcon: (@Composable () -> Unit)? = null,
+) {
+    val foreground = if (primary) Color(0xFF0C2340) else Color.White
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.alpha(if (enabled) 1f else 0.42f),
+        shape = RoundedCornerShape(12.dp),
+        color = if (primary) Color.White else Color.White.copy(alpha = 0.12f),
+        border = if (primary) null else BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            if (leadingIcon != null) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.material3.LocalContentColor provides foreground,
+                ) {
+                    leadingIcon()
+                }
+                Spacer(modifier = Modifier.width(7.dp))
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = foreground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun passFieldEntries(pass: UiPass): List<Pair<String, String>> {
+    return pass.fields.entries
+        .filter { (_, value) -> value.isNotBlank() }
+        .map { (key, value) -> passFieldLabel(key) to formatPassFieldValue(key, value) }
+}
+
+@Composable
+private fun passFieldLabel(key: String): String {
+    val resource = PassFieldLabels[key]
+    if (resource != null) {
+        return stringResource(resource)
+    }
+
+    return key
+        .replace('_', ' ')
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+}
+
+private fun formatPassFieldValue(key: String, value: String): String {
+    if (key == "date" || key == "expires" || key == "birth") {
+        return runCatching {
+            LocalDate.parse(value.take(10))
+                .format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()))
+        }.getOrDefault(value)
+    }
+
+    return value
+}
+
+private val PassFieldLabels: Map<String, Int> = mapOf(
+    "origin" to R.string.origin,
+    "destination" to R.string.destination,
+    "flight" to R.string.flight,
+    "date" to R.string.date,
+    "departure" to R.string.departure,
+    "boarding" to R.string.boarding_start,
+    "boarding_start" to R.string.boarding_start,
+    "boarding_end" to R.string.boarding_end,
+    "gate" to R.string.gate,
+    "terminal" to R.string.terminal,
+    "seat" to R.string.seat,
+    "zone" to R.string.zone,
+    "pnr" to R.string.booking_code,
+    "location" to R.string.location,
+    "address" to R.string.address,
+    "coordinates" to R.string.coordinates,
+    "time" to R.string.time,
+    "section" to R.string.section,
+    "row" to R.string.row,
+    "route" to R.string.route,
+    "platform" to R.string.platform,
+    "carriage" to R.string.carriage,
+    "number" to R.string.number,
+    "level" to R.string.level,
+    "expires" to R.string.expires,
+    "birth" to R.string.birth_date,
+    "holder" to R.string.holder,
+    "passenger" to R.string.passenger,
+    "carrier" to R.string.carrier,
+    "code_value" to R.string.code,
+)
+
+@Composable
 internal fun PassCompactCard(
     item: UiItem,
     archived: Boolean = false,
+    headerOnly: Boolean = false,
     onClick: () -> Unit,
 ) {
     val pass = item.pass ?: return
@@ -1115,8 +1431,8 @@ internal fun PassCompactCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(background)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 16.dp, vertical = if (headerOnly) 12.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (headerOnly) 4.dp else 10.dp),
         ) {
             PassCardHeader(
                 pass = pass,
@@ -1131,7 +1447,20 @@ internal fun PassCompactCard(
                 },
                 dark = !archived,
             )
-            PassCardBody(pass = pass, compact = true, dark = !archived)
+            if (headerOnly) {
+                val summary = passSummaryText(item, pass)
+                if (summary.isNotBlank()) {
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
+                PassCardBody(pass = pass, compact = true, dark = !archived)
+            }
             if (archived) {
                 Text(
                     text = item.expiresAt?.take(10) ?: "",
@@ -1642,6 +1971,41 @@ private fun passDateLabel(item: UiItem): String? {
     val date = passRelevantDate(item) ?: return null
     val locale = Locale.getDefault()
     return date.format(DateTimeFormatter.ofPattern("d MMM", locale))
+}
+
+private fun passSummaryText(item: UiItem, pass: UiPass): String {
+    val fields = pass.fields
+    val date = passDateLabel(item).orEmpty()
+
+    return when (pass.category) {
+        "flight" -> listOfNotNull(
+            listOfNotNull(fields["origin"], fields["destination"])
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(" → "),
+            date.takeIf { it.isNotBlank() },
+            fields["gate"],
+            fields["terminal"],
+        ).joinToString(" · ")
+
+        "event" -> listOfNotNull(
+            fields["location"],
+            date.takeIf { it.isNotBlank() },
+            fields["gate"],
+        ).joinToString(" · ")
+
+        "transit" -> listOfNotNull(
+            fields["route"],
+            date.takeIf { it.isNotBlank() },
+            fields["platform"],
+        ).joinToString(" · ")
+
+        else -> listOfNotNull(
+            pass.holder.takeIf { it.isNotBlank() },
+            fields["number"],
+            fields["level"],
+            date.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+    }
 }
 
 private fun passPayload(item: UiItem, pass: UiPass): String {

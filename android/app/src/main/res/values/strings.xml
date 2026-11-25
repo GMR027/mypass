@@ -827,4 +827,17 @@
     <string name="theme_system">Sistema</string>
     <string name="theme_light">Claro</string>
     <string name="theme_dark">Oscuro</string>
+    <string name="back_of_pass">Reverso del pase</string>
+    <string name="all_data">Todos los datos</string>
+    <string name="view_back">Ver reverso</string>
+    <string name="back_to_front">Volver al frente</string>
+    <string name="flip_hint">Voltea para ver el código y todos los datos.</string>
+    <string name="protected_by_mypass">Protegido por My Pass</string>
+    <string name="departure">Salida</string>
+    <string name="address">Dirección</string>
+    <string name="coordinates">Coordenadas</string>
+    <string name="number">Número</string>
+    <string name="expires">Vigente hasta</string>
+    <string name="passenger">Pasajero</string>
+    <string name="carrier">Aerolínea</string>
 </resources>

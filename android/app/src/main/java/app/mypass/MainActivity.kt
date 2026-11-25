@@ -1127,6 +1127,7 @@ private fun VaultScreen(
     var deleteItem by remember { mutableStateOf<UiItem?>(null) }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
+    var selectedDocumentId by remember { mutableStateOf<String?>(null) }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
     val context = LocalContext.current
     val notificationPermission = rememberLauncherForActivityResult(
@@ -1160,6 +1161,14 @@ private fun VaultScreen(
                     )
         }
     }
+
+    LaunchedEffect(visibleItems.map { it.id }) {
+        if (selectedDocumentId != null && visibleItems.none { it.id == selectedDocumentId }) {
+            selectedDocumentId = null
+        }
+    }
+    val selectedDocumentIndex = visibleItems.indexOfFirst { it.id == selectedDocumentId }
+        .takeIf { it >= 0 }
 
     val expiring = remember(vaultItems) {
         vaultItems.filter { item ->
@@ -1293,15 +1302,26 @@ private fun VaultScreen(
                     )
                 }
             } else {
-                gridItems(visibleItems, key = { it.id }) { item ->
-                    DocumentCard(
-                        item = item,
-                        hasContacts = acceptedContacts.isNotEmpty(),
-                        onOpen = { viewModel.openItem(item) },
-                        onShare = { shareItem = item },
-                        onExpiry = { expiryItem = item },
-                        onDelete = { deleteItem = item },
-                    )
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    MpCascadeStack(selectedIndex = selectedDocumentIndex) {
+                        visibleItems.forEachIndexed { index, item ->
+                            if (index == selectedDocumentIndex) {
+                                DocumentFlipCard(
+                                    item = item,
+                                    hasContacts = acceptedContacts.isNotEmpty(),
+                                    onOpen = { viewModel.openItem(item) },
+                                    onShare = { shareItem = item },
+                                    onExpiry = { expiryItem = item },
+                                    onDelete = { deleteItem = item },
+                                )
+                            } else {
+                                DocumentCompactCard(
+                                    item = item,
+                                    onClick = { selectedDocumentId = item.id },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1459,7 +1479,34 @@ internal fun ExpiryBanner(count: Int) {
 }
 
 @Composable
-private fun DocumentCard(
+private fun DocumentCompactCard(
+    item: UiItem,
+    onClick: () -> Unit,
+) {
+    MpCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        contentPadding = PaddingValues(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            DocumentHeader(item)
+            val preview = item.ocrText.lineSequence().firstOrNull()?.trim()?.take(110).orEmpty()
+            if (preview.isNotBlank()) {
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentFlipCard(
     item: UiItem,
     hasContacts: Boolean,
     onOpen: () -> Unit,
@@ -1467,74 +1514,141 @@ private fun DocumentCard(
     onExpiry: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val expiry = expiryLabel(item.expiresAt)
-    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+    MpFlipCard(
+        itemKey = item.id,
+        shape = MaterialTheme.shapes.large,
+        containerColor = MpColors.Surface,
+        front = { onFlip ->
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                ItemTypeIcon(type = item.type)
-                Column(modifier = Modifier.weight(1f)) {
+                DocumentHeader(item)
+                val preview = item.ocrText.lineSequence().firstOrNull()?.trim()?.take(180).orEmpty()
+                if (preview.isNotBlank()) {
                     Text(
-                        text = typeLabel(item.type),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MpColors.Primary,
-                    )
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        text = preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MpColors.OnSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 6.dp),
-                    ) {
-                        if (item.pendingUpload) {
-                            MpBadge(stringResource(R.string.pending_upload), MpBadgeTone.Warning)
-                        }
-                        if (expiry != null) {
-                            val expired = item.expiresAt?.let { value ->
-                                runCatching { LocalDate.parse(value.take(10)).isBefore(LocalDate.now()) }
-                                    .getOrDefault(false)
-                            } ?: false
-                            MpBadge(
-                                text = expiry,
-                                tone = if (expired) MpBadgeTone.Danger else MpBadgeTone.Warning,
-                            )
-                        }
-                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    MpFlipButton(
+                        text = stringResource(R.string.view_back),
+                        onClick = onFlip,
+                    )
                 }
             }
-
-            if (item.ocrText.isNotBlank()) {
-                Text(
-                    text = item.ocrText.lineSequence().first().take(120),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            MpDivider()
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+        },
+        back = { onFlipBack ->
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TextButton(onClick = onOpen) {
-                    Text(stringResource(R.string.open), style = MaterialTheme.typography.labelLarge)
+                DocumentHeader(item)
+                if (item.ocrText.isNotBlank()) {
+                    Text(
+                        text = item.ocrText.take(700),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MpColors.OnSurfaceVariant,
+                        maxLines = 10,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                if (hasContacts) {
-                    MpIconButton(Icons.Filled.Send, stringResource(R.string.send), onShare, tint = MpColors.Primary)
+                MpDivider()
+                DocumentActions(
+                    item = item,
+                    hasContacts = hasContacts,
+                    onOpen = onOpen,
+                    onShare = onShare,
+                    onExpiry = onExpiry,
+                    onDelete = onDelete,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    MpFlipButton(
+                        text = stringResource(R.string.back_to_front),
+                        onClick = onFlipBack,
+                    )
                 }
-                MpIconButton(Icons.Filled.DateRange, stringResource(R.string.expiry), onExpiry, tint = MpColors.Primary)
-                MpIconButton(Icons.Filled.Delete, stringResource(R.string.delete), onDelete, tint = MpColors.Error)
+            }
+        },
+    )
+}
+
+@Composable
+private fun DocumentHeader(item: UiItem) {
+    val expiry = expiryLabel(item.expiresAt)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ItemTypeIcon(type = item.type)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = typeLabel(item.type),
+                style = MaterialTheme.typography.labelSmall,
+                color = MpColors.Primary,
+            )
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                if (item.pendingUpload) {
+                    MpBadge(stringResource(R.string.pending_upload), MpBadgeTone.Warning)
+                }
+                if (expiry != null) {
+                    val expired = item.expiresAt?.let { value ->
+                        runCatching { LocalDate.parse(value.take(10)).isBefore(LocalDate.now()) }
+                            .getOrDefault(false)
+                    } ?: false
+                    MpBadge(
+                        text = expiry,
+                        tone = if (expired) MpBadgeTone.Danger else MpBadgeTone.Warning,
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun DocumentActions(
+    item: UiItem,
+    hasContacts: Boolean,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onExpiry: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = onOpen) {
+            Text(stringResource(R.string.open), style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        if (hasContacts) {
+            MpIconButton(Icons.Filled.Send, stringResource(R.string.send), onShare, tint = MpColors.Primary)
+        }
+        MpIconButton(Icons.Filled.DateRange, stringResource(R.string.expiry), onExpiry, tint = MpColors.Primary)
+        MpIconButton(Icons.Filled.Delete, stringResource(R.string.delete), onDelete, tint = MpColors.Error)
     }
 }
 

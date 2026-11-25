@@ -827,4 +827,17 @@
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="back_of_pass">Back of pass</string>
+    <string name="all_data">All details</string>
+    <string name="view_back">View back</string>
+    <string name="back_to_front">Back to front</string>
+    <string name="flip_hint">Flip for the code and all details.</string>
+    <string name="protected_by_mypass">Protected by My Pass</string>
+    <string name="departure">Departure</string>
+    <string name="address">Address</string>
+    <string name="coordinates">Coordinates</string>
+    <string name="number">Number</string>
+    <string name="expires">Valid until</string>
+    <string name="passenger">Passenger</string>
+    <string name="carrier">Airline</string>
 </resources>

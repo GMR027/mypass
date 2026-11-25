@@ -153,6 +153,7 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var groupFilter by remember { mutableStateOf("all") }
+    var selectedCredentialId by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<UiItem?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val context = LocalContext.current
@@ -203,6 +204,12 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
             ).map { group -> group to buckets.getValue(group) }
         } else {
             listOf("" to visible)
+        }
+    }
+
+    LaunchedEffect(visible.map { it.id }) {
+        if (selectedCredentialId != null && visible.none { it.id == selectedCredentialId }) {
+            selectedCredentialId = null
         }
     }
 
@@ -364,16 +371,36 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                             )
                         }
                     }
-                    gridItems(groupItems, key = { it.id }) { item ->
-                        CredentialCard(
-                            item = item,
-                            now = now,
-                            context = context,
-                            onEdit = { viewModel.editCredential(item) },
-                            onDelete = { deleteTarget = item },
-                            onFavorite = { viewModel.toggleCredentialFavorite(item) },
-                            onOpenAttachment = { viewModel.openItem(item) },
-                        )
+                    val selectedIndex = groupItems.indexOfFirst { it.id == selectedCredentialId }
+                        .takeIf { it >= 0 }
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "stack:$group") {
+                        MpCascadeStack(selectedIndex = selectedIndex) {
+                            groupItems.forEachIndexed { index, item ->
+                                if (index == selectedIndex) {
+                                    CredentialFlipCard(
+                                        item = item,
+                                        now = now,
+                                        context = context,
+                                        onEdit = { viewModel.editCredential(item) },
+                                        onDelete = { deleteTarget = item },
+                                        onFavorite = { viewModel.toggleCredentialFavorite(item) },
+                                        onOpenAttachment = { viewModel.openItem(item) },
+                                    )
+                                } else {
+                                    CredentialCard(
+                                        item = item,
+                                        now = now,
+                                        context = context,
+                                        headerOnly = true,
+                                        onSelect = { selectedCredentialId = item.id },
+                                        onEdit = { viewModel.editCredential(item) },
+                                        onDelete = { deleteTarget = item },
+                                        onFavorite = { viewModel.toggleCredentialFavorite(item) },
+                                        onOpenAttachment = { viewModel.openItem(item) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -386,6 +413,8 @@ private fun CredentialCard(
     item: UiItem,
     now: Long,
     context: Context,
+    headerOnly: Boolean = false,
+    onSelect: (() -> Unit)? = null,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onFavorite: () -> Unit,
@@ -410,7 +439,11 @@ private fun CredentialCard(
     val hasAppearance = credential.appearanceMode != "none"
         && (credential.appearanceColor.isNotBlank() || bannerBitmap != null)
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onSelect != null) Modifier.clickable(onClick = onSelect) else Modifier),
+    ) {
         val compact = maxWidth < 420.dp
         val padding = if (compact) 16.dp else 20.dp
         val body: @Composable () -> Unit = {
@@ -435,7 +468,9 @@ private fun CredentialCard(
             ) {
                 Column {
                     CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
-                    body()
+                    if (!headerOnly) {
+                        body()
+                    }
                 }
             }
         } else if (credential.appearanceMode == "banner") {
@@ -467,8 +502,10 @@ private fun CredentialCard(
                             CredentialHead(item, credential, dark = true, compact = compact, onFavorite = onFavorite)
                         }
                     }
-                    Column(modifier = Modifier.padding(padding)) {
-                        body()
+                    if (!headerOnly) {
+                        Column(modifier = Modifier.padding(padding)) {
+                            body()
+                        }
                     }
                 }
             }
@@ -495,11 +532,164 @@ private fun CredentialCard(
                                 .padding(padding),
                         ) {
                             CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
-                            body()
+                            if (!headerOnly) {
+                                body()
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CredentialFlipCard(
+    item: UiItem,
+    now: Long,
+    context: Context,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onFavorite: () -> Unit,
+    onOpenAttachment: () -> Unit,
+) {
+    val credential = item.credential ?: return
+    var revealPassword by remember(item.id) { mutableStateOf(false) }
+
+    LaunchedEffect(revealPassword) {
+        if (revealPassword) {
+            delay(30_000)
+            revealPassword = false
+        }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 420.dp
+
+        MpFlipCard(
+            itemKey = item.id,
+            shape = MaterialTheme.shapes.large,
+            containerColor = MpColors.Surface,
+            front = { onFlip ->
+                Column {
+                    CredentialFlipHeader(
+                        item = item,
+                        credential = credential,
+                        compact = compact,
+                        onFavorite = onFavorite,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        MpFlipButton(
+                            text = stringResource(R.string.view_back),
+                            onClick = onFlip,
+                        )
+                    }
+                }
+            },
+            back = { onFlipBack ->
+                Column {
+                    CredentialFlipHeader(
+                        item = item,
+                        credential = credential,
+                        compact = compact,
+                        onFavorite = onFavorite,
+                    )
+                    Column(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CredentialBody(
+                            item = item,
+                            credential = credential,
+                            now = now,
+                            context = context,
+                            revealPassword = revealPassword,
+                            compact = compact,
+                            onToggleReveal = { revealPassword = !revealPassword },
+                            onEdit = onEdit,
+                            onDelete = onDelete,
+                            onOpenAttachment = onOpenAttachment,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            MpFlipButton(
+                                text = stringResource(R.string.back_to_front),
+                                onClick = onFlipBack,
+                            )
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CredentialFlipHeader(
+    item: UiItem,
+    credential: UiCredential,
+    compact: Boolean,
+    onFavorite: () -> Unit,
+) {
+    val bannerBitmap = remember(credential.appearanceImage) {
+        credential.appearanceImage?.let(::decodeDataUrl)
+    }
+    val bannerColor = runCatching {
+        Color(android.graphics.Color.parseColor(credential.appearanceColor))
+    }.getOrDefault(MpColors.Primary)
+    val hasAppearance = credential.appearanceMode != "none"
+        && (credential.appearanceColor.isNotBlank() || bannerBitmap != null)
+
+    if (!hasAppearance) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            CredentialHead(
+                item = item,
+                credential = credential,
+                dark = false,
+                compact = compact,
+                onFavorite = onFavorite,
+            )
+        }
+        return
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bannerColor),
+    ) {
+        bannerBitmap?.let {
+            Image(
+                bitmap = it.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.24f), Color.Black.copy(alpha = 0.5f)),
+                    ),
+                ),
+        )
+        Column(modifier = Modifier.padding(18.dp)) {
+            CredentialHead(
+                item = item,
+                credential = credential,
+                dark = true,
+                compact = compact,
+                onFavorite = onFavorite,
+            )
         }
     }
 }
