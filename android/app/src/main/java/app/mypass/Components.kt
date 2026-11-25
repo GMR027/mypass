@@ -130,7 +130,7 @@ fun MpLogo(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(if (inverse) Color.White else Color.Transparent),
+                .background(if (inverse) Color.White else if (MpTheme.isDark) MpColors.BrandMark else Color.Transparent),
             contentAlignment = Alignment.Center,
         ) {
             Image(
@@ -185,7 +185,7 @@ fun MpButton(
                 color = when (variant) {
                     MpButtonVariant.Primary -> MpColors.OnPrimary
                     MpButtonVariant.Danger -> MpColors.OnErrorContainer
-                    MpButtonVariant.Destructive -> Color.White
+                    MpButtonVariant.Destructive -> MpColors.OnError
                     else -> MpColors.Primary
                 },
             )
@@ -210,7 +210,7 @@ fun MpButton(
         MpButtonVariant.Primary -> {
             val shape = MaterialTheme.shapes.medium
             val brush = if (enabled && !loading) {
-                MpGradients.Brand
+                MpGradients.PrimaryButton
             } else {
                 Brush.linearGradient(listOf(MpColors.Primary.copy(alpha = 0.35f), MpColors.Primary.copy(alpha = 0.28f)))
             }
@@ -225,7 +225,7 @@ fun MpButton(
                     containerColor = Color.Transparent,
                     contentColor = MpColors.OnPrimary,
                     disabledContainerColor = Color.Transparent,
-                    disabledContentColor = Color.White.copy(alpha = 0.8f),
+                    disabledContentColor = MpColors.OnPrimary.copy(alpha = 0.8f),
                 ),
                 elevation = ButtonDefaults.buttonElevation(
                     defaultElevation = 0.dp,
@@ -284,9 +284,9 @@ fun MpButton(
             shape = MaterialTheme.shapes.medium,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MpColors.Error,
-                contentColor = Color.White,
+                contentColor = MpColors.OnError,
                 disabledContainerColor = MpColors.Error.copy(alpha = 0.35f),
-                disabledContentColor = Color.White.copy(alpha = 0.8f),
+                disabledContentColor = MpColors.OnError.copy(alpha = 0.8f),
             ),
             contentPadding = resolvedPadding,
         ) { content() }
@@ -328,7 +328,7 @@ fun MpCard(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
         color = MpColors.Surface,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        border = BorderStroke(1.dp, MpColors.Border),
         shadowElevation = 2.dp,
     ) {
         Box(modifier = Modifier.padding(contentPadding)) {
@@ -343,6 +343,7 @@ fun MpHeroPanel(
     contentPadding: PaddingValues = PaddingValues(24.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val heroAccent = MpColors.Accent
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(32.dp))
@@ -350,7 +351,7 @@ fun MpHeroPanel(
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             drawCircle(
-                color = MpColors.Accent.copy(alpha = 0.16f),
+                color = heroAccent.copy(alpha = 0.16f),
                 radius = size.minDimension * 0.42f,
                 center = androidx.compose.ui.geometry.Offset(size.width * 0.92f, size.height * 0.04f),
             )
@@ -567,8 +568,8 @@ fun MpTextField(
             focusedLabelColor = MpColors.Primary,
             unfocusedLabelColor = MpColors.OnSurfaceVariant,
             cursorColor = MpColors.Primary,
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
+            focusedContainerColor = MpColors.Surface,
+            unfocusedContainerColor = MpColors.Surface,
             disabledContainerColor = MpColors.SurfaceLow.copy(alpha = 0.5f),
         ),
     )
@@ -688,7 +689,7 @@ fun MpDateWheelDialog(
                     .fillMaxWidth()
                     .wrapContentHeight(),
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                color = Color(0xFFF4F4F6),
+                color = MpColors.SurfaceLow,
             ) {
                 Column(
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 24.dp),
@@ -742,7 +743,7 @@ fun MpDateWheelDialog(
                                 .align(Alignment.Center)
                                 .fillMaxWidth()
                                 .height(46.dp)
-                                .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(14.dp)),
+                                .background(MpColors.Surface.copy(alpha = 0.9f), RoundedCornerShape(14.dp)),
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1007,9 +1008,9 @@ fun MpSwitchRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
+                checkedThumbColor = MpColors.OnPrimary,
                 checkedTrackColor = MpColors.Primary,
-                uncheckedThumbColor = Color.White,
+                uncheckedThumbColor = MpColors.Surface,
                 uncheckedTrackColor = MpColors.OutlineVariant,
                 uncheckedBorderColor = Color.Transparent,
             ),

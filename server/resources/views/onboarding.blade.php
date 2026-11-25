@@ -59,7 +59,7 @@
 
             <form id="onboarding-form" class="mp-card mp-card-pad space-y-6" hidden>
                 <div class="flex items-start gap-4 rounded-xl bg-surface-container-low p-4">
-                    <span class="mp-icon-tile shrink-0 bg-white">
+                    <span class="mp-icon-tile shrink-0 bg-paper">
                         <x-icon name="enhanced_encryption" class="text-[24px]" />
                     </span>
                     <div>
@@ -134,7 +134,7 @@
                 <div class="mp-card overflow-hidden">
                     <div class="border-b border-secondary/20 bg-secondary-fixed/60 p-5 md:p-7">
                         <div class="flex items-start gap-4">
-                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-secondary">
+                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-paper text-secondary">
                                 <x-icon name="security" class="text-[25px]" />
                             </span>
                             <div>

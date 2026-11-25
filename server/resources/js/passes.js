@@ -351,40 +351,78 @@ function stackSummary(pass) {
     return [pass.holder, fields.number, fields.expires ? formatDate(fields.expires) : ''].filter(Boolean).join(' · ');
 }
 
-function createPassCardElement(item, options = {}) {
-    const {
-        interactive = true,
-        selected = false,
-        compact = false,
-        preview = false,
-        badge = null,
-        highlight = false,
-        headerOnly = false,
-    } = options;
-    const pass = passFromItem(item);
-    const node = document.createElement(interactive ? 'button' : 'article');
-    if (interactive) {
-        node.type = 'button';
-    }
-    node.className = [
-        'mp-pass-card',
-        selected ? 'is-selected' : '',
-        compact ? 'mp-pass-card--compact' : '',
-        highlight ? 'mp-pass-card--highlight' : '',
-        headerOnly ? 'mp-pass-card--stack-header' : '',
-    ].filter(Boolean).join(' ');
-    node.dataset.category = pass.category;
-    node.dataset.passId = item.id;
-    node.style.setProperty('--pass-color', themeColor(pass));
-    applyAppearance(node, pass.appearance);
-    if (interactive) {
-        node.setAttribute('aria-pressed', selected ? 'true' : 'false');
+const FIELD_LABELS = {
+    origin: 'Origen',
+    destination: 'Destino',
+    flight: 'Vuelo',
+    date: 'Fecha',
+    departure: 'Salida',
+    boarding: 'Abordaje',
+    boarding_start: 'Inicio de abordaje',
+    boarding_end: 'Cierre de abordaje',
+    gate: 'Puerta',
+    terminal: 'Terminal',
+    seat: 'Asiento',
+    zone: 'Zona',
+    pnr: 'Código de reserva',
+    location: 'Ubicación',
+    address: 'Dirección',
+    coordinates: 'Coordenadas',
+    time: 'Hora',
+    section: 'Sección',
+    row: 'Fila',
+    route: 'Ruta',
+    platform: 'Andén',
+    carriage: 'Coche',
+    number: 'Número',
+    level: 'Nivel',
+    expires: 'Vigente hasta',
+    birth: 'Nacimiento',
+    holder: 'Titular',
+    passenger: 'Pasajero',
+    carrier: 'Aerolínea',
+    code_value: 'Código',
+};
+
+const DATE_FIELDS = new Set(['date', 'expires', 'birth']);
+const TIME_FIELDS = new Set(['time', 'departure', 'boarding', 'boarding_start', 'boarding_end']);
+
+function fieldLabel(key) {
+    return FIELD_LABELS[key] ? t(FIELD_LABELS[key]) : key.replaceAll('_', ' ');
+}
+
+function fieldValue(key, value) {
+    if (DATE_FIELDS.has(key)) {
+        return formatDate(value);
     }
 
-    const body = el('div', 'mp-pass-card__body');
+    if (TIME_FIELDS.has(key)) {
+        return formatTime(value);
+    }
+
+    return String(value);
+}
+
+function passDetailEntries(pass) {
+    return Object.entries(pass.fields || {})
+        .filter(([, value]) => value !== null && value !== undefined && value !== '')
+        .map(([key, value]) => [fieldLabel(key), fieldValue(key, value)]);
+}
+
+function codeFormatLabel(pass) {
+    return {
+        qr: 'QR',
+        pdf417: 'PDF417',
+        aztec: 'Aztec',
+        code128: 'Code 128',
+    }[pass.code?.format || 'qr'] || 'QR';
+}
+
+function passHeader(pass, badge = null) {
     const header = el('div', 'flex items-start justify-between gap-3');
     const identity = el('div', 'flex min-w-0 items-center gap-2.5');
     const tile = el('span', 'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/15');
+
     if (pass.logo) {
         const logo = document.createElement('img');
         logo.src = pass.logo;
@@ -394,21 +432,18 @@ function createPassCardElement(item, options = {}) {
     } else {
         tile.appendChild(icon(categoryIcon(pass.category), 'text-[20px]'));
     }
+
     const names = el('div', 'min-w-0');
     names.appendChild(el('p', 'mp-pass-card__eyebrow truncate', pass.issuer || categoryLabel(pass.category)));
     names.appendChild(el('p', 'mp-pass-card__title truncate', pass.title));
     identity.append(tile, names);
     header.append(identity, el('span', 'mp-pass-card__chip shrink-0', badge || badgeFor(pass)));
-    body.appendChild(header);
 
-    if (headerOnly) {
-        const summary = stackSummary(pass);
-        if (summary) {
-            body.appendChild(el('p', 'mp-pass-card__stack-summary mt-1.5 truncate', summary));
-        }
-        node.appendChild(body);
-        return node;
-    }
+    return header;
+}
+
+function appendPassContent(body, pass, item, options = {}) {
+    const { preview = false } = options;
 
     if (pass.category === 'flight') {
         const route = el('div', 'mp-pass-card__route mt-3');
@@ -438,6 +473,7 @@ function createPassCardElement(item, options = {}) {
             meta.appendChild(cell);
         }
         body.appendChild(meta);
+
         const boarding = boardingStrip(pass.fields);
         if (boarding) {
             body.appendChild(boarding);
@@ -480,6 +516,7 @@ function createPassCardElement(item, options = {}) {
         right.appendChild(el('p', 'text-[14px] font-bold', pass.fields?.date ? formatDate(pass.fields.date) : pass.fields?.expires ? formatDate(pass.fields.expires) : '—'));
         details.append(left, right);
         body.appendChild(details);
+
         if (pass.fields?.terminal || pass.fields?.platform || pass.fields?.carriage || pass.fields?.seat) {
             const meta = el('div', 'mt-3 grid grid-cols-2 gap-1 rounded-xl bg-black/20 p-2 text-center');
             for (const [label, value] of [
@@ -495,6 +532,7 @@ function createPassCardElement(item, options = {}) {
             }
             body.appendChild(meta);
         }
+
         const boarding = boardingStrip(pass.fields);
         if (boarding) {
             body.appendChild(boarding);
@@ -508,6 +546,7 @@ function createPassCardElement(item, options = {}) {
         right.textContent = (pass.holder || pass.title || '?').slice(0, 2).toUpperCase();
         holder.append(left, right);
         body.appendChild(holder);
+
         if (pass.fields?.number || pass.fields?.level || pass.fields?.expires) {
             const footer = el('div', 'mp-pass-card__footer');
             if (pass.fields?.number) {
@@ -522,8 +561,215 @@ function createPassCardElement(item, options = {}) {
             body.appendChild(footer);
         }
     }
+}
 
+function flipButton(direction) {
+    const button = el('button', 'mp-pass-flip__toggle');
+    button.type = 'button';
+    button.dataset.flipToggle = direction;
+    button.appendChild(icon(direction === 'back' ? 'flip' : 'undo', 'text-[18px]'));
+    button.appendChild(document.createTextNode(direction === 'back' ? t('Ver reverso') : t('Volver al frente')));
+
+    return button;
+}
+
+function passActionButton(action, iconName, label, primary = false) {
+    const button = el('button', [
+        'mp-pass-back__action',
+        primary ? 'mp-pass-back__action--primary' : '',
+    ].filter(Boolean).join(' '));
+    button.type = 'button';
+    button.dataset.passAction = action;
+    button.appendChild(icon(iconName, 'text-[18px]'));
+    button.appendChild(document.createTextNode(label));
+
+    return button;
+}
+
+function buildPassFrontFace(pass, item, options) {
+    const face = el('div', 'mp-pass-flip__face mp-pass-flip__face--front');
+    const body = el('div', 'mp-pass-card__body');
+    body.appendChild(passHeader(pass, options.badge));
+    appendPassContent(body, pass, item, options);
+
+    const flipRow = el('div', 'mt-3 flex items-center justify-between gap-3 border-t border-white/15 pt-3');
+    flipRow.appendChild(el('p', 'text-[11px] leading-snug opacity-70', t('Voltea para ver el código y todos los datos.')));
+    flipRow.appendChild(flipButton('back'));
+    body.appendChild(flipRow);
+    face.appendChild(body);
+
+    return face;
+}
+
+function buildPassBackFace(pass, item, options) {
+    const face = el('div', 'mp-pass-flip__face mp-pass-flip__face--back');
+    const body = el('div', 'mp-pass-card__body');
+
+    const header = el('div', 'flex items-start justify-between gap-3');
+    const names = el('div', 'min-w-0');
+    names.appendChild(el('p', 'mp-pass-card__eyebrow truncate', t('Reverso del pase')));
+    names.appendChild(el('p', 'mp-pass-card__title truncate', pass.title));
+    if (pass.issuer) {
+        names.appendChild(el('p', 'mt-0.5 truncate text-[11px] opacity-65', pass.issuer));
+    }
+    header.append(names, el('span', 'mp-pass-card__chip shrink-0', badgeFor(pass)));
+    body.appendChild(header);
+
+    const code = el('div', 'mp-pass-back__code mp-scan-sheet');
+    const canvasWrap = el('div', 'mp-code-canvas');
+    canvasWrap.dataset.cardCode = 'true';
+    code.appendChild(canvasWrap);
+    code.appendChild(el('p', 'mp-pass-back__caption', codeFormatLabel(pass)));
+    body.appendChild(code);
+
+    const details = passDetailEntries(pass);
+    if (details.length > 0) {
+        body.appendChild(el('p', 'mp-pass-back__section-title', t('Todos los datos')));
+        const grid = el('div', 'mp-pass-back__details');
+        for (const [label, value] of details) {
+            const cell = el('div', 'mp-pass-back__detail');
+            cell.appendChild(el('span', null, label));
+            cell.appendChild(el('strong', null, value));
+            grid.appendChild(cell);
+        }
+        body.appendChild(grid);
+    }
+
+    if (pass.notes.length > 0) {
+        body.appendChild(el('p', 'mp-pass-back__section-title', t('Notas')));
+        const notes = el('div', 'mp-pass-back__notes');
+        for (const note of pass.notes.slice(0, 6)) {
+            notes.appendChild(el('span', 'mp-pass-back__note', note));
+        }
+        body.appendChild(notes);
+    }
+
+    const actions = el('div', 'mp-pass-back__actions');
+    actions.appendChild(passActionButton('present', 'qr_code_2', t('Presentar código'), true));
+    const share = passActionButton('share', 'share', t('Compartir'));
+    share.disabled = !options.shareAllowed;
+    if (share.disabled) {
+        share.title = t('Agrega un contacto de confianza para compartir.');
+    }
+    actions.appendChild(share);
+    actions.appendChild(passActionButton('edit', 'edit', t('Editar pase')));
+    if (options.mapUrl) {
+        actions.appendChild(passActionButton('map', 'map', t('Cómo llegar')));
+    }
+    if (options.calendarAvailable) {
+        actions.appendChild(passActionButton('calendar', 'calendar_month', t('Agregar al calendario')));
+    }
+    body.appendChild(actions);
+
+    const footer = el('div', 'mp-pass-back__footer');
+    footer.appendChild(el('span', null, item.id.slice(0, 8).toUpperCase()));
+    footer.appendChild(el('span', null, t('Protegido por My Pass')));
+    body.appendChild(footer);
+
+    const flipRow = el('div', 'mp-pass-back__flip-row');
+    flipRow.appendChild(flipButton('front'));
+    body.appendChild(flipRow);
+    face.appendChild(body);
+
+    return face;
+}
+
+function syncFlipFaceAccessibility(card, flipped) {
+    const front = card.querySelector('.mp-pass-flip__face--front');
+    const back = card.querySelector('.mp-pass-flip__face--back');
+    if (!front || !back) {
+        return;
+    }
+
+    const setHidden = (face, hidden) => {
+        face.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+        if (hidden) {
+            face.setAttribute('inert', '');
+        } else {
+            face.removeAttribute('inert');
+        }
+    };
+
+    setHidden(front, flipped);
+    setHidden(back, !flipped);
+}
+
+function createPassCardElement(item, options = {}) {
+    const {
+        interactive = true,
+        selected = false,
+        compact = false,
+        preview = false,
+        badge = null,
+        highlight = false,
+        headerOnly = false,
+        flippable = false,
+        flipped = false,
+        shareAllowed = true,
+    } = options;
+    const pass = passFromItem(item);
+    const isFlip = flippable && !preview;
+    const node = document.createElement(isFlip || !interactive ? 'article' : 'button');
+
+    if (!isFlip && interactive) {
+        node.type = 'button';
+    }
+
+    node.className = [
+        'mp-pass-card',
+        selected ? 'is-selected' : '',
+        compact ? 'mp-pass-card--compact' : '',
+        highlight ? 'mp-pass-card--highlight' : '',
+        headerOnly ? 'mp-pass-card--stack-header' : '',
+        isFlip ? 'mp-pass-card--flip' : '',
+    ].filter(Boolean).join(' ');
+    node.dataset.category = pass.category;
+    node.dataset.passId = item.id;
+    node.style.setProperty('--pass-color', themeColor(pass));
+    applyAppearance(node, pass.appearance);
+
+    if (interactive && !isFlip) {
+        node.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    }
+
+    if (isFlip) {
+        const flip = el('div', 'mp-pass-flip');
+        const inner = el('div', 'mp-pass-flip__inner');
+        const mapUrl = passMapUrl(pass);
+        const faceOptions = {
+            ...options,
+            badge: badge || badgeFor(pass),
+            shareAllowed,
+            mapUrl,
+            calendarAvailable: Boolean(passCalendar(item, pass)),
+        };
+        inner.append(
+            buildPassFrontFace(pass, item, faceOptions),
+            buildPassBackFace(pass, item, faceOptions),
+        );
+        flip.appendChild(inner);
+        node.appendChild(flip);
+        node.classList.toggle('is-flipped', Boolean(flipped));
+        syncFlipFaceAccessibility(node, Boolean(flipped));
+
+        return node;
+    }
+
+    const body = el('div', 'mp-pass-card__body');
+    body.appendChild(passHeader(pass, badge));
+
+    if (headerOnly) {
+        const summary = stackSummary(pass);
+        if (summary) {
+            body.appendChild(el('p', 'mp-pass-card__stack-summary mt-1.5 truncate', summary));
+        }
+        node.appendChild(body);
+        return node;
+    }
+
+    appendPassContent(body, pass, item, { preview });
     node.appendChild(body);
+
     return node;
 }
 
@@ -604,6 +850,7 @@ class WalletApp {
         this.filter = 'all';
         this.view = localStorage.getItem('mypass.passView') === 'grid' ? 'grid' : 'stack';
         this.selectedId = null;
+        this.flippedId = null;
         this.wakeLock = null;
         this.passList = [];
         this.bind();
@@ -743,6 +990,12 @@ class WalletApp {
             this.presentSelected();
         });
 
+        window.addEventListener('resize', () => {
+            clearTimeout(this.flipResizeTimer);
+            this.flipResizeTimer = setTimeout(() => this.syncAllFlipHeights(), 120);
+        });
+        document.fonts?.ready?.then(() => this.syncAllFlipHeights()).catch(() => {});
+
         this.setView(this.view, false);
     }
 
@@ -764,8 +1017,12 @@ class WalletApp {
 
     setItems(items) {
         this.items = Array.isArray(items) ? items : [];
+        const previousId = this.selectedId;
         if (!this.selectedId || !this.allPasses().some((pass) => pass.item.id === this.selectedId)) {
             this.selectedId = this.filteredActive()[0]?.item.id ?? this.allPasses()[0]?.item.id ?? null;
+        }
+        if (this.selectedId !== previousId) {
+            this.flippedId = null;
         }
         this.refresh();
     }
@@ -870,6 +1127,10 @@ class WalletApp {
             return;
         }
 
+        if (this.flippedId && this.flippedId !== this.selectedId) {
+            this.flippedId = null;
+        }
+
         const active = this.activePasses();
         const filtered = this.filteredActive();
         const archive = this.archivedPasses();
@@ -929,35 +1190,44 @@ class WalletApp {
         entries.forEach((entry, index) => {
             const selected = entry.item.id === this.selectedId;
             const next = this.nextPassEntry();
+            const flipped = selected && this.flippedId === entry.item.id;
+            const shareAllowed = entry.pass.options?.share !== false && this.options.canShare();
             const card = createPassCardElement(entry.item, {
                 selected,
                 badge: next?.item.id === entry.item.id ? t('Próximo') : null,
                 highlight: next?.item.id === entry.item.id,
                 headerOnly: this.view === 'stack' && !selected,
+                flippable: selected,
+                flipped,
+                shareAllowed,
             });
-            card.style.zIndex = selected ? String(40) : String(30 - index);
-            card.addEventListener('click', () => this.select(entry.item.id));
-            card.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    this.select(entry.item.id);
-                }
-            });
+            card.style.setProperty('--stack-index', String(index));
 
-            if (selected) {
-                const codeBox = el('div', 'mp-pass-card__mobile-code');
-                const canvasWrap = el('div', 'flex min-h-[170px] items-center justify-center');
-                canvasWrap.dataset.cardCode = 'true';
-                codeBox.appendChild(canvasWrap);
-                codeBox.appendChild(el('p', 'mt-2 text-center text-[11px] text-on-surface-variant', t('Toca «Presentar código» para pantalla completa.')));
-                card.appendChild(codeBox);
-                renderCodeInto(canvasWrap, passPayload(entry.item, entry.pass), entry.pass.code?.format || 'qr', {
-                    scale: 3,
-                    includeText: false,
+            if (!selected) {
+                card.addEventListener('click', () => this.select(entry.item.id));
+                card.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        this.select(entry.item.id);
+                    }
                 });
+            } else {
+                this.bindFlipCardActions(card, entry.item.id, shareAllowed);
+
+                const codeWrap = card.querySelector('[data-card-code]');
+                if (codeWrap) {
+                    renderCodeInto(codeWrap, passPayload(entry.item, entry.pass), entry.pass.code?.format || 'qr', {
+                        scale: 3,
+                        includeText: false,
+                    }).then(() => this.syncFlipHeight(card));
+                }
             }
 
             this.stack.appendChild(card);
+
+            if (selected) {
+                window.requestAnimationFrame(() => this.syncFlipHeight(card));
+            }
         });
     }
 
@@ -966,7 +1236,7 @@ class WalletApp {
         if (!entry) {
             this.detailTag.textContent = t('Selecciona un pase');
             this.detailTitle.textContent = t('Tus pases aparecerán aquí');
-            this.detailSubtitle.textContent = t('Elige una tarjeta de la pila para ver su código.');
+            this.detailSubtitle.textContent = t('Elige una tarjeta de la pila para ver su código y su reverso.');
             this.detailNotes.replaceChildren();
             this.codeCanvas.replaceChildren();
             this.codeCaption.textContent = '';
@@ -1067,9 +1337,95 @@ class WalletApp {
     }
 
     select(id) {
+        if (this.selectedId !== id) {
+            this.flippedId = null;
+        }
         this.selectedId = id;
         this.refresh();
         window.dispatchEvent(new CustomEvent('mypass:item-open', { detail: { id } }));
+    }
+
+    toggleFlip(id) {
+        const card = this.stack?.querySelector(`[data-pass-id="${id}"]`);
+        if (!card || !card.classList.contains('mp-pass-card--flip')) {
+            return;
+        }
+
+        const flipped = !card.classList.contains('is-flipped');
+        card.classList.toggle('is-flipped', flipped);
+        this.flippedId = flipped ? id : null;
+        syncFlipFaceAccessibility(card, flipped);
+        this.syncFlipHeight(card);
+
+        const target = card.querySelector(
+            flipped
+                ? '.mp-pass-flip__face--back [data-flip-toggle]'
+                : '.mp-pass-flip__face--front [data-flip-toggle]',
+        );
+        window.setTimeout(() => target?.focus({ preventScroll: true }), 60);
+    }
+
+    syncFlipHeight(card) {
+        if (!card?.classList.contains('mp-pass-card--flip')) {
+            return;
+        }
+
+        const flipped = card.classList.contains('is-flipped');
+        const face = card.querySelector(
+            flipped ? '.mp-pass-flip__face--back' : '.mp-pass-flip__face--front',
+        );
+        if (!face) {
+            return;
+        }
+
+        const height = Math.ceil(face.scrollHeight);
+        if (height > 0) {
+            card.style.setProperty('--flip-height', `${height}px`);
+        }
+    }
+
+    syncAllFlipHeights() {
+        this.stack?.querySelectorAll('.mp-pass-card--flip').forEach((card) => this.syncFlipHeight(card));
+    }
+
+    bindFlipCardActions(card, itemId, shareAllowed) {
+        card.querySelectorAll('[data-flip-toggle]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleFlip(itemId);
+            });
+        });
+
+        card.querySelectorAll('[data-pass-action]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (button.disabled) {
+                    return;
+                }
+
+                switch (button.dataset.passAction) {
+                    case 'present':
+                        this.presentSelected();
+                        break;
+                    case 'share':
+                        if (shareAllowed) {
+                            this.shareSelected();
+                        }
+                        break;
+                    case 'edit':
+                        this.editSelected();
+                        break;
+                    case 'map':
+                        this.openMap();
+                        break;
+                    case 'calendar':
+                        this.addToCalendar();
+                        break;
+                }
+            });
+        });
     }
 
     setView(view, persist = true) {
@@ -1082,9 +1438,9 @@ class WalletApp {
         }
         this.viewStack?.setAttribute('aria-pressed', view === 'stack' ? 'true' : 'false');
         this.viewGrid?.setAttribute('aria-pressed', view === 'grid' ? 'true' : 'false');
-        this.viewStack?.classList.toggle('bg-white', view === 'stack');
+        this.viewStack?.classList.toggle('bg-paper', view === 'stack');
         this.viewStack?.classList.toggle('shadow-sm', view === 'stack');
-        this.viewGrid?.classList.toggle('bg-white', view === 'grid');
+        this.viewGrid?.classList.toggle('bg-paper', view === 'grid');
         this.viewGrid?.classList.toggle('shadow-sm', view === 'grid');
         if (this.activePasses().length > 0) {
             this.refresh();
@@ -1310,6 +1666,7 @@ class WalletApp {
     reset() {
         this.items = [];
         this.selectedId = null;
+        this.flippedId = null;
         this.filter = 'all';
         if (this.search) {
             this.search.value = '';

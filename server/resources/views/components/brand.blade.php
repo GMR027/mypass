@@ -7,8 +7,8 @@
         'relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl transition-transform duration-200 group-hover:-rotate-3',
         'h-11 w-11' => ! $compact,
         'h-10 w-10' => $compact,
-        'bg-white/10 ring-1 ring-white/15' => $inverse,
-        'bg-primary-fixed/70 ring-1 ring-primary/10' => ! $inverse,
+        'mp-brand-tile--inverse' => $inverse,
+        'mp-brand-tile' => ! $inverse,
     ])>
         <img src="{{ asset('images/mypass-wallet.png') }}"
              alt=""

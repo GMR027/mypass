@@ -1,5 +1,13 @@
+@php
+    $themePreference = in_array(request()->cookie('mypass_theme'), ['light', 'dark', 'system'], true)
+        ? request()->cookie('mypass_theme')
+        : 'system';
+@endphp
+
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}"
+      data-theme="{{ $themePreference }}"
+      @class(['dark' => $themePreference === 'dark'])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,8 +16,19 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon-32.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/favicon-180.png') }}">
     <link rel="manifest" href="/manifest.webmanifest">
-    <meta name="theme-color" content="#012d1d">
+    <meta name="theme-color" content="{{ $themePreference === 'dark' ? '#08120e' : '#012d1d' }}">
     <x-translations />
+    <script nonce="{{ $cspNonce }}">
+        (function () {
+            var preference = document.documentElement.getAttribute('data-theme') || 'system';
+            var dark = preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.classList.toggle('dark', dark);
+            var themeColor = document.querySelector('meta[name="theme-color"]');
+            if (themeColor) {
+                themeColor.setAttribute('content', dark ? '#08120e' : '#012d1d');
+            }
+        })();
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 @php
@@ -35,7 +54,7 @@
         };
     @endphp
 
-    <header class="sticky top-0 z-40 border-b border-white/70 bg-surface/80 backdrop-blur-xl">
+    <header class="sticky top-0 z-40 border-b border-outline-variant/40 bg-surface/80 backdrop-blur-xl">
         <div class="mp-container flex min-h-20 flex-wrap items-center justify-between gap-2 py-2.5">
             <x-brand :href="$user ? route('dashboard') : route('login')" />
 
@@ -71,12 +90,14 @@
                         {{ __('Mi billetera') }}
                     </a>
 
+                    <x-theme-toggle />
+
                     <div class="flex items-center gap-0.5 rounded-xl bg-surface-container-low p-1" aria-label="{{ __('Idioma') }}">
                         <a href="{{ route('language.switch', 'es-MX') }}"
-                           @class(['inline-flex min-h-10 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-white text-primary shadow-sm' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
+                           @class(['inline-flex min-h-10 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-paper text-primary shadow-sm' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
                            @if ($isSpanish) aria-current="true" @endif>ES</a>
                         <a href="{{ route('language.switch', 'en') }}"
-                           @class(['inline-flex min-h-10 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-white text-primary shadow-sm' => ! $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => $isSpanish])
+                           @class(['inline-flex min-h-10 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-paper text-primary shadow-sm' => ! $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => $isSpanish])
                            @if (! $isSpanish) aria-current="true" @endif>EN</a>
                     </div>
 
@@ -109,12 +130,14 @@
                 </div>
             @else
                 <nav class="flex flex-wrap items-center gap-1.5" aria-label="{{ __('Navegación principal') }}">
+                    <x-theme-toggle />
+
                     <div class="flex items-center gap-0.5 rounded-xl bg-surface-container-low p-1" aria-label="{{ __('Idioma') }}">
                         <a href="{{ route('language.switch', 'es-MX') }}"
-                           @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-white text-primary shadow-sm' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
+                           @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-paper text-primary shadow-sm' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
                            @if ($isSpanish) aria-current="true" @endif>ES</a>
                         <a href="{{ route('language.switch', 'en') }}"
-                           @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-white text-primary shadow-sm' => ! $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => $isSpanish])
+                           @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-paper text-primary shadow-sm' => ! $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => $isSpanish])
                            @if (! $isSpanish) aria-current="true" @endif>EN</a>
                     </div>
 

@@ -1002,7 +1002,7 @@ private fun PassDetailCard(
                     Text(
                         text = stringResource(R.string.pass_code_unavailable),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MpColors.OnSurfaceVariant,
+                        color = MpColors.ScanInk,
                     )
                 }
                 Text(
@@ -1012,7 +1012,7 @@ private fun PassDetailCard(
                         stringResource(R.string.pass_generated_code)
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = MpColors.Outline,
+                    color = MpColors.ScanInk,
                 )
                 MpButton(
                     text = stringResource(R.string.present_code),
@@ -1224,7 +1224,7 @@ internal fun PassPreviewCard(draft: PassDraft) {
                 Text(
                     text = codeFormatLabel(draft.codeFormat),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MpColors.Outline,
+                    color = MpColors.ScanInk,
                 )
             }
         }
@@ -1568,7 +1568,7 @@ private fun PassPresentationDialog(item: UiItem, onDismiss: () -> Unit) {
                         Text(
                             text = stringResource(R.string.pass_code_unavailable),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MpColors.OnSurfaceVariant,
+                            color = MpColors.ScanInk,
                         )
                     }
                 }
@@ -1576,7 +1576,7 @@ private fun PassPresentationDialog(item: UiItem, onDismiss: () -> Unit) {
                 Text(
                     text = stringResource(R.string.presentation_hint),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MpColors.OnSurfaceVariant,
+                    color = MpColors.ScanInk,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )

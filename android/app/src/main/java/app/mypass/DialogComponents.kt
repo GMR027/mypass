@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -70,6 +71,8 @@ enum class MpCalloutTone {
     Success,
 }
 
+@Composable
+@ReadOnlyComposable
 private fun toneBackground(tone: MpDialogTone): Color = when (tone) {
     MpDialogTone.Primary -> MpColors.PrimaryFixed
     MpDialogTone.Warning -> MpColors.SecondaryFixed
@@ -77,6 +80,8 @@ private fun toneBackground(tone: MpDialogTone): Color = when (tone) {
     MpDialogTone.Neutral -> MpColors.SurfaceHighest
 }
 
+@Composable
+@ReadOnlyComposable
 private fun toneForeground(tone: MpDialogTone): Color = when (tone) {
     MpDialogTone.Primary -> MpColors.Primary
     MpDialogTone.Warning -> MpColors.OnSecondaryFixed
@@ -144,7 +149,7 @@ fun MpDialog(
                         interactionSource = remember { MutableInteractionSource() },
                     ) { },
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White,
+                color = MpColors.Surface,
                 border = BorderStroke(1.dp, MpColors.OutlineVariant.copy(alpha = 0.45f)),
                 shadowElevation = 24.dp,
             ) {
@@ -336,7 +341,7 @@ fun MpSelectableCard(
     enabled: Boolean = true,
 ) {
     val borderColor = if (selected) MpColors.Primary else MpColors.OutlineVariant.copy(alpha = 0.65f)
-    val background = if (selected) MpColors.PrimaryFixed.copy(alpha = 0.35f) else Color.White
+    val background = if (selected) MpColors.PrimaryFixed.copy(alpha = 0.35f) else MpColors.Surface
 
     Surface(
         modifier = modifier
@@ -404,7 +409,7 @@ fun MpOptionCard(
             .heightIn(min = 64.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        color = Color.White,
+        color = MpColors.Surface,
         border = BorderStroke(1.dp, MpColors.OutlineVariant.copy(alpha = 0.6f)),
     ) {
         Row(
@@ -561,14 +566,14 @@ fun MpSummaryCard(
                 icon != null -> MpIconTile(
                     icon = icon,
                     size = 48,
-                    background = Color.White,
+                    background = MpColors.Surface,
                     tint = MpColors.Primary,
                 )
 
                 painter != null -> MpIconTile(
                     painter = painter,
                     size = 48,
-                    background = Color.White,
+                    background = MpColors.Surface,
                     tint = MpColors.Primary,
                 )
             }
@@ -608,7 +613,7 @@ fun MpFullScreenWindow(
     ) {
         Surface(
             modifier = modifier.fillMaxSize(),
-            color = Color.White,
+            color = MpColors.Surface,
         ) {
             Column(
                 modifier = Modifier

@@ -822,4 +822,9 @@
     <string name="flight_soon_title">Your flight leaves soon</string>
     <string name="transit_soon_title">Your transport leaves soon</string>
     <string name="pass_tomorrow_title">Your pass is tomorrow</string>
+    <string name="appearance">Appearance</string>
+    <string name="appearance_help">Choose how My Pass looks on this device. System mode adapts automatically.</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
 </resources>

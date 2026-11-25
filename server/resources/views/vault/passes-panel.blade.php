@@ -41,7 +41,7 @@
                         {{ __('Agregar pase') }}
                         <x-icon name="expand_more" class="text-[18px]" />
                     </button>
-                    <div id="pass-add-menu" class="absolute right-0 z-30 mt-2 w-72 rounded-2xl border border-outline-variant/60 bg-white p-2 shadow-dialog" hidden>
+                    <div id="pass-add-menu" class="absolute right-0 z-30 mt-2 w-72 rounded-2xl border border-outline-variant/60 bg-paper p-2 shadow-dialog" hidden>
                         @php
                             $newPassOptions = [
                                 'flight' => ['icon' => 'flight_takeoff', 'label' => __('Vuelo / embarque')],
@@ -123,7 +123,7 @@
 
             <div class="flex shrink-0 items-center gap-1 self-end rounded-xl bg-surface-container p-1 sm:self-auto" aria-label="{{ __('Vista de pases') }}">
                 <button id="pass-view-stack" type="button" aria-pressed="true"
-                        class="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-white px-3 text-[14px] font-semibold text-on-surface shadow-sm">
+                        class="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-paper px-3 text-[14px] font-semibold text-on-surface shadow-sm">
                     <x-icon name="layers" class="text-[18px]" />
                     {{ __('Cartera') }}
                 </button>
@@ -152,7 +152,7 @@
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
                     <div class="flex flex-wrap items-center gap-2">
                         <h3 class="mp-title-sm">{{ __('Pila de tarjetas') }}</h3>
-                        <span class="rounded-full bg-surface-container px-2 py-0.5 text-[12px] font-medium text-on-surface-variant">{{ __('Toca para abrir') }}</span>
+                        <span class="rounded-full bg-surface-container px-2 py-0.5 text-[12px] font-medium text-on-surface-variant">{{ __('Toca para abrir · Voltea para ver más') }}</span>
                     </div>
                     <span id="pass-sort-label" class="hidden text-sm font-semibold text-primary sm:inline">{{ __('Próximos primero') }}</span>
                 </div>
@@ -172,10 +172,10 @@
                     <div class="mt-4">
                         <p id="pass-detail-tag" class="mp-eyebrow">{{ __('Selecciona un pase') }}</p>
                         <h3 id="pass-detail-title" class="mp-title-md mt-1">{{ __('Tus pases aparecerán aquí') }}</h3>
-                        <p id="pass-detail-subtitle" class="mp-body-sm mt-1">{{ __('Elige una tarjeta de la pila para ver su código.') }}</p>
+                        <p id="pass-detail-subtitle" class="mp-body-sm mt-1">{{ __('Elige una tarjeta de la pila para ver su código y su reverso.') }}</p>
                     </div>
 
-                    <div class="mt-4 rounded-2xl border border-outline-variant/50 bg-white p-4 shadow-inner">
+                    <div class="mt-4 mp-scan-sheet rounded-2xl border border-outline-variant/50 bg-white p-4 shadow-inner">
                         <div id="pass-code-canvas" class="mx-auto flex min-h-[190px] w-full max-w-[260px] items-center justify-center"></div>
                         <p id="pass-code-caption" class="mt-3 break-all text-center font-mono text-[12px] text-on-surface-variant"></p>
                         <p id="pass-code-hash" class="mt-1 text-center font-mono text-[11px] text-outline"></p>
@@ -272,7 +272,7 @@
                 </button>
             </div>
             <p id="pass-presentation-meta" class="mp-body-sm mt-2"></p>
-            <div class="mt-4 flex flex-1 items-center justify-center rounded-2xl border border-outline-variant/40 bg-white p-4">
+            <div class="mt-4 flex flex-1 items-center justify-center mp-scan-sheet rounded-2xl border border-outline-variant/40 bg-white p-4">
                 <div id="pass-presentation-code" class="flex w-full max-w-[380px] items-center justify-center"></div>
             </div>
             <p id="pass-presentation-hint" class="mt-3 text-center text-sm text-on-surface-variant">{{ __('Sube el brillo de la pantalla para facilitar la lectura.') }}</p>

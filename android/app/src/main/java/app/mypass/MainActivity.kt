@@ -1,5 +1,6 @@
 package app.mypass
 
+import android.app.Activity
 import android.app.LocaleManager
 import android.content.Intent
 import android.net.Uri
@@ -130,6 +131,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -148,6 +150,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.delay
 import java.io.File
@@ -231,7 +234,16 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            MyPassTheme {
+            MyPassTheme(themeMode = state.themeMode) {
+                val isDarkTheme = MpTheme.isDark
+                val currentView = LocalView.current
+                LaunchedEffect(isDarkTheme) {
+                    val activity = currentView.context as? Activity ?: return@LaunchedEffect
+                    WindowCompat.getInsetsController(activity.window, currentView).apply {
+                        isAppearanceLightStatusBars = !isDarkTheme
+                        isAppearanceLightNavigationBars = !isDarkTheme
+                    }
+                }
                 CompositionLocalProvider(
                     LocalDensity provides Density(
                         density = baseDensity.density,
@@ -425,9 +437,10 @@ private fun AuthShell(content: @Composable () -> Unit) {
                         .fillMaxHeight()
                         .background(MpGradients.BrandDeep),
                 ) {
+                    val authAccent = MpColors.Accent
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         drawCircle(
-                            color = MpColors.Accent.copy(alpha = 0.2f),
+                            color = authAccent.copy(alpha = 0.2f),
                             radius = size.minDimension * 0.34f,
                             center = androidx.compose.ui.geometry.Offset(size.width * 0.96f, size.height * 0.04f),
                         )
@@ -665,7 +678,7 @@ private fun AuthCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(32.dp),
         color = MpColors.Surface,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        border = BorderStroke(1.dp, MpColors.Border.copy(alpha = 0.9f)),
         shadowElevation = 12.dp,
     ) {
         Column(
@@ -1950,6 +1963,7 @@ private fun ShareRequestCard(request: UiShareRequest, onDecline: () -> Unit, onC
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
     val context = LocalContext.current
@@ -2025,7 +2039,7 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                                         .size(28.dp),
                                     shape = CircleShape,
                                     color = MpColors.Primary,
-                                    border = BorderStroke(2.dp, Color.White),
+                                    border = BorderStroke(2.dp, MpColors.Surface),
                                 ) {
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
@@ -2104,6 +2118,42 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                             compact = true,
                             maxLines = 1,
                         )
+                    }
+                }
+            }
+
+            item {
+                MpCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.appearance),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.appearance_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            MpFilterChip(
+                                text = stringResource(R.string.theme_system),
+                                selected = state.themeMode == ThemeMode.System,
+                                onClick = { viewModel.setThemeMode(ThemeMode.System) },
+                            )
+                            MpFilterChip(
+                                text = stringResource(R.string.theme_light),
+                                selected = state.themeMode == ThemeMode.Light,
+                                onClick = { viewModel.setThemeMode(ThemeMode.Light) },
+                            )
+                            MpFilterChip(
+                                text = stringResource(R.string.theme_dark),
+                                selected = state.themeMode == ThemeMode.Dark,
+                                onClick = { viewModel.setThemeMode(ThemeMode.Dark) },
+                            )
+                        }
                     }
                 }
             }
@@ -2523,7 +2573,7 @@ internal fun MpTopBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White),
+            .background(MpColors.Surface),
     ) {
         Row(
             modifier = Modifier
@@ -2542,7 +2592,7 @@ internal fun MpTopBar(
                         stringResource(R.string.notifications_title)
                     },
                     onClick = onNotifications,
-                    container = Color.White,
+                    container = MpColors.Surface,
                     tint = MpColors.OnSurfaceVariant,
                     shape = CircleShape,
                 )
@@ -2557,7 +2607,7 @@ internal fun MpTopBar(
                     ) {
                         Text(
                             text = if (unreadNotifications > 9) "9+" else unreadNotifications.toString(),
-                            color = Color.White,
+                            color = MpColors.OnError,
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 9.sp,
                         )
@@ -2623,7 +2673,7 @@ private fun TopBarBrand(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(MpColors.PrimaryFixed),
+                .background(if (MpTheme.isDark) MpColors.BrandMark else MpColors.PrimaryFixed),
             contentAlignment = Alignment.Center,
         ) {
             Image(
@@ -2663,7 +2713,7 @@ private fun AccountMenu(
         onDismissRequest = onDismiss,
         offset = DpOffset(x = 0.dp, y = 6.dp),
         shape = RoundedCornerShape(24.dp),
-        containerColor = Color.White,
+        containerColor = MpColors.Surface,
         tonalElevation = 0.dp,
         shadowElevation = 12.dp,
         border = BorderStroke(1.dp, MpColors.Border.copy(alpha = 0.9f)),
@@ -2797,8 +2847,8 @@ private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
             .fillMaxWidth()
             .widthIn(max = 620.dp),
         shape = RoundedCornerShape(28.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
+        color = MpColors.Surface,
+        border = BorderStroke(1.dp, MpColors.Border.copy(alpha = 0.9f)),
         shadowElevation = 16.dp,
     ) {
         NavigationBar(
@@ -2902,7 +2952,7 @@ internal fun MpFilterChip(text: String, selected: Boolean, onClick: () -> Unit) 
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = MpColors.Primary,
             selectedLabelColor = MpColors.OnPrimary,
-            containerColor = Color.White,
+            containerColor = MpColors.Surface,
             labelColor = MpColors.OnSurfaceVariant,
         ),
         border = FilterChipDefaults.filterChipBorder(

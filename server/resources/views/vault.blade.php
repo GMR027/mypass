@@ -75,7 +75,7 @@
                     </div>
                     <div class="relative mx-auto w-full max-w-[340px]">
                         <div class="rounded-[1.75rem] border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-                            <div class="rounded-[1.25rem] bg-white p-4 shadow-2xl">
+                            <div class="rounded-[1.25rem] bg-paper p-4 shadow-2xl">
                                 <div class="flex items-center justify-between gap-2">
                                     <span class="mp-badge mp-badge-primary">
                                         <x-icon name="wallet" class="text-[16px]" filled />
@@ -220,7 +220,7 @@
 
                     <label id="recovery-drop-zone"
                            class="mt-5 block cursor-pointer rounded-2xl border-2 border-dashed border-outline/30 bg-surface-container-low/70 px-5 py-8 text-center transition-colors hover:border-primary hover:bg-primary-fixed/30">
-                        <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary shadow-sm">
+                        <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-paper text-primary shadow-sm">
                             <x-icon name="upload_file" class="text-[28px]" />
                         </span>
                         <span class="mt-3 block font-semibold text-on-surface">{{ __('Arrastra el archivo .mypss aquí') }}</span>
@@ -560,7 +560,7 @@
 
                             <div class="mt-4 flex flex-col justify-between gap-3 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 sm:flex-row sm:items-center">
                                 <div class="flex items-center gap-3">
-                                    <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-primary">
+                                    <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-paper text-primary">
                                         <x-icon name="laptop_mac" class="text-[24px]" />
                                     </span>
                                     <div>
@@ -703,7 +703,7 @@
             </div>
 
             <div class="mb-4 flex items-center gap-3 rounded-xl bg-surface-container-low p-4">
-                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-paper text-primary">
                     <x-icon name="description" class="text-[22px]" />
                 </span>
                 <div class="min-w-0">

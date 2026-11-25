@@ -20,7 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // El TLS termina en ingress-nginx; sin esto Laravel genera URLs http://
         // y las cookies Secure no se comportan correctamente.
         $middleware->trustProxies(at: '*');
-        $middleware->encryptCookies(except: ['mypass_easy']);
+        $middleware->encryptCookies(except: ['mypass_easy', 'mypass_theme']);
         $middleware->validateCsrfTokens(except: ['share-target']);
 
         $middleware->alias([

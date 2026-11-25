@@ -73,7 +73,7 @@
 
             <div class="relative mx-auto w-full max-w-[360px]">
                 <div class="rounded-[1.75rem] border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-                    <div class="rounded-[1.25rem] bg-white p-4 text-on-surface shadow-2xl">
+                    <div class="rounded-[1.25rem] bg-paper p-4 text-on-surface shadow-2xl">
                         <div class="flex items-center justify-between gap-2">
                             <span class="mp-badge mp-badge-primary">
                                 <x-icon name="wallet" class="text-[16px]" filled />

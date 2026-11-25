@@ -19,7 +19,7 @@
                         <x-icon name="dashboard_customize" class="text-[21px]" />
                         {{ __('Plantillas') }}
                     </button>
-                    <div id="generator-templates-menu" class="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-outline-variant/60 bg-white p-2 shadow-dialog" hidden>
+                    <div id="generator-templates-menu" class="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-outline-variant/60 bg-paper p-2 shadow-dialog" hidden>
                         @foreach ([
                             'flight' => __('Vuelo / embarque'),
                             'event' => __('Evento / concierto'),
@@ -56,7 +56,7 @@
                     </div>
 
                     <label id="generator-dropzone" class="mt-4 block cursor-pointer rounded-2xl border-2 border-dashed border-outline/35 bg-surface-container-low px-5 py-8 text-center transition-colors hover:border-primary hover:bg-surface-container">
-                        <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary shadow-sm">
+                        <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-paper text-primary shadow-sm">
                             <x-icon name="upload_file" class="text-[28px]" />
                         </span>
                         <span class="mt-3 block font-semibold text-on-surface">{{ __('Arrastra aquí tu boleto o documento') }}</span>
@@ -160,7 +160,7 @@
                                     <span class="material-symbols-outlined mp-icon-filled text-[18px] text-white">check</span>
                                 </button>
                             @endforeach
-                            <label class="flex h-11 items-center gap-2 rounded-full border border-outline-variant/60 bg-white px-3 text-sm font-semibold text-on-surface-variant">
+                            <label class="flex h-11 items-center gap-2 rounded-full border border-outline-variant/60 bg-paper px-3 text-sm font-semibold text-on-surface-variant">
                                 {{ __('Otro') }}
                                 <input id="generator-color" type="color" value="#0c2340"
                                        class="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0">

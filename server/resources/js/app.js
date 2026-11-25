@@ -1,3 +1,7 @@
+import { initTheme } from './theme';
+
+initTheme();
+
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
         // La PWA es opcional; la aplicación funciona sin service worker.

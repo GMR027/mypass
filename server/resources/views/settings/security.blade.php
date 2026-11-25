@@ -1,4 +1,15 @@
 <x-layout :title="__('Seguridad')">
+    @php
+        $themePreference = in_array(request()->cookie('mypass_theme'), ['light', 'dark', 'system'], true)
+            ? request()->cookie('mypass_theme')
+            : 'system';
+        $themeOptions = [
+            'system' => ['icon' => 'brightness_auto', 'label' => __('Sistema'), 'hint' => __('Sigue el tema del dispositivo')],
+            'light' => ['icon' => 'light_mode', 'label' => __('Claro'), 'hint' => __('Siempre luminoso')],
+            'dark' => ['icon' => 'dark_mode', 'label' => __('Oscuro'), 'hint' => __('Descansa la vista')],
+        ];
+    @endphp
+
     <div class="mx-auto max-w-4xl">
         <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -59,10 +70,10 @@
             <div id="totp-setup" class="mt-6 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 md:p-5" @if (! $totpPending) hidden @endif>
                 <p class="font-semibold text-on-surface">{{ __('1. Escanea este código con tu app') }}</p>
                 <div class="mt-4 grid gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
-                    <div id="totp-qr" class="w-fit rounded-xl border border-outline-variant/60 bg-white p-3 [&_svg]:h-44 [&_svg]:w-44"></div>
+                    <div id="totp-qr" class="mp-scan-sheet w-fit rounded-xl border border-outline-variant/60 bg-white p-3 [&_svg]:h-44 [&_svg]:w-44"></div>
                     <div>
                         <p class="mp-hint">{{ __('Si no puedes escanearlo, escribe esta clave:') }}</p>
-                        <code id="totp-secret" class="mt-2 block break-all rounded-lg border border-outline-variant/60 bg-white p-3 font-mono text-[15px] font-semibold text-on-surface"></code>
+                        <code id="totp-secret" class="mt-2 block break-all rounded-lg border border-outline-variant/60 bg-paper p-3 font-mono text-[15px] font-semibold text-on-surface"></code>
 
                         <p class="mt-5 font-semibold text-on-surface">{{ __('2. Escribe el código de 6 dígitos que muestra la app') }}</p>
                         <div class="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -212,7 +223,7 @@
                             {{ __('Generar llave nueva') }}
                         </button>
 
-                        <div id="vault-recovery-output" class="mt-4 rounded-xl border border-outline-variant/60 bg-white p-4" hidden>
+                        <div id="vault-recovery-output" class="mt-4 rounded-xl border border-outline-variant/60 bg-paper p-4" hidden>
                             <p class="text-sm font-semibold text-on-surface">{{ __('Tu llave de emergencia nueva') }}</p>
                             <p id="vault-recovery-digits" class="mt-2 break-words rounded-lg bg-surface-container-low px-3 py-4 text-center font-mono text-[19px] font-semibold tracking-[0.08em] text-on-surface"></p>
                             <div class="mt-3 flex flex-wrap gap-2">
@@ -232,7 +243,7 @@
                 <div class="mt-6 rounded-xl border border-outline-variant/60 bg-surface-container-low p-4 md:p-5">
                     <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                         <div class="flex items-start gap-3">
-                            <span class="mp-icon-tile shrink-0 bg-white">
+                            <span class="mp-icon-tile shrink-0 bg-paper">
                                 <x-icon name="mark_email_read" class="text-[24px]" />
                             </span>
                             <div>
@@ -274,6 +285,35 @@
                     @endif
                 </div>
             @endif
+        </section>
+
+        <section class="mp-card mp-card-pad mt-5">
+            <div class="flex items-start gap-4">
+                <span class="mp-icon-tile">
+                    <x-icon name="contrast" class="text-[24px]" />
+                </span>
+                <div>
+                    <h2 class="mp-title-sm">{{ __('Apariencia') }}</h2>
+                    <p class="mp-hint mt-1 max-w-2xl">{{ __('Elige cómo se ve My Pass en este dispositivo. El modo del sistema se adapta automáticamente.') }}</p>
+                </div>
+            </div>
+
+            <div class="mt-5 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="{{ __('Tema de la aplicación') }}">
+                @foreach ($themeOptions as $value => $option)
+                    <button type="button"
+                            data-theme-option="{{ $value }}"
+                            role="radio"
+                            aria-checked="{{ $themePreference === $value ? 'true' : 'false' }}"
+                            aria-pressed="{{ $themePreference === $value ? 'true' : 'false' }}"
+                            class="mp-theme-option">
+                        <span class="flex items-center gap-2 text-[15px] font-bold">
+                            <x-icon :name="$option['icon']" class="text-[20px]" />
+                            {{ $option['label'] }}
+                        </span>
+                        <span class="text-[12px] font-medium leading-snug opacity-75">{{ $option['hint'] }}</span>
+                    </button>
+                @endforeach
+            </div>
         </section>
 
         <section class="mp-card mp-card-pad mt-5">
@@ -537,7 +577,7 @@
             for (const code of codes) {
                 const li = document.createElement('li');
                 li.textContent = code;
-                li.className = 'rounded-lg border border-outline-variant/60 bg-white px-3 py-2 text-center tracking-wider';
+                li.className = 'rounded-lg border border-outline-variant/60 bg-paper px-3 py-2 text-center tracking-wider';
                 totpCodes.appendChild(li);
             }
         }

@@ -822,4 +822,9 @@
     <string name="flight_soon_title">Tu vuelo sale pronto</string>
     <string name="transit_soon_title">Tu transporte sale pronto</string>
     <string name="pass_tomorrow_title">Tu pase es mañana</string>
+    <string name="appearance">Apariencia</string>
+    <string name="appearance_help">Elige cómo se ve My Pass en este dispositivo. El modo del sistema se adapta automáticamente.</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Oscuro</string>
 </resources>

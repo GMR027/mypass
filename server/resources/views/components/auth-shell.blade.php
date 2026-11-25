@@ -6,10 +6,15 @@
     $guestEasy = request()->cookie('mypass_easy') === '1';
     $shellEasy = $shellUser?->usesEasyMode() ?? $guestEasy;
     $shellLargeText = $shellUser?->usesLargeText() ?? $guestEasy;
+    $themePreference = in_array(request()->cookie('mypass_theme'), ['light', 'dark', 'system'], true)
+        ? request()->cookie('mypass_theme')
+        : 'system';
 @endphp
 
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}"
+      data-theme="{{ $themePreference }}"
+      @class(['dark' => $themePreference === 'dark'])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,7 +22,19 @@
     <title>{{ $title ?? 'My Pass' }} · My Pass</title>
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon-32.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/favicon-180.png') }}">
+    <meta name="theme-color" content="{{ $themePreference === 'dark' ? '#08120e' : '#012d1d' }}">
     <x-translations />
+    <script nonce="{{ $cspNonce }}">
+        (function () {
+            var preference = document.documentElement.getAttribute('data-theme') || 'system';
+            var dark = preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.classList.toggle('dark', dark);
+            var themeColor = document.querySelector('meta[name="theme-color"]');
+            if (themeColor) {
+                themeColor.setAttribute('content', dark ? '#08120e' : '#012d1d');
+            }
+        })();
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body data-easy="{{ $shellEasy ? '1' : '0' }}" class="min-h-screen bg-surface text-on-surface {{ $shellLargeText ? 'simple-mode' : '' }} {{ $shellEasy ? 'easy-mode' : '' }}">
@@ -120,6 +137,7 @@
                         <span class="material-symbols-outlined text-[19px]" aria-hidden="true">accessibility_new</span>
                         <span data-easy-toggle-label>{{ $shellEasy ? __('Modo normal') : __('Modo fácil') }}</span>
                     </button>
+                    <x-theme-toggle compact />
                     <a href="{{ route('language.switch', 'es-MX') }}"
                        @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-primary text-on-primary' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
                        @if ($isSpanish) aria-current="true" @endif>ES</a>
@@ -133,10 +151,11 @@
                 <button type="button"
                         data-easy-toggle
                         aria-pressed="{{ $shellEasy ? 'true' : 'false' }}"
-                        class="inline-flex min-h-12 items-center gap-1.5 rounded-xl border border-outline-variant/60 bg-white/80 px-3 text-sm font-semibold text-on-surface-variant shadow-sm backdrop-blur hover:bg-surface-container">
+                        class="inline-flex min-h-12 items-center gap-1.5 rounded-xl border border-outline-variant/60 bg-paper/80 px-3 text-sm font-semibold text-on-surface-variant shadow-sm backdrop-blur hover:bg-surface-container">
                     <span class="material-symbols-outlined text-[19px]" aria-hidden="true">accessibility_new</span>
                     <span data-easy-toggle-label>{{ $shellEasy ? __('Modo normal') : __('Modo fácil') }}</span>
                 </button>
+                <x-theme-toggle compact />
                 <a href="{{ route('language.switch', 'es-MX') }}"
                    @class(['inline-flex min-h-12 items-center rounded-lg px-3 text-sm font-semibold', 'bg-primary text-on-primary' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])>ES</a>
                 <a href="{{ route('language.switch', 'en') }}"

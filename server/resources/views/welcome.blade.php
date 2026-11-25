@@ -1,7 +1,14 @@
-@php($isSpanish = str_starts_with(app()->getLocale(), 'es'))
+@php
+    $isSpanish = str_starts_with(app()->getLocale(), 'es');
+    $themePreference = in_array(request()->cookie('mypass_theme'), ['light', 'dark', 'system'], true)
+        ? request()->cookie('mypass_theme')
+        : 'system';
+@endphp
 
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}"
+      data-theme="{{ $themePreference }}"
+      @class(['dark' => $themePreference === 'dark'])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,21 +17,35 @@
     <meta name="description" content="{{ __('Tus pases, boletos y documentos importantes, cifrados y siempre contigo.') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon-32.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/favicon-180.png') }}">
+    <meta name="theme-color" content="{{ $themePreference === 'dark' ? '#08120e' : '#012d1d' }}">
     <x-translations />
+    <script nonce="{{ $cspNonce }}">
+        (function () {
+            var preference = document.documentElement.getAttribute('data-theme') || 'system';
+            var dark = preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.classList.toggle('dark', dark);
+            var themeColor = document.querySelector('meta[name="theme-color"]');
+            if (themeColor) {
+                themeColor.setAttribute('content', dark ? '#08120e' : '#012d1d');
+            }
+        })();
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-surface text-on-surface">
-    <header class="sticky top-0 z-40 border-b border-white/70 bg-surface/80 backdrop-blur-xl">
+    <header class="sticky top-0 z-40 border-b border-outline-variant/40 bg-surface/80 backdrop-blur-xl">
         <div class="mp-container flex min-h-20 flex-wrap items-center justify-between gap-3 py-3">
             <x-brand :href="url('/')" />
 
             <nav class="flex flex-wrap items-center gap-2" aria-label="{{ __('Navegación principal') }}">
+                <x-theme-toggle compact />
+
                 <div class="flex items-center gap-0.5 rounded-xl bg-surface-container-low p-1" aria-label="{{ __('Idioma') }}">
                     <a href="{{ route('language.switch', 'es-MX') }}"
-                       @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-white text-primary shadow-sm' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
+                       @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-paper text-primary shadow-sm' => $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => ! $isSpanish])
                        @if ($isSpanish) aria-current="true" @endif>ES</a>
                     <a href="{{ route('language.switch', 'en') }}"
-                       @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-white text-primary shadow-sm' => ! $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => $isSpanish])
+                       @class(['inline-flex min-h-12 items-center rounded-lg px-2.5 text-sm font-semibold', 'bg-paper text-primary shadow-sm' => ! $isSpanish, 'text-on-surface-variant hover:bg-surface-container' => $isSpanish])
                        @if (! $isSpanish) aria-current="true" @endif>EN</a>
                 </div>
 
@@ -41,7 +62,7 @@
     <main>
         <section class="mp-container grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] lg:gap-14 lg:py-20">
             <div class="mp-reveal">
-                <span class="mp-hero-pill border-primary/10 bg-white text-primary shadow-sm">
+                <span class="mp-hero-pill border-primary/10 bg-paper text-primary shadow-sm">
                     <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
                     {{ __('Tu billetera digital') }}
                 </span>
@@ -148,7 +169,7 @@
             </div>
         </section>
 
-        <section class="border-y border-white/70 bg-white/70 py-5">
+        <section class="border-y border-outline-variant/40 bg-paper/70 py-5">
             <div class="mp-container grid gap-4 text-center sm:grid-cols-3">
                 <div class="flex items-center justify-center gap-3">
                     <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-fixed text-primary"><x-icon name="wallet" class="text-[21px]" /></span>
@@ -179,7 +200,7 @@
                         ['wallet', __('Abre tus pases'), __('Desbloquea y presenta tu código al instante.')],
                     ] as $index => [$icon, $title, $copy])
                         <article class="mp-card mp-card-pad relative overflow-hidden">
-                            <span class="absolute right-4 top-4 text-[42px] font-bold leading-none text-primary-fixed/70">{{ $index + 1 }}</span>
+                            <span class="absolute right-4 top-4 text-[42px] font-bold leading-none text-primary/20">{{ $index + 1 }}</span>
                             <span class="mp-icon-tile"><x-icon :name="$icon" class="text-[24px]" /></span>
                             <h3 class="mp-title-sm mt-4">{{ $title }}</h3>
                             <p class="mp-body-sm mt-2">{{ $copy }}</p>
@@ -189,7 +210,7 @@
             </div>
         </section>
 
-        <section class="border-y border-white/70 bg-white py-14 lg:py-16">
+        <section class="border-y border-outline-variant/40 bg-paper py-14 lg:py-16">
             <div class="mp-container">
                 <div class="max-w-2xl">
                     <p class="mp-eyebrow">{{ __('Tranquilidad por diseño') }}</p>

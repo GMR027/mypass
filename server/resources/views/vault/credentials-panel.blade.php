@@ -213,7 +213,7 @@
                 <label for="credential-banner-color" class="mp-label">{{ __('Color del banner') }}</label>
                 <div class="mt-1 flex flex-wrap items-center gap-2">
                     <input id="credential-banner-color" type="color" value="#1B4332"
-                           class="h-11 w-14 cursor-pointer rounded-lg border border-outline-variant bg-white p-1"
+                           class="h-11 w-14 cursor-pointer rounded-lg border border-outline-variant bg-paper p-1"
                            aria-label="{{ __('Color del banner') }}">
                     <div id="credential-banner-presets" class="flex flex-wrap gap-2"></div>
                 </div>

@@ -150,6 +150,15 @@ class VaultStore(context: Context) {
         prefs.edit().putBoolean(KEY_EASY_MODE, enabled).apply()
     }
 
+    fun themeMode(): ThemeMode {
+        val saved = prefs.getString(KEY_THEME_MODE, ThemeMode.System.name) ?: ThemeMode.System.name
+        return runCatching { ThemeMode.valueOf(saved) }.getOrDefault(ThemeMode.System)
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+    }
+
     fun recentItemIds(): List<String> {
         val raw = prefs.getString(KEY_RECENT_ITEMS, null) ?: return emptyList()
         return runCatching {
@@ -391,6 +400,7 @@ class VaultStore(context: Context) {
         const val KEY_SERVER_DEVICE_ID = "server_device_id"
         const val KEY_SIMPLE_MODE = "simple_mode"
         const val KEY_EASY_MODE = "easy_mode"
+        const val KEY_THEME_MODE = "theme_mode"
         const val KEY_AGE_GROUP = "age_group"
         const val KEY_BIRTH_DATE = "birth_date"
         const val KEY_RECENT_ITEMS = "recent_items"

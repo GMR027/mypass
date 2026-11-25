@@ -26,7 +26,7 @@
                             {{ mb_substr($user->name ?: $user->email, 0, 1) }}
                         @endif
                     </span>
-                    <span class="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary ring-2 ring-white" aria-hidden="true">
+                    <span class="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary ring-2 ring-paper" aria-hidden="true">
                         <x-icon name="photo_camera" class="text-[17px]" />
                     </span>
                 </div>

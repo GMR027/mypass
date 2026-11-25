@@ -353,6 +353,7 @@ data class UiState(
     val twoFactorMethods: List<String> = emptyList(),
     val simpleMode: Boolean = false,
     val easyMode: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.System,
     val ageGroup: String = "unknown",
     val birthDate: String = "",
     val recoveryEmail: String = "",
@@ -426,6 +427,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             },
             simpleMode = store.simpleMode(),
             easyMode = store.easyMode(),
+            themeMode = store.themeMode(),
             ageGroup = store.ageGroup(),
             birthDate = store.birthDate(),
             recoveryEnabled = false,
@@ -3581,6 +3583,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         store.setEasyMode(enabled)
         _state.value = _state.value.copy(easyMode = enabled)
         syncPreferences(easyMode = enabled)
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        store.setThemeMode(mode)
+        _state.value = _state.value.copy(themeMode = mode)
     }
 
     fun setBirthDate(value: String) {
