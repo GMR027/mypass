@@ -1,4 +1,5 @@
 import { applyAppearance, normalizeAppearance } from './pass-appearance';
+import { centerCardInView } from './card-deck';
 import { passMapUrl } from './geo';
 import { downloadCalendar, passCalendar } from './calendar';
 
@@ -1342,7 +1343,17 @@ class WalletApp {
         }
         this.selectedId = id;
         this.refresh();
+
+        const card = this.stack?.querySelector(`[data-pass-id="${CSS.escape(id)}"]`) ?? null;
+        if (card) {
+            window.requestAnimationFrame(() => {
+                centerCardInView(this.stack?.querySelector(`[data-pass-id="${CSS.escape(id)}"]`));
+            });
+        }
+
         window.dispatchEvent(new CustomEvent('mypass:item-open', { detail: { id } }));
+
+        return Boolean(card);
     }
 
     toggleFlip(id) {

@@ -154,6 +154,7 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
     var filter by remember { mutableStateOf("all") }
     var groupFilter by remember { mutableStateOf("all") }
     var selectedCredentialId by remember { mutableStateOf<String?>(null) }
+    var revealCredentialId by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<UiItem?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val context = LocalContext.current
@@ -377,22 +378,30 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                         MpCascadeStack(selectedIndex = selectedIndex) {
                             groupItems.forEachIndexed { index, item ->
                                 if (index == selectedIndex) {
-                                    CredentialFlipCard(
-                                        item = item,
-                                        now = now,
-                                        context = context,
-                                        onEdit = { viewModel.editCredential(item) },
-                                        onDelete = { deleteTarget = item },
-                                        onFavorite = { viewModel.toggleCredentialFavorite(item) },
-                                        onOpenAttachment = { viewModel.openItem(item) },
-                                    )
+                                    MpRevealOnSelection(
+                                        selectionKey = if (revealCredentialId == item.id) item.id else null,
+                                        onRevealed = { revealCredentialId = null },
+                                    ) {
+                                        CredentialFlipCard(
+                                            item = item,
+                                            now = now,
+                                            context = context,
+                                            onEdit = { viewModel.editCredential(item) },
+                                            onDelete = { deleteTarget = item },
+                                            onFavorite = { viewModel.toggleCredentialFavorite(item) },
+                                            onOpenAttachment = { viewModel.openItem(item) },
+                                        )
+                                    }
                                 } else {
                                     CredentialCard(
                                         item = item,
                                         now = now,
                                         context = context,
                                         headerOnly = true,
-                                        onSelect = { selectedCredentialId = item.id },
+                                        onSelect = {
+                                            selectedCredentialId = item.id
+                                            revealCredentialId = item.id
+                                        },
                                         onEdit = { viewModel.editCredential(item) },
                                         onDelete = { deleteTarget = item },
                                         onFavorite = { viewModel.toggleCredentialFavorite(item) },

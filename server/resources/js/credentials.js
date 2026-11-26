@@ -11,7 +11,7 @@ import {
     totpSecondsLeft,
 } from './vault-secrets';
 import { bannerDataUrl, isImageDataUrl, logoDataUrl } from './media';
-import { createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
+import { centerCardInView, createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -1036,6 +1036,9 @@ export class CredentialsApp {
                     this.selectedCredentialId = targetItem.id;
                     this.flippedCredentialId = null;
                     this.render();
+                    window.requestAnimationFrame(() => {
+                        centerCardInView(this.list?.querySelector(`[data-credential-id="${CSS.escape(targetItem.id)}"]`));
+                    });
                 }
             }
             return;

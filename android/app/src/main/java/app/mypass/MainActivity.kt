@@ -1128,6 +1128,7 @@ private fun VaultScreen(
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var selectedDocumentId by remember { mutableStateOf<String?>(null) }
+    var revealDocumentId by remember { mutableStateOf<String?>(null) }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
     val context = LocalContext.current
     val notificationPermission = rememberLauncherForActivityResult(
@@ -1306,18 +1307,26 @@ private fun VaultScreen(
                     MpCascadeStack(selectedIndex = selectedDocumentIndex) {
                         visibleItems.forEachIndexed { index, item ->
                             if (index == selectedDocumentIndex) {
-                                DocumentFlipCard(
-                                    item = item,
-                                    hasContacts = acceptedContacts.isNotEmpty(),
-                                    onOpen = { viewModel.openItem(item) },
-                                    onShare = { shareItem = item },
-                                    onExpiry = { expiryItem = item },
-                                    onDelete = { deleteItem = item },
-                                )
+                                MpRevealOnSelection(
+                                    selectionKey = if (revealDocumentId == item.id) item.id else null,
+                                    onRevealed = { revealDocumentId = null },
+                                ) {
+                                    DocumentFlipCard(
+                                        item = item,
+                                        hasContacts = acceptedContacts.isNotEmpty(),
+                                        onOpen = { viewModel.openItem(item) },
+                                        onShare = { shareItem = item },
+                                        onExpiry = { expiryItem = item },
+                                        onDelete = { deleteItem = item },
+                                    )
+                                }
                             } else {
                                 DocumentCompactCard(
                                     item = item,
-                                    onClick = { selectedDocumentId = item.id },
+                                    onClick = {
+                                        selectedDocumentId = item.id
+                                        revealDocumentId = item.id
+                                    },
                                 )
                             }
                         }

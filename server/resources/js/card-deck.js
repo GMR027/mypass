@@ -103,6 +103,19 @@ export function syncAllDeckHeights(root = document) {
     root.querySelectorAll('.mp-deck-card--flip').forEach((card) => syncDeckHeight(card));
 }
 
+export function centerCardInView(card) {
+    if (!card) {
+        return;
+    }
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    card.scrollIntoView({
+        behavior: reduceMotion ? 'auto' : 'smooth',
+        block: 'center',
+        inline: 'nearest',
+    });
+}
+
 let resizeTimer = null;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);

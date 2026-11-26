@@ -5,7 +5,7 @@ import {
     splitList,
 } from './vault-secrets';
 import { downloadMedicalCalendar, medicalCalendar } from './calendar';
-import { createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
+import { centerCardInView, createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -668,6 +668,9 @@ export class MedicalApp {
                     this.selectedMedicalId = targetItem.id;
                     this.flippedMedicalId = null;
                     this.render();
+                    window.requestAnimationFrame(() => {
+                        centerCardInView(this.list?.querySelector(`[data-medical-id="${CSS.escape(targetItem.id)}"]`));
+                    });
                 }
             }
             return;

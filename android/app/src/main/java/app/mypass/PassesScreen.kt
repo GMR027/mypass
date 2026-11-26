@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -62,6 +63,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -623,6 +625,11 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     var shareItem by remember { mutableStateOf<UiItem?>(null) }
     var deleteItem by remember { mutableStateOf<UiItem?>(null) }
     var showNewPassDialog by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    var revealRequest by remember { mutableStateOf(0) }
+    // Elementos fijos antes de la tarjeta seleccionada: título, estado, acciones y filtros.
+    val selectedDetailItemIndex = 4
+    val revealSelectedPass: () -> Unit = { revealRequest += 1 }
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -643,7 +650,21 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
             filter = "all"
             selectedId = id
             viewModel.clearFocusItem()
+            revealSelectedPass()
         }
+    }
+
+    LaunchedEffect(revealRequest) {
+        if (revealRequest == 0) {
+            return@LaunchedEffect
+        }
+        val current = selected ?: return@LaunchedEffect
+        if (filter != "all" && current.pass?.category != filter) {
+            return@LaunchedEffect
+        }
+        withFrameNanos { }
+        withFrameNanos { }
+        listState.animateScrollToItem(selectedDetailItemIndex)
     }
 
     LaunchedEffect(allPasses.size, filter, selectedId) {
@@ -703,6 +724,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
+            state = listState,
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -834,6 +856,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                                     onClick = {
                                         selectedId = item.id
                                         viewModel.recordRecentItem(item.id)
+                                        revealSelectedPass()
                                     },
                                 )
                             }
@@ -863,6 +886,9 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                             onClick = {
                                 selectedId = item.id
                                 viewModel.recordRecentItem(item.id)
+                                if (filter == "all" || item.pass?.category == filter) {
+                                    revealSelectedPass()
+                                }
                             },
                         )
                     }

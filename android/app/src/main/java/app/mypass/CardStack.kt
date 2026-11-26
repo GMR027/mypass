@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -20,10 +22,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -69,6 +73,38 @@ fun MpCascadeStack(
                 placeable.placeRelative(0, positions[index])
             }
         }
+    }
+}
+
+/**
+ * Lleva el contenido a la vista cuando cambia la selección. Se aplica a la
+ * tarjeta expandida para que el contenedor con scroll la muestre sin que el
+ * usuario tenga que buscarla manualmente.
+ */
+@Composable
+fun MpRevealOnSelection(
+    selectionKey: Any?,
+    modifier: Modifier = Modifier,
+    onRevealed: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    val requester = remember { BringIntoViewRequester() }
+
+    LaunchedEffect(selectionKey) {
+        if (selectionKey == null) {
+            return@LaunchedEffect
+        }
+        repeat(2) { withFrameNanos { } }
+        runCatching { requester.bringIntoView() }
+        onRevealed?.invoke()
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(requester),
+    ) {
+        content()
     }
 }
 

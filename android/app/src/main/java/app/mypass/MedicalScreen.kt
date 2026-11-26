@@ -63,6 +63,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
     var shareTarget by remember { mutableStateOf<UiItem?>(null) }
     var presenting by remember { mutableStateOf<UiItem?>(null) }
     var selectedMedicalId by remember { mutableStateOf<String?>(null) }
+    var revealMedicalId by remember { mutableStateOf<String?>(null) }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
 
     val all = remember(state.items) {
@@ -198,19 +199,27 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                     MpCascadeStack(selectedIndex = selectedMedicalIndex) {
                         visible.forEachIndexed { index, item ->
                             if (index == selectedMedicalIndex) {
-                                MedicalFlipCard(
-                                    item = item,
-                                    canShare = acceptedContacts.isNotEmpty(),
-                                    onPresent = { presenting = item },
-                                    onEdit = { viewModel.editMedicalCard(item) },
-                                    onShare = { shareTarget = item },
-                                    onOpenAttachment = { viewModel.openItem(item) },
-                                    onDelete = { deleteTarget = item },
-                                )
+                                MpRevealOnSelection(
+                                    selectionKey = if (revealMedicalId == item.id) item.id else null,
+                                    onRevealed = { revealMedicalId = null },
+                                ) {
+                                    MedicalFlipCard(
+                                        item = item,
+                                        canShare = acceptedContacts.isNotEmpty(),
+                                        onPresent = { presenting = item },
+                                        onEdit = { viewModel.editMedicalCard(item) },
+                                        onShare = { shareTarget = item },
+                                        onOpenAttachment = { viewModel.openItem(item) },
+                                        onDelete = { deleteTarget = item },
+                                    )
+                                }
                             } else {
                                 MedicalCompactCard(
                                     item = item,
-                                    onClick = { selectedMedicalId = item.id },
+                                    onClick = {
+                                        selectedMedicalId = item.id
+                                        revealMedicalId = item.id
+                                    },
                                 )
                             }
                         }

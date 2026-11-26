@@ -4,7 +4,7 @@ import { WalletApp } from './passes';
 import { PassGenerator } from './pass-generator';
 import { CredentialsApp, credentialFromItem, isCredentialItem } from './credentials';
 import { MedicalApp, medicalFromItem, isMedicalItem } from './medical';
-import { createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
+import { centerCardInView, createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => window.mypassT ? window.mypassT(key) : key;
 const tf = (key, values) => window.mypassTF ? window.mypassTF(key, values) : key;
@@ -2474,8 +2474,10 @@ function openSearchResult(entry) {
 
     if (entry.section === 'pass') {
         switchTab('pases');
-        wallet?.select(entry.item.id);
-        setTimeout(() => wallet?.inspector?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+        const revealed = wallet?.select(entry.item.id);
+        if (!revealed) {
+            setTimeout(() => wallet?.inspector?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+        }
     } else if (entry.section === 'credential') {
         switchTab('credentials');
         credentials?.openEdit(entry.item);
@@ -2493,7 +2495,7 @@ function openSearchResult(entry) {
         setTimeout(() => {
             const card = itemList?.querySelector(`[data-item-id="${CSS.escape(entry.item.id)}"]`);
             if (card) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                centerCardInView(card);
                 card.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
                 setTimeout(() => card.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2500);
             }
@@ -2732,6 +2734,9 @@ function documentCompactCard(item) {
         selectedDocumentId = item.id;
         flippedDocumentId = null;
         renderItems();
+        window.requestAnimationFrame(() => {
+            centerCardInView(itemList?.querySelector(`[data-item-id="${CSS.escape(item.id)}"]`));
+        });
     });
     return card;
 }
