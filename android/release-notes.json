@@ -1,16 +1,12 @@
 {
   "es": [
-    "Pases, documentos, credenciales y salud usan una pila cascade en Android.",
-    "Toca una tarjeta y usa «Ver reverso» para acceder a datos, códigos y acciones.",
-    "Modo oscuro completo en web y Android, con opción Sistema, Claro u Oscuro.",
-    "Nuevo selector de apariencia en Ajustes y botón rápido de tema.",
-    "Mejoras de contraste y legibilidad en toda la interfaz."
+    "Al elegir una tarjeta, la vista se desplaza automáticamente hasta ella.",
+    "En pases, documentos, credenciales y salud ya no tienes que buscar la tarjeta seleccionada.",
+    "La misma mejora está disponible en la bóveda web y en la app Android."
   ],
   "en": [
-    "Passes, documents, credentials and health cards use a cascade stack on Android.",
-    "Tap a card and use \"View back\" to access details, codes and actions.",
-    "Full dark mode on web and Android, with System, Light and Dark options.",
-    "New appearance selector in Settings and a quick theme toggle.",
-    "Contrast and readability improvements across the interface."
+    "Selecting a card now scrolls the view straight to it.",
+    "In passes, documents, credentials and health, you no longer have to search for the selected card.",
+    "The same improvement is available in the web vault and the Android app."
   ]
 }
