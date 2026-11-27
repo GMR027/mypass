@@ -211,8 +211,41 @@ class NotificationStore(context: Context) {
         prefs.edit().putStringSet(KEY_EXPIRY_READ, updated).apply()
     }
 
+    fun promptedFamilyKeys(): Set<String> {
+        return prefs.getStringSet(KEY_FAMILY_PROMPTED, emptySet()).orEmpty().toSet()
+    }
+
+    fun markFamilyPrompted(key: String) {
+        prefs.edit()
+            .putStringSet(KEY_FAMILY_PROMPTED, promptedFamilyKeys() + key)
+            .apply()
+    }
+
+    fun lastNotifiedNotificationIds(): Set<String> {
+        return prefs.getStringSet(KEY_NOTIFIED_IDS, emptySet()).orEmpty().toSet()
+    }
+
+    fun markNotificationsNotified(ids: Set<String>) {
+        if (ids.isEmpty()) {
+            return
+        }
+
+        prefs.edit()
+            .putStringSet(KEY_NOTIFIED_IDS, lastNotifiedNotificationIds() + ids)
+            .apply()
+    }
+
+    fun lastUpdateNotifiedCode(): Int = prefs.getInt(KEY_UPDATE_NOTIFIED, 0)
+
+    fun markUpdateNotified(versionCode: Int) {
+        prefs.edit().putInt(KEY_UPDATE_NOTIFIED, versionCode).apply()
+    }
+
     private companion object {
         const val KEY_EXPIRY_READ = "expiry_read"
+        const val KEY_FAMILY_PROMPTED = "family_prompted"
+        const val KEY_NOTIFIED_IDS = "notified_ids"
+        const val KEY_UPDATE_NOTIFIED = "update_notified"
     }
 }
 

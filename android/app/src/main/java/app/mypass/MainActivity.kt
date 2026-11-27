@@ -89,6 +89,7 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -165,7 +166,7 @@ class MainActivity : FragmentActivity() {
 
     // Development-only switch used for visual verification on the tablet.
     // The release build must keep this false.
-    private val allowScreenCapture = false
+    private val allowScreenCapture = BuildConfig.DEBUG
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -181,6 +182,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         Reminders.schedule(this)
         Reminders.checkNow(this)
+        FamilyNotifier.schedule(this)
         setContent {
             val state by viewModel.state.collectAsState()
             val baseDensity = LocalDensity.current
@@ -402,6 +404,75 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
 
     if (state.showUpdateDialog) {
         UpdateDialog(state = state, viewModel = viewModel)
+    }
+
+    state.pendingPrompt?.let { prompt ->
+        FamilyPromptDialog(
+            prompt = prompt,
+            total = state.pendingPromptTotal,
+            onAccept = viewModel::acceptFamilyPrompt,
+            onDecline = viewModel::declineFamilyPrompt,
+            onDismiss = viewModel::dismissFamilyPrompt,
+        )
+    }
+}
+
+@Composable
+private fun FamilyPromptDialog(
+    prompt: FamilyPrompt,
+    total: Int,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val icon = when (prompt.type) {
+        "contact" -> Icons.Filled.Person
+        "request" -> Icons.Filled.Email
+        else -> Icons.Filled.Send
+    }
+
+    MpDialog(
+        onDismissRequest = onDismiss,
+        header = {
+            MpDialogHeader(
+                icon = icon,
+                title = prompt.title,
+                subtitle = if (total > 1) {
+                    stringResource(R.string.family_prompt_progress, total)
+                } else {
+                    stringResource(R.string.family_prompt_new)
+                },
+                onClose = onDismiss,
+            )
+        },
+        actions = {
+            MpButton(
+                text = prompt.acceptLabel,
+                onClick = onAccept,
+                fillWidth = true,
+            )
+            MpButton(
+                text = prompt.declineLabel,
+                onClick = onDecline,
+                variant = MpButtonVariant.Danger,
+                fillWidth = true,
+            )
+            MpButton(
+                text = stringResource(R.string.not_now),
+                onClick = onDismiss,
+                variant = MpButtonVariant.Quiet,
+                fillWidth = true,
+            )
+        },
+    ) {
+        Text(
+            text = prompt.message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MpColors.OnSurface,
+        )
+        if (prompt.detail.isNotBlank()) {
+            MpCallout(text = prompt.detail, tone = MpCalloutTone.Info)
+        }
     }
 }
 
@@ -1123,6 +1194,7 @@ private fun VaultScreen(
     onAdd: () -> Unit,
 ) {
     var shareItem by remember { mutableStateOf<UiItem?>(null) }
+    var manageSharesItem by remember { mutableStateOf<UiItem?>(null) }
     var expiryItem by remember { mutableStateOf<UiItem?>(null) }
     var deleteItem by remember { mutableStateOf<UiItem?>(null) }
     var search by remember { mutableStateOf("") }
@@ -1187,6 +1259,21 @@ private fun VaultScreen(
                 viewModel.sendShare(shareItem!!, contactId, mode)
                 shareItem = null
             },
+        )
+    }
+
+    manageSharesItem?.let { item ->
+        ManageSharesDialog(
+            itemId = item.id,
+            itemTitle = item.title,
+            shares = state.outgoingShares,
+            canShare = acceptedContacts.isNotEmpty(),
+            onDismiss = { manageSharesItem = null },
+            onShare = {
+                shareItem = item
+                manageSharesItem = null
+            },
+            onRevoke = viewModel::revokeShare,
         )
     }
 
@@ -1314,8 +1401,10 @@ private fun VaultScreen(
                                     DocumentFlipCard(
                                         item = item,
                                         hasContacts = acceptedContacts.isNotEmpty(),
+                                        shared = state.isItemShared(item.id),
                                         onOpen = { viewModel.openItem(item) },
                                         onShare = { shareItem = item },
+                                        onManageShares = { manageSharesItem = item },
                                         onExpiry = { expiryItem = item },
                                         onDelete = { deleteItem = item },
                                     )
@@ -1323,6 +1412,7 @@ private fun VaultScreen(
                             } else {
                                 DocumentCompactCard(
                                     item = item,
+                                    shared = state.isItemShared(item.id),
                                     onClick = {
                                         selectedDocumentId = item.id
                                         revealDocumentId = item.id
@@ -1490,6 +1580,7 @@ internal fun ExpiryBanner(count: Int) {
 @Composable
 private fun DocumentCompactCard(
     item: UiItem,
+    shared: Boolean,
     onClick: () -> Unit,
 ) {
     MpCard(
@@ -1499,7 +1590,7 @@ private fun DocumentCompactCard(
         contentPadding = PaddingValues(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            DocumentHeader(item)
+            DocumentHeader(item, shared = shared)
             val preview = item.ocrText.lineSequence().firstOrNull()?.trim()?.take(110).orEmpty()
             if (preview.isNotBlank()) {
                 Text(
@@ -1518,8 +1609,10 @@ private fun DocumentCompactCard(
 private fun DocumentFlipCard(
     item: UiItem,
     hasContacts: Boolean,
+    shared: Boolean,
     onOpen: () -> Unit,
     onShare: () -> Unit,
+    onManageShares: () -> Unit,
     onExpiry: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -1532,7 +1625,7 @@ private fun DocumentFlipCard(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                DocumentHeader(item)
+                DocumentHeader(item, shared = shared)
                 val preview = item.ocrText.lineSequence().firstOrNull()?.trim()?.take(180).orEmpty()
                 if (preview.isNotBlank()) {
                     Text(
@@ -1560,7 +1653,7 @@ private fun DocumentFlipCard(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                DocumentHeader(item)
+                DocumentHeader(item, shared = shared)
                 if (item.ocrText.isNotBlank()) {
                     Text(
                         text = item.ocrText.take(700),
@@ -1574,8 +1667,10 @@ private fun DocumentFlipCard(
                 DocumentActions(
                     item = item,
                     hasContacts = hasContacts,
+                    shared = shared,
                     onOpen = onOpen,
                     onShare = onShare,
+                    onManageShares = onManageShares,
                     onExpiry = onExpiry,
                     onDelete = onDelete,
                 )
@@ -1593,8 +1688,9 @@ private fun DocumentFlipCard(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DocumentHeader(item: UiItem) {
+private fun DocumentHeader(item: UiItem, shared: Boolean = false) {
     val expiry = expiryLabel(item.expiresAt)
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1614,10 +1710,14 @@ private fun DocumentHeader(item: UiItem) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(top = 6.dp),
             ) {
+                if (shared) {
+                    MpBadge(stringResource(R.string.shared), MpBadgeTone.Primary)
+                }
                 if (item.pendingUpload) {
                     MpBadge(stringResource(R.string.pending_upload), MpBadgeTone.Warning)
                 }
@@ -1640,8 +1740,10 @@ private fun DocumentHeader(item: UiItem) {
 private fun DocumentActions(
     item: UiItem,
     hasContacts: Boolean,
+    shared: Boolean,
     onOpen: () -> Unit,
     onShare: () -> Unit,
+    onManageShares: () -> Unit,
     onExpiry: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -1653,6 +1755,9 @@ private fun DocumentActions(
             Text(stringResource(R.string.open), style = MaterialTheme.typography.labelLarge)
         }
         Spacer(modifier = Modifier.weight(1f))
+        if (shared) {
+            MpIconButton(Icons.Filled.Share, stringResource(R.string.manage_shares), onManageShares, tint = MpColors.Primary)
+        }
         if (hasContacts) {
             MpIconButton(Icons.Filled.Send, stringResource(R.string.send), onShare, tint = MpColors.Primary)
         }
@@ -1662,7 +1767,7 @@ private fun DocumentActions(
 }
 
 @Composable
-private fun ItemTypeIcon(type: String, size: Int = 46) {
+internal fun ItemTypeIcon(type: String, size: Int = 46) {
     val painter = when (type) {
         "ticket" -> painterResource(R.drawable.ic_ticket)
         "card", "medical_card" -> painterResource(R.drawable.ic_card)
@@ -1681,314 +1786,114 @@ private fun typeLabel(type: String): String = when (type) {
     else -> stringResource(R.string.document)
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FamilyScreen(state: UiState, viewModel: MainViewModel) {
-    var email by remember { mutableStateOf("") }
-    var requestContactId by remember { mutableStateOf("") }
-    var requestType by remember { mutableStateOf("") }
-    var requestPurpose by remember { mutableStateOf("") }
-    var blockContact by remember { mutableStateOf<UiContact?>(null) }
-    val acceptedContacts = state.contacts.filter { it.status == "accepted" }
-    val incomingShares = state.incomingShares.filter { !it.isOutgoing }
-    val outgoingShares = state.incomingShares.filter { it.isOutgoing }
-    val effectiveContactId = requestContactId.ifBlank { acceptedContacts.firstOrNull()?.id.orEmpty() }
-
-    if (blockContact != null) {
-        ConfirmDialog(
-            title = stringResource(R.string.confirm_block_contact_title),
-            message = stringResource(R.string.confirm_block_contact_body),
-            confirmLabel = stringResource(R.string.block_contact),
-            onConfirm = {
-                viewModel.blockContact(blockContact!!.id)
-                blockContact = null
-            },
-            onDismiss = { blockContact = null },
-            icon = Icons.Filled.Warning,
-        )
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        SubScreenHeader(
-            title = stringResource(R.string.family),
-            onBack = viewModel::backToHome,
-            action = {
-                MpIconButton(
-                    icon = Icons.Filled.Lock,
-                    contentDescription = stringResource(R.string.lock),
-                    onClick = viewModel::lock,
-                    container = MpColors.SurfaceLow,
-                )
-            },
-        )
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(stringResource(R.string.family), style = MaterialTheme.typography.headlineMedium)
-                    Text(
-                        stringResource(R.string.family_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MpColors.OnSurfaceVariant,
-                    )
-                    MpStatusBanner(state.familyStatus, state.error, modifier = Modifier.padding(top = 4.dp))
-                }
-            }
-
-            item {
-                MpCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            MpIconTile(icon = Icons.Filled.Person, size = 46)
-                            Column {
-                                Text(stringResource(R.string.add_contact), style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    stringResource(R.string.add_contact_hint),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MpColors.OnSurfaceVariant,
-                                )
-                            }
-                        }
-                        MpTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = stringResource(R.string.family_email),
-                            keyboardType = KeyboardType.Email,
-                        )
-                        MpButton(
-                            text = stringResource(R.string.add_contact),
-                            onClick = { viewModel.addContact(email); email = "" },
-                            icon = Icons.Filled.Add,
-                            enabled = email.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(stringResource(R.string.contacts), style = MaterialTheme.typography.titleLarge)
-                    Spacer(modifier = Modifier.weight(1f))
-                    MpBadge(
-                        text = if (acceptedContacts.size == 1) {
-                            stringResource(R.string.contacts_count_one, acceptedContacts.size)
-                        } else {
-                            stringResource(R.string.contacts_count, acceptedContacts.size)
-                        },
-                        tone = MpBadgeTone.Neutral,
-                    )
-                }
-            }
-
-            if (state.contacts.isEmpty()) {
-                item {
-                    MpEmptyState(
-                        icon = Icons.Filled.Person,
-                        title = stringResource(R.string.no_contacts),
-                    )
-                }
-            } else {
-                lazyItems(state.contacts, key = { it.id }) { contact ->
-                    ContactCard(
-                        contact = contact,
-                        onAccept = { viewModel.acceptContact(contact.id) },
-                        onBlock = { blockContact = contact },
-                    )
-                }
-            }
-
-            item {
-                Text(stringResource(R.string.shared_with_me), style = MaterialTheme.typography.titleLarge)
-            }
-
-            if (incomingShares.isEmpty()) {
-                item {
-                    MpEmptyState(icon = Icons.Filled.Email, title = stringResource(R.string.no_shares))
-                }
-            } else {
-                lazyItems(incomingShares, key = { it.id }) { share ->
-                    ShareCard(
-                        share = share,
-                        onAccept = { viewModel.acceptShare(share.id) },
-                        onDecline = { viewModel.declineShare(share.id) },
-                    )
-                }
-            }
-
-            if (outgoingShares.isNotEmpty()) {
-                item {
-                    Text(stringResource(R.string.outgoing_shares), style = MaterialTheme.typography.titleLarge)
-                }
-                lazyItems(outgoingShares, key = { "out-${it.id}" }) { share ->
-                    OutgoingShareCard(
-                        share = share,
-                        onCancel = { viewModel.revokeShare(share.id) },
-                    )
-                }
-            }
-
-            item {
-                Text(stringResource(R.string.document_requests), style = MaterialTheme.typography.titleLarge)
-            }
-
-            item {
-                MpCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (acceptedContacts.isEmpty()) {
-                            Text(
-                                stringResource(R.string.request_needs_contact),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MpColors.OnSurfaceVariant,
-                            )
-                        } else {
-                            Text(stringResource(R.string.request_from), style = MaterialTheme.typography.titleSmall)
-                            Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                for (contact in acceptedContacts) {
-                                    MpFilterChip(
-                                        text = contact.name,
-                                        selected = effectiveContactId == contact.id,
-                                        onClick = { requestContactId = contact.id },
-                                    )
-                                }
-                            }
-                            MpTextField(
-                                value = requestType,
-                                onValueChange = { requestType = it },
-                                label = stringResource(R.string.request_document),
-                            )
-                            MpTextField(
-                                value = requestPurpose,
-                                onValueChange = { requestPurpose = it },
-                                label = stringResource(R.string.request_purpose),
-                            )
-                            MpButton(
-                                text = stringResource(R.string.request),
-                                onClick = {
-                                    viewModel.createShareRequest(
-                                        effectiveContactId,
-                                        requestType,
-                                        requestPurpose,
-                                    )
-                                    requestType = ""
-                                    requestPurpose = ""
-                                },
-                                enabled = effectiveContactId.isNotBlank() &&
-                                    requestType.isNotBlank() && requestPurpose.isNotBlank(),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (state.shareRequests.isEmpty()) {
-                item {
-                    MpEmptyState(icon = Icons.Filled.List, title = stringResource(R.string.no_requests))
-                }
-            } else {
-                lazyItems(state.shareRequests, key = { it.id }) { request ->
-                    ShareRequestCard(
-                        request = request,
-                        onDecline = { viewModel.declineShareRequest(request.id) },
-                        onCancel = { viewModel.cancelShareRequest(request.id) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContactCard(
+internal fun ContactCard(
     contact: UiContact,
     onAccept: () -> Unit,
     onBlock: () -> Unit,
 ) {
     MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            MpAvatar(contact.name, size = 46)
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MpAvatar(contact.name, size = 46)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
                     Text(
                         text = contact.name,
                         style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = contact.email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MpColors.OnSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
                     )
-                    MpBadge(
-                        text = when (contact.status) {
-                            "accepted" -> stringResource(R.string.accepted)
-                            "pending" -> stringResource(R.string.pending)
-                            else -> contact.status
-                        },
-                        tone = if (contact.status == "accepted") MpBadgeTone.Primary else MpBadgeTone.Warning,
-                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        MpBadge(
+                            text = when (contact.status) {
+                                "accepted" -> stringResource(R.string.accepted)
+                                "pending" -> stringResource(R.string.pending)
+                                else -> contact.status
+                            },
+                            tone = when (contact.status) {
+                                "accepted" -> MpBadgeTone.Primary
+                                "pending" -> MpBadgeTone.Warning
+                                else -> MpBadgeTone.Neutral
+                            },
+                        )
+                        if (contact.status == "pending") {
+                            MpBadge(
+                                text = if (contact.incoming) {
+                                    stringResource(R.string.contact_incoming)
+                                } else {
+                                    stringResource(R.string.contact_outgoing)
+                                },
+                                tone = MpBadgeTone.Neutral,
+                            )
+                        }
+                    }
                 }
-                Text(
-                    text = contact.email,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MpColors.OnSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
-            if (contact.status == "pending") {
-                MpButton(
-                    text = stringResource(R.string.accept),
-                    onClick = onAccept,
-                    variant = MpButtonVariant.Secondary,
-                    modifier = Modifier.widthIn(max = 140.dp),
-                    compact = true,
-                    maxLines = 1,
-                )
-            }
-        }
-        if (contact.status == "accepted") {
-            TextButton(onClick = onBlock) {
-                Text(
-                    text = stringResource(R.string.block),
-                    color = MpColors.Error,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
 
-@Composable
-private fun OutgoingShareCard(share: UiShare, onCancel: () -> Unit) {
-    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ItemTypeIcon(type = share.itemType, size = 44)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.sent_to, share.sender),
-                        style = MaterialTheme.typography.titleSmall,
+            val statusText = when {
+                contact.status == "accepted" -> stringResource(R.string.contact_ready)
+                contact.status == "pending" && contact.incoming -> stringResource(R.string.contact_accept_hint)
+                contact.status == "pending" -> stringResource(R.string.contact_waiting)
+                else -> stringResource(R.string.contact_blocked)
+            }
+
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+            )
+
+            if (contact.status == "pending" && contact.incoming) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MpButton(
+                        text = stringResource(R.string.accept),
+                        onClick = onAccept,
+                        variant = MpButtonVariant.Primary,
+                        modifier = Modifier.weight(1f),
+                        compact = true,
+                        maxLines = 1,
                     )
-                    MpBadge(
-                        text = stringResource(if (share.mode == "transfer") R.string.transfer_label else R.string.copy_label),
-                        tone = if (share.mode == "transfer") MpBadgeTone.Warning else MpBadgeTone.Neutral,
+                    MpButton(
+                        text = stringResource(R.string.block),
+                        onClick = onBlock,
+                        variant = MpButtonVariant.Danger,
+                        modifier = Modifier.weight(1f),
+                        compact = true,
+                        maxLines = 1,
                     )
                 }
-                TextButton(onClick = onCancel) {
+            } else if (contact.status == "accepted") {
+                TextButton(onClick = onBlock) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = MpColors.Error,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = stringResource(R.string.cancel),
+                        text = stringResource(R.string.block_contact),
                         color = MpColors.Error,
                         style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
@@ -2000,8 +1905,110 @@ private fun OutgoingShareCard(share: UiShare, onCancel: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ShareCard(share: UiShare, onAccept: () -> Unit, onDecline: () -> Unit) {
+internal fun OutgoingShareCard(
+    share: UiShare,
+    itemTitle: String?,
+    onCancel: () -> Unit,
+    onManage: (() -> Unit)? = null,
+) {
+    val typeName = when (share.itemType) {
+        "ticket" -> stringResource(R.string.ticket)
+        "medical_card" -> stringResource(R.string.medical_card)
+        "credential" -> stringResource(R.string.credentials)
+        else -> stringResource(R.string.document)
+    }
+    val title = itemTitle?.takeIf { it.isNotBlank() } ?: typeName
+    val statusLabel = when (share.status) {
+        "accepted" -> stringResource(R.string.share_status_accepted)
+        "declined" -> stringResource(R.string.share_status_declined)
+        "revoked" -> stringResource(R.string.share_status_revoked)
+        "expired" -> stringResource(R.string.share_status_expired)
+        else -> stringResource(R.string.share_status_pending)
+    }
+    val statusTone = when (share.status) {
+        "accepted" -> MpBadgeTone.Primary
+        "declined", "expired" -> MpBadgeTone.Danger
+        "pending" -> MpBadgeTone.Warning
+        else -> MpBadgeTone.Neutral
+    }
+
+    MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ItemTypeIcon(type = share.itemType, size = 44)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        MpBadge(text = statusLabel, tone = statusTone)
+                        MpBadge(
+                            text = stringResource(if (share.mode == "transfer") R.string.transfer_label else R.string.copy_label),
+                            tone = if (share.mode == "transfer") MpBadgeTone.Warning else MpBadgeTone.Neutral,
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = if (share.sender.isBlank()) {
+                    stringResource(R.string.share_recipient_unknown)
+                } else {
+                    stringResource(R.string.sent_to, share.sender)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            if (share.status == "pending" || onManage != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (onManage != null) {
+                        MpButton(
+                            text = stringResource(R.string.manage),
+                            onClick = onManage,
+                            variant = MpButtonVariant.Secondary,
+                            compact = true,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (share.status == "pending") {
+                        MpButton(
+                            text = stringResource(R.string.cancel),
+                            onClick = onCancel,
+                            variant = MpButtonVariant.Danger,
+                            compact = true,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ShareCard(share: UiShare, onAccept: () -> Unit, onDecline: () -> Unit) {
     MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2042,7 +2049,7 @@ private fun ShareCard(share: UiShare, onAccept: () -> Unit, onDecline: () -> Uni
 }
 
 @Composable
-private fun ShareRequestCard(request: UiShareRequest, onDecline: () -> Unit, onCancel: () -> Unit) {
+internal fun ShareRequestCard(request: UiShareRequest, onDecline: () -> Unit, onCancel: () -> Unit) {
     MpCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MpBadge(
@@ -2236,7 +2243,7 @@ private fun SettingsScreen(state: UiState, viewModel: MainViewModel) {
                         }
                         MpButton(
                             text = stringResource(R.string.open_family),
-                            onClick = viewModel::openFamily,
+                            onClick = { viewModel.openFamily() },
                             variant = MpButtonVariant.Quiet,
                             compact = true,
                             maxLines = 1,
@@ -2696,7 +2703,8 @@ internal fun MpTopBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MpColors.Surface),
+            .background(MpColors.Surface)
+            .padding(top = 6.dp),
     ) {
         Row(
             modifier = Modifier
@@ -2947,7 +2955,7 @@ fun SubScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

@@ -1,10 +1,21 @@
 import { initTheme } from './theme';
+import './push';
 
 initTheme();
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
         // La PWA es opcional; la aplicación funciona sin service worker.
+    });
+
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type !== 'mypass-open-url' || !event.data.url) {
+            return;
+        }
+
+        if (event.data.url !== window.location.href) {
+            window.location.href = event.data.url;
+        }
     });
 }
 

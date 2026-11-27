@@ -12,28 +12,29 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
@@ -50,6 +51,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -187,6 +190,7 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                     NextPassHero(
                         item = nextPass,
                         passCount = passes.size,
+                        shared = state.isItemShared(nextPass.id),
                         onPresent = { presentingItem = nextPass },
                         onOpenPasses = viewModel::openPasses,
                     )
@@ -211,7 +215,7 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                         }
                     }
                     items(otherPasses, key = { "home-${it.id}" }) { item ->
-                        PassCompactCard(item = item, onClick = { viewModel.openPasses() })
+                        PassCompactCard(item = item, shared = state.isItemShared(item.id), onClick = { viewModel.openPasses() })
                     }
                 }
             } else {
@@ -249,28 +253,23 @@ fun HomeScreen(state: UiState, viewModel: MainViewModel) {
                     onVault = viewModel::backToVault,
                     onPasses = viewModel::openPasses,
                     onScan = { viewModel.openScanner(true) },
-                    onFamily = viewModel::openFamily,
+                    onFamily = { viewModel.openFamily() },
                 )
             }
 
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     HomeVaultShortcut(
                         title = stringResource(R.string.credentials),
                         subtitle = stringResource(R.string.credentials_shortcut),
                         icon = Icons.Filled.Lock,
                         onClick = viewModel::openCredentials,
-                        modifier = Modifier.weight(1f),
                     )
                     HomeVaultShortcut(
                         title = stringResource(R.string.medical),
                         subtitle = stringResource(R.string.medical_shortcut),
                         icon = Icons.Filled.Info,
                         onClick = viewModel::openMedical,
-                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -332,10 +331,12 @@ private fun HomeVaultShortcut(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NextPassHero(
     item: UiItem,
     passCount: Int,
+    shared: Boolean,
     onPresent: () -> Unit,
     onOpenPasses: () -> Unit,
 ) {
@@ -365,10 +366,10 @@ private fun NextPassHero(
                 modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f)) {
                         Row(
@@ -399,7 +400,27 @@ private fun NextPassHero(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Spacer(modifier = Modifier.weight(1f))
+                    if (shared) {
+                        Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.18f)) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Share,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                                Text(
+                                    text = stringResource(R.string.shared),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = if (passCount == 1) stringResource(R.string.home_pass_count_one, passCount) else stringResource(R.string.home_pass_count, passCount),
                         style = MaterialTheme.typography.labelSmall,
@@ -515,7 +536,7 @@ private fun QuickActionDock(
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 QuickActionItem(
                     title = stringResource(R.string.vault),
@@ -529,6 +550,11 @@ private fun QuickActionDock(
                     modifier = Modifier.weight(1f),
                     onClick = onPasses,
                 )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 QuickActionItem(
                     title = stringResource(R.string.scan),
                     icon = Icons.Filled.Add,
@@ -555,39 +581,41 @@ private fun QuickActionItem(
     onClick: () -> Unit,
     accent: Boolean = false,
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (accent) MpColors.AccentSoft else MpColors.SurfaceLow,
+        border = BorderStroke(1.dp, if (accent) MpColors.Accent.copy(alpha = 0.35f) else MpColors.Border),
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (accent) MpColors.AccentSoft else MpColors.PrimaryFixed),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (accent) MpColors.AccentDeep else MpColors.Primary,
-                modifier = Modifier.size(23.dp),
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(if (accent) MpColors.Accent else MpColors.PrimaryFixed),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (accent) Color.White else MpColors.Primary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (accent) MpColors.AccentDeep else MpColors.OnSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
         }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MpColors.OnSurfaceVariant,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp),
-        )
     }
 }
 
@@ -617,6 +645,7 @@ private fun QuickAction(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     var filter by remember { mutableStateOf("all") }
@@ -624,11 +653,12 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     var presentingItem by remember { mutableStateOf<UiItem?>(null) }
     var shareItem by remember { mutableStateOf<UiItem?>(null) }
     var deleteItem by remember { mutableStateOf<UiItem?>(null) }
+    var manageSharesItem by remember { mutableStateOf<UiItem?>(null) }
     var showNewPassDialog by remember { mutableStateOf(false) }
+    var showAddMenu by remember { mutableStateOf(false) }
+    var showFilterMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var revealRequest by remember { mutableStateOf(0) }
-    // Elementos fijos antes de la tarjeta seleccionada: título, estado, acciones y filtros.
-    val selectedDetailItemIndex = 4
     val revealSelectedPass: () -> Unit = { revealRequest += 1 }
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -641,9 +671,23 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
     val allPasses = state.items.filter { it.pass != null }
     val active = sortActivePassItems(allPasses.filterNot { isExpired(it) || it.state == "transferred" })
     val archived = allPasses.filter { isExpired(it) || it.state == "transferred" }
-    val filtered = if (filter == "all") active else active.filter { it.pass?.category == filter }
-    val selected = allPasses.firstOrNull { it.id == selectedId } ?: active.firstOrNull()
+    val filtered = when (filter) {
+        "all" -> active
+        "shared" -> active.filter { state.isItemShared(it.id) }
+        else -> active.filter { it.pass?.category == filter }
+    }
+    val selected = filtered.firstOrNull { it.id == selectedId }
+        ?: filtered.firstOrNull()
+        ?: active.firstOrNull()
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
+    val sharedCount = active.count { state.isItemShared(it.id) }
+    val selectedDetailItemIndex = 3
+
+    LaunchedEffect(sharedCount) {
+        if (filter == "shared" && sharedCount == 0) {
+            filter = "all"
+        }
+    }
 
     LaunchedEffect(state.focusItemId) {
         state.focusItemId?.let { id ->
@@ -684,6 +728,21 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                 viewModel.sendShare(shareItem!!, contactId, mode)
                 shareItem = null
             },
+        )
+    }
+
+    manageSharesItem?.let { item ->
+        ManageSharesDialog(
+            itemId = item.id,
+            itemTitle = item.title,
+            shares = state.outgoingShares,
+            canShare = acceptedContacts.isNotEmpty(),
+            onDismiss = { manageSharesItem = null },
+            onShare = {
+                shareItem = item
+                manageSharesItem = null
+            },
+            onRevoke = viewModel::revokeShare,
         )
     }
 
@@ -729,55 +788,64 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = stringResource(R.string.passes_title),
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.passes_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MpColors.OnSurfaceVariant,
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = stringResource(R.string.passes_title),
+                            style = MaterialTheme.typography.headlineMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.passes_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                    }
+                    Box {
+                        MpIconButton(
+                            icon = Icons.Filled.Add,
+                            contentDescription = stringResource(R.string.add_pass),
+                            onClick = { showAddMenu = true },
+                            container = MpColors.Primary,
+                            tint = MpColors.OnPrimary,
+                        )
+                        DropdownMenu(
+                            expanded = showAddMenu,
+                            onDismissRequest = { showAddMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.create_pass_from_scratch)) },
+                                leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                onClick = {
+                                    showAddMenu = false
+                                    showNewPassDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.scan)) },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                                onClick = {
+                                    showAddMenu = false
+                                    viewModel.openScanner(true)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.import_short)) },
+                                leadingIcon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                                onClick = {
+                                    showAddMenu = false
+                                    importLauncher.launch(arrayOf("application/pdf", "image/*"))
+                                },
+                            )
+                        }
+                    }
                 }
             }
 
             item { MpStatusBanner(state.status, state.error) }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MpButton(
-                        text = stringResource(R.string.create_pass_from_scratch),
-                        onClick = { showNewPassDialog = true },
-                        icon = Icons.Filled.Add,
-                        variant = MpButtonVariant.Secondary,
-                        enabled = !state.busy,
-                        fillWidth = true,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MpButton(
-                            text = stringResource(R.string.scan),
-                            onClick = { viewModel.openScanner(true) },
-                            icon = Icons.Filled.Add,
-                            enabled = !state.busy,
-                            modifier = Modifier.weight(1f),
-                            compact = true,
-                            maxLines = 1,
-                        )
-                        MpButton(
-                            text = stringResource(R.string.import_short),
-                            onClick = {
-                                importLauncher.launch(arrayOf("application/pdf", "image/*"))
-                            },
-                            variant = MpButtonVariant.Secondary,
-                            enabled = !state.busy,
-                            modifier = Modifier.weight(1f),
-                            compact = true,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
 
             if (allPasses.isEmpty()) {
                 item {
@@ -809,29 +877,78 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                 }
             } else {
                 item {
+                    val filterLabel = when (filter) {
+                        "shared" -> stringResource(R.string.shared_filter, sharedCount)
+                        "flight" -> stringResource(R.string.flight)
+                        "event" -> stringResource(R.string.event)
+                        "transit" -> stringResource(R.string.transit)
+                        "id" -> stringResource(R.string.identity)
+                        "membership" -> stringResource(R.string.membership)
+                        else -> stringResource(R.string.all)
+                    }
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        MpFilterChip(stringResource(R.string.all), filter == "all") { filter = "all" }
-                        MpFilterChip(stringResource(R.string.flight), filter == "flight") { filter = "flight" }
-                        MpFilterChip(stringResource(R.string.event), filter == "event") { filter = "event" }
-                        MpFilterChip(stringResource(R.string.transit), filter == "transit") { filter = "transit" }
-                        MpFilterChip(stringResource(R.string.identity), filter == "id") { filter = "id" }
-                        MpFilterChip(stringResource(R.string.membership), filter == "membership") { filter = "membership" }
+                        Text(
+                            text = stringResource(R.string.pass_count_visible, filtered.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Box {
+                            MpButton(
+                                text = filterLabel,
+                                onClick = { showFilterMenu = true },
+                                variant = MpButtonVariant.Secondary,
+                                compact = true,
+                                maxLines = 1,
+                            )
+                            DropdownMenu(
+                                expanded = showFilterMenu,
+                                onDismissRequest = { showFilterMenu = false },
+                            ) {
+                                val options = buildList {
+                                    add("all" to stringResource(R.string.all))
+                                    if (sharedCount > 0) {
+                                        add("shared" to stringResource(R.string.shared_filter, sharedCount))
+                                    }
+                                    add("flight" to stringResource(R.string.flight))
+                                    add("event" to stringResource(R.string.event))
+                                    add("transit" to stringResource(R.string.transit))
+                                    add("id" to stringResource(R.string.identity))
+                                    add("membership" to stringResource(R.string.membership))
+                                }
+                                options.forEach { (value, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            filter = value
+                                            showFilterMenu = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                if (selected != null && (filter == "all" || selected.pass?.category == filter)) {
+                if (selected != null && (
+                        filter == "all" ||
+                            (filter == "shared" && state.isItemShared(selected.id)) ||
+                            selected.pass?.category == filter
+                        )
+                ) {
                     item {
                         PassDetailCard(
                             item = selected,
                             isNext = selected.id == active.firstOrNull()?.id,
                             hasContacts = acceptedContacts.isNotEmpty(),
+                            shared = state.isItemShared(selected.id),
                             onPresent = { presentingItem = selected },
                             onShare = { shareItem = selected },
+                            onManageShares = { manageSharesItem = selected },
                             onEdit = { viewModel.editPass(selected) },
                             onDelete = { deleteItem = selected },
                         )
@@ -853,6 +970,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                                 PassCompactCard(
                                     item = item,
                                     headerOnly = true,
+                                    shared = state.isItemShared(item.id),
                                     onClick = {
                                         selectedId = item.id
                                         viewModel.recordRecentItem(item.id)
@@ -883,6 +1001,7 @@ fun PassesScreen(state: UiState, viewModel: MainViewModel) {
                         PassCompactCard(
                             item = item,
                             archived = true,
+                            shared = state.isItemShared(item.id),
                             onClick = {
                                 selectedId = item.id
                                 viewModel.recordRecentItem(item.id)
@@ -957,8 +1076,10 @@ private fun PassDetailCard(
     item: UiItem,
     isNext: Boolean,
     hasContacts: Boolean,
+    shared: Boolean,
     onPresent: () -> Unit,
     onShare: () -> Unit,
+    onManageShares: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -980,8 +1101,10 @@ private fun PassDetailCard(
                 item = item,
                 pass = pass,
                 isNext = isNext,
+                shared = shared,
                 background = background,
                 onFlip = onFlip,
+                onManageShares = onManageShares,
             )
         },
         back = { onFlipBack ->
@@ -991,9 +1114,11 @@ private fun PassDetailCard(
                 bitmap = bitmap,
                 background = background,
                 hasContacts = hasContacts,
+                shared = shared,
                 onFlip = onFlipBack,
                 onPresent = onPresent,
                 onShare = onShare,
+                onManageShares = onManageShares,
                 onEdit = onEdit,
                 onDelete = onDelete,
             )
@@ -1006,8 +1131,10 @@ private fun PassDetailFront(
     item: UiItem,
     pass: UiPass,
     isNext: Boolean,
+    shared: Boolean,
     background: Modifier,
     onFlip: () -> Unit,
+    onManageShares: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1023,6 +1150,7 @@ private fun PassDetailFront(
             } else {
                 categoryLabel(pass.category)
             },
+            shared = shared,
         )
         PassCardBody(pass = pass)
         Row(
@@ -1054,6 +1182,17 @@ private fun PassDetailFront(
                 color = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.weight(1f),
             )
+            if (shared) {
+                MpIconButton(
+                    icon = Icons.Filled.Share,
+                    contentDescription = stringResource(R.string.manage_shares),
+                    onClick = onManageShares,
+                    tint = Color.White,
+                    container = Color.White.copy(alpha = 0.14f),
+                    shape = CircleShape,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             MpFlipButton(
                 text = stringResource(R.string.view_back),
                 onClick = onFlip,
@@ -1070,9 +1209,11 @@ private fun PassDetailBack(
     bitmap: Bitmap?,
     background: Modifier,
     hasContacts: Boolean,
+    shared: Boolean,
     onFlip: () -> Unit,
     onPresent: () -> Unit,
     onShare: () -> Unit,
+    onManageShares: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -1234,6 +1375,16 @@ private fun PassDetailBack(
                 modifier = Modifier.weight(1f),
                 leadingIcon = {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+            )
+        }
+
+        if (shared) {
+            PassDarkActionButton(
+                text = stringResource(R.string.manage_shares),
+                onClick = onManageShares,
+                leadingIcon = {
+                    Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
             )
         }
@@ -1436,6 +1587,7 @@ internal fun PassCompactCard(
     item: UiItem,
     archived: Boolean = false,
     headerOnly: Boolean = false,
+    shared: Boolean = false,
     onClick: () -> Unit,
 ) {
     val pass = item.pass ?: return
@@ -1472,6 +1624,7 @@ internal fun PassCompactCard(
                     categoryLabel(pass.category)
                 },
                 dark = !archived,
+                shared = shared,
             )
             if (headerOnly) {
                 val summary = passSummaryText(item, pass)
@@ -1586,8 +1739,9 @@ internal fun PassPreviewCard(draft: PassDraft) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PassCardHeader(pass: UiPass, badge: String, dark: Boolean = true) {
+private fun PassCardHeader(pass: UiPass, badge: String, dark: Boolean = true, shared: Boolean = false) {
     val logo = remember(pass.logo) { pass.logo?.let(::decodeDataUrl) }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1633,19 +1787,31 @@ private fun PassCardHeader(pass: UiPass, badge: String, dark: Boolean = true) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        Surface(
-            shape = CircleShape,
-            color = if (dark) Color.White.copy(alpha = 0.16f) else MpColors.SurfaceHighest,
-        ) {
-            Text(
-                text = badge,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (dark) Color.White else MpColors.OnSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            FlowRow(
+                modifier = Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (dark) Color.White.copy(alpha = 0.16f) else MpColors.SurfaceHighest,
+                ) {
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (dark) Color.White else MpColors.OnSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (shared) {
+                    MpBadge(
+                        text = stringResource(R.string.shared),
+                        tone = MpBadgeTone.Primary,
+                    )
+                }
+            }
         }
     }
 }

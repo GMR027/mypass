@@ -12,7 +12,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,6 +64,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
     var search by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<UiItem?>(null) }
     var shareTarget by remember { mutableStateOf<UiItem?>(null) }
+    var manageSharesTarget by remember { mutableStateOf<UiItem?>(null) }
     var presenting by remember { mutableStateOf<UiItem?>(null) }
     var selectedMedicalId by remember { mutableStateOf<String?>(null) }
     var revealMedicalId by remember { mutableStateOf<String?>(null) }
@@ -116,6 +120,21 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
         )
     }
 
+    manageSharesTarget?.let { item ->
+        ManageSharesDialog(
+            itemId = item.id,
+            itemTitle = item.title,
+            shares = state.outgoingShares,
+            canShare = acceptedContacts.isNotEmpty(),
+            onDismiss = { manageSharesTarget = null },
+            onShare = {
+                shareTarget = item
+                manageSharesTarget = null
+            },
+            onRevoke = viewModel::revokeShare,
+        )
+    }
+
     presenting?.let { item ->
         MedicalPresentationDialog(item = item, onDismiss = { presenting = null })
     }
@@ -144,28 +163,54 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                         onMedical = {},
                     )
                     MpStatusBanner(state.status, state.error)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.medical_title),
-                                style = MaterialTheme.typography.headlineSmall,
-                            )
-                            Text(
-                                text = stringResource(R.string.medical_subtitle),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MpColors.OnSurfaceVariant,
-                            )
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val compactHeader = maxWidth < 520.dp
+                        if (compactHeader) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.medical_title),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.medical_subtitle),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MpColors.OnSurfaceVariant,
+                                    )
+                                }
+                                MpButton(
+                                    text = stringResource(R.string.add_medical_card),
+                                    onClick = viewModel::newMedicalCard,
+                                    icon = Icons.Filled.Add,
+                                    enabled = !state.busy,
+                                    fillWidth = true,
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.medical_title),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.medical_subtitle),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MpColors.OnSurfaceVariant,
+                                    )
+                                }
+                                MpButton(
+                                    text = stringResource(R.string.add_medical_card),
+                                    onClick = viewModel::newMedicalCard,
+                                    icon = Icons.Filled.Add,
+                                    enabled = !state.busy,
+                                )
+                            }
                         }
-                        MpButton(
-                            text = stringResource(R.string.add_medical_card),
-                            onClick = viewModel::newMedicalCard,
-                            icon = Icons.Filled.Add,
-                            enabled = !state.busy,
-                        )
                     }
                     MpTextField(
                         value = search,
@@ -205,10 +250,12 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                                 ) {
                                     MedicalFlipCard(
                                         item = item,
+                                        shared = state.isItemShared(item.id),
                                         canShare = acceptedContacts.isNotEmpty(),
                                         onPresent = { presenting = item },
                                         onEdit = { viewModel.editMedicalCard(item) },
                                         onShare = { shareTarget = item },
+                                        onManageShares = { manageSharesTarget = item },
                                         onOpenAttachment = { viewModel.openItem(item) },
                                         onDelete = { deleteTarget = item },
                                     )
@@ -216,6 +263,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                             } else {
                                 MedicalCompactCard(
                                     item = item,
+                                    shared = state.isItemShared(item.id),
                                     onClick = {
                                         selectedMedicalId = item.id
                                         revealMedicalId = item.id
@@ -233,6 +281,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
 @Composable
 private fun MedicalCompactCard(
     item: UiItem,
+    shared: Boolean = false,
     onClick: () -> Unit,
 ) {
     val medical = item.medical ?: return
@@ -243,7 +292,7 @@ private fun MedicalCompactCard(
         contentPadding = PaddingValues(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            MedicalHeader(item = item, medical = medical)
+            MedicalHeader(item = item, medical = medical, shared = shared)
             Text(
                 text = listOf(
                     stringResource(R.string.blood_type) + ": " + medical.bloodType.ifBlank { "—" },
@@ -261,10 +310,12 @@ private fun MedicalCompactCard(
 @Composable
 private fun MedicalFlipCard(
     item: UiItem,
+    shared: Boolean = false,
     canShare: Boolean,
     onPresent: () -> Unit,
     onEdit: () -> Unit,
     onShare: () -> Unit,
+    onManageShares: () -> Unit,
     onOpenAttachment: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -279,7 +330,7 @@ private fun MedicalFlipCard(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                MedicalHeader(item = item, medical = medical)
+                MedicalHeader(item = item, medical = medical, shared = shared)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     MedicalStat(
                         label = stringResource(R.string.blood_type),
@@ -308,14 +359,16 @@ private fun MedicalFlipCard(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                MedicalHeader(item = item, medical = medical)
+                MedicalHeader(item = item, medical = medical, shared = shared)
                 MedicalDetails(
                     item = item,
                     medical = medical,
                     canShare = canShare,
+                    shared = shared,
                     onPresent = onPresent,
                     onEdit = onEdit,
                     onShare = onShare,
+                    onManageShares = onManageShares,
                     onOpenAttachment = onOpenAttachment,
                     onDelete = onDelete,
                 )
@@ -333,31 +386,44 @@ private fun MedicalFlipCard(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MedicalHeader(item: UiItem, medical: UiMedicalCard) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        MpIconTile(icon = Icons.Filled.Info, size = 50)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = medical.holder.ifBlank { stringResource(R.string.no_holder) },
-                style = MaterialTheme.typography.bodySmall,
-                color = MpColors.OnSurfaceVariant,
-            )
+private fun MedicalHeader(item: UiItem, medical: UiMedicalCard, shared: Boolean = false) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MpIconTile(icon = Icons.Filled.Info, size = 50)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = medical.holder.ifBlank { stringResource(R.string.no_holder) },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MpColors.OnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        MpBadge(
-            text = stringResource(R.string.medical),
-            tone = MpBadgeTone.Primary,
-        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MpBadge(
+                text = stringResource(R.string.medical),
+                tone = MpBadgeTone.Primary,
+            )
+            if (shared) {
+                MpBadge(text = stringResource(R.string.shared), tone = MpBadgeTone.Primary)
+            }
+        }
     }
 }
 
@@ -366,9 +432,11 @@ private fun MedicalDetails(
     item: UiItem,
     medical: UiMedicalCard,
     canShare: Boolean,
+    shared: Boolean,
     onPresent: () -> Unit,
     onEdit: () -> Unit,
     onShare: () -> Unit,
+    onManageShares: () -> Unit,
     onOpenAttachment: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -453,23 +521,29 @@ private fun MedicalDetails(
             )
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             MedicalAction(stringResource(R.string.present_card), onPresent, primary = true)
             MedicalAction(stringResource(R.string.edit), onEdit)
             if (canShare) {
                 MedicalAction(stringResource(R.string.share), onShare)
             }
+            if (shared) {
+                MedicalAction(stringResource(R.string.manage_shares), onManageShares)
+            }
             if (item.blobId != null) {
                 MedicalAction(stringResource(R.string.attachment), onOpenAttachment)
             }
-            TextButton(onClick = onDelete) {
-                Text(stringResource(R.string.delete), color = MpColors.Error)
-            }
+            MpButton(
+                text = stringResource(R.string.delete),
+                onClick = onDelete,
+                variant = MpButtonVariant.Danger,
+                compact = true,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -500,19 +574,13 @@ private fun MedicalStat(label: String, value: String, modifier: Modifier = Modif
 
 @Composable
 private fun MedicalAction(text: String, onClick: () -> Unit, primary: Boolean = false) {
-    TextButton(
+    MpButton(
+        text = text,
         onClick = onClick,
-        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-            contentColor = if (primary) MpColors.Primary else MpColors.OnSurfaceVariant,
-        ),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+        variant = if (primary) MpButtonVariant.Primary else MpButtonVariant.Secondary,
+        compact = true,
+        maxLines = 1,
+    )
 }
 
 private fun parseMedicationTimes(value: String): List<String> {

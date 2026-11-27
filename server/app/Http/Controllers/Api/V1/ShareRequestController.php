@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\ShareRequest;
-use App\Models\UserNotification;
+use App\Services\AppNotifications;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,15 +53,11 @@ class ShareRequestController extends Controller
             'expires_at' => $data['expires_at'] ?? null,
         ]);
 
-        UserNotification::create([
-            'user_id' => $contact->contact_user_id,
-            'type' => 'document_request',
-            'data' => [
-                'request_id' => $shareRequest->id,
-                'from' => $request->user()->name,
-                'document_type' => $data['document_type'],
-            ],
-        ]);
+        AppNotifications::create($contact->contactUser, 'document_request', [
+            'request_id' => $shareRequest->id,
+            'from' => $request->user()->name,
+            'document_type' => $data['document_type'],
+        ], url: '/vault?tab=family&request='.$shareRequest->id);
 
         $audit->log($request->user(), 'document_requested', [
             'request_id' => $shareRequest->id,

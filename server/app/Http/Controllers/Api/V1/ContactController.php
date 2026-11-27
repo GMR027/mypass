@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\User;
-use App\Models\UserNotification;
+use App\Services\AppNotifications;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,30 +49,35 @@ class ContactController extends Controller
             return response()->json(['data' => $this->payload($existing)]);
         }
 
+        $initiatorId = $existing?->initiated_by_user_id ?? $request->user()->id;
+
         $contact = Contact::updateOrCreate(
             [
                 'user_id' => $request->user()->id,
                 'contact_user_id' => $contactUser->id,
             ],
-            ['status' => 'pending'],
+            [
+                'status' => 'pending',
+                'initiated_by_user_id' => $initiatorId,
+            ],
         );
 
-        Contact::updateOrCreate(
+        $recipientContact = Contact::updateOrCreate(
             [
                 'user_id' => $contactUser->id,
                 'contact_user_id' => $request->user()->id,
             ],
-            ['status' => 'pending'],
+            [
+                'status' => 'pending',
+                'initiated_by_user_id' => $initiatorId,
+            ],
         );
 
-        UserNotification::create([
-            'user_id' => $contactUser->id,
-            'type' => 'contact_request',
-            'data' => [
-                'contact_id' => $contact->id,
-                'from' => $request->user()->name,
-            ],
-        ]);
+        AppNotifications::create($contactUser, 'contact_request', [
+            'contact_id' => $recipientContact->id,
+            'requester_contact_id' => $contact->id,
+            'from' => $request->user()->name,
+        ], url: '/vault?tab=family&contact='.$recipientContact->id);
 
         $audit->log($request->user(), 'contact_requested', [
             'contact' => $contactUser->name,
@@ -89,20 +94,29 @@ class ContactController extends Controller
             return response()->json(['message' => __('Esta relación ya fue procesada.')], 422);
         }
 
+        if ($contact->initiated_by_user_id !== null
+            && (int) $contact->initiated_by_user_id === (int) $contact->user_id) {
+            return response()->json([
+                'message' => __('Esta invitación la enviaste tú. Espera a que la otra persona la acepte.'),
+            ], 422);
+        }
+
         $contact->forceFill(['status' => 'accepted', 'verified_at' => now()])->save();
 
-        Contact::where('user_id', $contact->contact_user_id)
+        $requesterContact = Contact::where('user_id', $contact->contact_user_id)
             ->where('contact_user_id', $request->user()->id)
-            ->update(['status' => 'accepted', 'verified_at' => now()]);
+            ->first();
 
-        UserNotification::create([
-            'user_id' => $contact->contact_user_id,
-            'type' => 'contact_accepted',
-            'data' => [
-                'contact_id' => $contact->id,
+        $requesterContact?->forceFill(['status' => 'accepted', 'verified_at' => now()])->save();
+
+        $requester = $contact->contactUser;
+
+        if ($requester) {
+            AppNotifications::create($requester, 'contact_accepted', [
+                'contact_id' => $requesterContact?->id,
                 'from' => $request->user()->name,
-            ],
-        ]);
+            ], url: '/vault?tab=family');
+        }
 
         $audit->log($request->user(), 'contact_accepted', [
             'contact_id' => $contact->id,
@@ -150,9 +164,18 @@ class ContactController extends Controller
 
     private function payload(Contact $contact): array
     {
+        $direction = match (true) {
+            $contact->initiated_by_user_id === null => 'unknown',
+            (int) $contact->initiated_by_user_id === (int) $contact->user_id => 'outgoing',
+            default => 'incoming',
+        };
+
         return [
             'id' => $contact->id,
             'status' => $contact->status,
+            'direction' => $direction,
+            'incoming' => $direction !== 'outgoing',
+            'can_accept' => $contact->status === 'pending' && $direction !== 'outgoing',
             'name' => $contact->contactUser->name,
             'email' => $contact->contactUser->email,
             'public_id' => $contact->contactUser->public_id,

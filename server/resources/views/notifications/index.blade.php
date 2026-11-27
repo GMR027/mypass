@@ -21,6 +21,28 @@
             <p class="mp-alert mp-alert-success mb-5" role="status">{{ session('status') }}</p>
         @endif
 
+        <section id="push-notifications" class="mp-card mp-card-pad mb-5" hidden>
+            <div class="flex items-start gap-4">
+                <span class="mp-icon-tile shrink-0">
+                    <x-icon name="notifications_active" class="text-[24px]" />
+                </span>
+                <div class="min-w-0 flex-1">
+                    <h2 class="mp-title-sm">{{ __('Avisos en este dispositivo') }}</h2>
+                    <p class="mp-hint mt-1">{{ __('Recibe avisos de envíos, contactos y actualizaciones aunque la app esté cerrada.') }}</p>
+                    <p id="push-status" class="mp-hint mt-2" role="status"></p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button id="push-enable" type="button" class="mp-btn mp-btn-primary mp-btn-sm" hidden>
+                            <x-icon name="notifications_active" class="text-[19px]" />
+                            {{ __('Activar avisos') }}
+                        </button>
+                        <button id="push-disable" type="button" class="mp-btn mp-btn-quiet mp-btn-sm" hidden>
+                            {{ __('Desactivar en este dispositivo') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         @if ($notifications->isEmpty())
             <div class="mp-empty">
                 <span class="flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-high text-outline">
@@ -44,6 +66,7 @@
                             'vault_recovery_enabled' => 'mark_email_read',
                             'vault_recovery_disabled' => 'link_off',
                             'vault_recovery_used' => 'lock_open',
+                            'app_update' => 'system_update',
                             default => 'notifications',
                         };
                         $title = match ($type) {
@@ -55,6 +78,7 @@
                             'vault_recovery_enabled' => __('Recuperación por correo activada'),
                             'vault_recovery_disabled' => __('Recuperación por correo desactivada'),
                             'vault_recovery_used' => __('Bóveda abierta con recuperación por correo'),
+                            'app_update' => __('Nueva versión disponible'),
                             default => __('Actividad de la bóveda'),
                         };
                         $description = match ($type) {
@@ -64,8 +88,25 @@
                             'share_accepted' => __(':name aceptó el documento que le enviaste.', ['name' => $data['from'] ?? __('Alguien')]),
                             'document_request' => __(':name te pidió un documento: :type.', ['name' => $data['from'] ?? __('Alguien'), 'type' => $data['document_type'] ?? __('Documento')]),
                             'vault_recovery_enabled', 'vault_recovery_disabled', 'vault_recovery_used' => $data['message'] ?? __('Revisa la seguridad de tu bóveda.'),
+                            'app_update' => __('My Pass :version ya está disponible. Revisa los cambios y actualiza cuando quieras.', ['version' => $data['version_name'] ?? '']),
                             default => __('Tienes actividad nueva en tu bóveda.'),
                         };
+                        $actionUrl = match ($type) {
+                            'contact_request' => route('vault', ['tab' => 'family', 'contact' => $data['contact_id'] ?? '']),
+                            'share_received' => route('vault', ['tab' => 'family', 'share' => $data['share_id'] ?? '']),
+                            'document_request' => route('vault', ['tab' => 'family', 'request' => $data['request_id'] ?? '']),
+                            'share_accepted' => route('vault', ['tab' => 'family', 'outbox' => 1]),
+                            'app_update' => $data['apk_url'] ?? route('app.download', ['v' => $data['version_code'] ?? $androidVersionCode]),
+                            default => null,
+                        };
+                        $actionLabel = match ($type) {
+                            'app_update' => __('Descargar actualización'),
+                            'contact_request', 'share_received', 'document_request', 'share_accepted' => __('Revisar'),
+                            default => null,
+                        };
+                        $notes = $type === 'app_update' && is_array($data['notes'] ?? null)
+                            ? ($data['notes'][str_starts_with(app()->getLocale(), 'en') ? 'en' : 'es'] ?? [])
+                            : [];
                     @endphp
                     <li @class(['mp-card flex flex-col gap-4 p-5 sm:flex-row sm:items-start', 'border-primary/30' => $notification->read_at === null])>
                         <span class="mp-icon-tile shrink-0">
@@ -80,6 +121,20 @@
                                 <span class="text-sm text-on-surface-variant">{{ $notification->created_at?->diffForHumans() }}</span>
                             </div>
                             <p class="mp-body-sm mt-1">{{ $description }}</p>
+                            @if ($notes !== [])
+                                <ul class="mt-2 list-inside list-disc space-y-1 text-sm text-on-surface-variant">
+                                    @foreach (array_slice($notes, 0, 4) as $note)
+                                        <li>{{ $note }}</li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                            @if ($actionUrl && $actionLabel)
+                                <a href="{{ $actionUrl }}" class="mp-btn mp-btn-secondary mp-btn-sm mt-3"
+                                   @if ($type === 'app_update') download @endif>
+                                    <x-icon name="{{ $type === 'app_update' ? 'download' : 'arrow_forward' }}" class="text-[18px]" />
+                                    {{ $actionLabel }}
+                                </a>
+                            @endif
                         </div>
                         @if ($notification->read_at === null)
                             <form method="POST" action="{{ route('notifications.read', $notification) }}" class="shrink-0">

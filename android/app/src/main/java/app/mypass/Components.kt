@@ -1129,3 +1129,28 @@ fun MpDivider(modifier: Modifier = Modifier) {
             .background(MpColors.OutlineVariant.copy(alpha = 0.5f)),
     )
 }
+
+@Composable
+fun MpCompactFilterChip(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = CircleShape,
+        color = if (selected) MpColors.Primary else MpColors.Surface,
+        border = BorderStroke(1.dp, if (selected) MpColors.Primary else MpColors.OutlineVariant),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) MpColors.OnPrimary else MpColors.OnSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+        )
+    }
+}

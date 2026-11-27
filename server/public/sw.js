@@ -43,3 +43,53 @@ self.addEventListener('fetch', (event) => {
         }
     })());
 });
+
+
+self.addEventListener('push', (event) => {
+    if (!event.data) {
+        return;
+    }
+
+    let payload = {};
+
+    try {
+        payload = event.data.json();
+    } catch {
+        payload = { body: event.data.text() };
+    }
+
+    const title = payload.title || 'My Pass';
+    const options = {
+        body: payload.body || '',
+        icon: payload.icon || '/images/favicon-180.png',
+        badge: payload.badge || '/images/favicon-32.png',
+        tag: payload.tag || 'mypass',
+        renotify: true,
+        data: {
+            url: payload.url || '/notifications',
+            type: payload.type || 'activity',
+        },
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const target = new URL(event.notification.data?.url || '/notifications', self.location.origin).href;
+
+    event.waitUntil((async () => {
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+
+        for (const client of clients) {
+            if (client.url.startsWith(self.location.origin)) {
+                await client.focus();
+                client.postMessage({ type: 'mypass-open-url', url: target });
+                return;
+            }
+        }
+
+        await self.clients.openWindow(target);
+    })());
+});

@@ -288,7 +288,7 @@ fun NotificationsCard(
                 }
             }
 
-            entries.take(3).forEach { entry ->
+            entries.take(4).forEach { entry ->
                 NotificationEntryRow(entry = entry, onClick = { onOpenEntry(entry) })
             }
 
@@ -319,7 +319,6 @@ fun NotificationsScreen(state: UiState, viewModel: MainViewModel) {
         it.kind == NotificationKind.Expired || it.kind == NotificationKind.Expiring
     }
     val activityEntries = entries.filter { it.kind == NotificationKind.Activity }
-    val hasUpdate = state.updateState.release != null
     val unread = entries.count { !it.read }
 
     LaunchedEffect(Unit) {
@@ -344,17 +343,15 @@ fun NotificationsScreen(state: UiState, viewModel: MainViewModel) {
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (hasUpdate) {
-                item {
-                    Text(
-                        text = stringResource(R.string.notifications_section_update),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MpColors.OnSurfaceVariant,
-                    )
-                }
-                item {
-                    UpdateNotificationCard(state = state, viewModel = viewModel)
-                }
+            item {
+                Text(
+                    text = stringResource(R.string.notifications_section_update),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MpColors.OnSurfaceVariant,
+                )
+            }
+            item {
+                UpdateBellCard(state = state, viewModel = viewModel)
             }
 
             if (expiryEntries.isNotEmpty()) {
@@ -363,7 +360,7 @@ fun NotificationsScreen(state: UiState, viewModel: MainViewModel) {
                         text = stringResource(R.string.notifications_section_expirations),
                         style = MaterialTheme.typography.labelLarge,
                         color = MpColors.OnSurfaceVariant,
-                        modifier = Modifier.padding(top = if (hasUpdate) 8.dp else 0.dp),
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
                 items(expiryEntries, key = { it.id }) { entry ->
@@ -395,7 +392,7 @@ fun NotificationsScreen(state: UiState, viewModel: MainViewModel) {
                 }
             }
 
-            if (!hasUpdate && entries.isEmpty()) {
+            if (entries.isEmpty()) {
                 item {
                     MpEmptyState(
                         icon = Icons.Filled.Notifications,

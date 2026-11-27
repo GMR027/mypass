@@ -824,6 +824,9 @@ export class MedicalApp {
         const names = el('div', 'min-w-0');
         names.appendChild(el('p', 'mp-medical-card__title', item.metadata?.title || t('Carnet médico')));
         names.appendChild(el('p', 'mp-medical-card__holder', medical.holder || t('Sin titular')));
+        if (window.mypassSharedItemIds?.has(item.id)) {
+            names.appendChild(el('span', 'mp-badge mp-badge-primary mt-1', t('Compartido')));
+        }
         head.appendChild(names);
         const badge = el('span', 'mp-badge mp-badge-primary shrink-0');
         badge.textContent = expired ? t('Vencido') : t('Carnet médico');

@@ -60,6 +60,8 @@ secrets:
   dbPassword: CAMBIAR-EN-VALUES-LOCAL
   mysqlRootPassword: CAMBIAR-EN-VALUES-LOCAL
   appKey: CAMBIAR-EN-VALUES-LOCAL
+  vapidPublicKey: ""
+  vapidPrivateKey: ""
 
 resources:
   app:

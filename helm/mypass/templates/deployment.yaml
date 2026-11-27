@@ -186,6 +186,22 @@ spec:
               value: {{ .Values.app.logLevel | quote }}
             - name: LOG_DAILY_DAYS
               value: {{ .Values.app.logDailyDays | quote }}
+            - name: WEBPUSH_ENABLED
+              value: {{ if and .Values.secrets.vapidPublicKey .Values.secrets.vapidPrivateKey }}"true"{{ else }}"false"{{ end }}
+            - name: VAPID_SUBJECT
+              value: {{ .Values.app.url | quote }}
+            {{- if and .Values.secrets.vapidPublicKey .Values.secrets.vapidPrivateKey }}
+            - name: VAPID_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: VAPID_PUBLIC_KEY
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mypass
+                  key: VAPID_PRIVATE_KEY
+            {{- end }}
             - name: MAIL_MAILER
               value: {{ ternary "smtp" "log" .Values.mail.enabled | quote }}
             {{- if .Values.mail.enabled }}

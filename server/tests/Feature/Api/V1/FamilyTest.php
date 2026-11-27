@@ -7,6 +7,7 @@ use App\Models\Share;
 use App\Models\ShareRequest;
 use App\Models\User;
 use App\Models\UserKey;
+use App\Models\UserNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -61,7 +62,8 @@ class FamilyTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('data.status', 'pending')
-            ->assertJsonPath('data.mode', 'transfer');
+            ->assertJsonPath('data.mode', 'transfer')
+            ->assertJsonPath('data.item_id', $item->id);
 
         $this->assertSame('transferred', $item->fresh()->state);
 
@@ -242,5 +244,59 @@ class FamilyTest extends TestCase
                 'encrypted_package' => base64_encode('package'),
             ])
             ->assertNotFound();
+    }
+
+    public function test_contact_requests_expose_direction_and_notify_the_recipient_row(): void
+    {
+        $sender = User::factory()->create(['name' => 'Ana', 'email' => 'ana@example.com']);
+        $recipient = User::factory()->create(['name' => 'Luis', 'email' => 'luis@example.com']);
+
+        $this->actingAs($sender)
+            ->postJson('/api/web/contacts', ['email' => 'luis@example.com'])
+            ->assertCreated();
+
+        $senderContact = Contact::where('user_id', $sender->id)
+            ->where('contact_user_id', $recipient->id)
+            ->firstOrFail();
+        $recipientContact = Contact::where('user_id', $recipient->id)
+            ->where('contact_user_id', $sender->id)
+            ->firstOrFail();
+
+        $this->actingAs($sender)
+            ->getJson('/api/web/contacts')
+            ->assertOk()
+            ->assertJsonPath('data.0.direction', 'outgoing')
+            ->assertJsonPath('data.0.incoming', false)
+            ->assertJsonPath('data.0.can_accept', false);
+
+        $this->actingAs($recipient)
+            ->getJson('/api/web/contacts')
+            ->assertOk()
+            ->assertJsonPath('data.0.direction', 'incoming')
+            ->assertJsonPath('data.0.incoming', true)
+            ->assertJsonPath('data.0.can_accept', true);
+
+        $notification = UserNotification::where('user_id', $recipient->id)
+            ->where('type', 'contact_request')
+            ->firstOrFail();
+
+        $this->assertSame($recipientContact->id, $notification->data['contact_id']);
+
+        $this->actingAs($sender)
+            ->postJson("/api/web/contacts/{$senderContact->id}/accept")
+            ->assertStatus(422);
+
+        $this->actingAs($recipient)
+            ->postJson("/api/web/contacts/{$recipientContact->id}/accept")
+            ->assertOk();
+
+        $this->assertSame('accepted', $senderContact->fresh()->status);
+        $this->assertSame('accepted', $recipientContact->fresh()->status);
+
+        $acceptedNotification = UserNotification::where('user_id', $sender->id)
+            ->where('type', 'contact_accepted')
+            ->firstOrFail();
+
+        $this->assertSame($senderContact->id, $acceptedNotification->data['contact_id']);
     }
 }

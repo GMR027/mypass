@@ -1,12 +1,18 @@
 {
   "es": [
-    "Al elegir una tarjeta, la vista se desplaza automáticamente hasta ella.",
-    "En pases, documentos, credenciales y salud ya no tienes que buscar la tarjeta seleccionada.",
-    "La misma mejora está disponible en la bóveda web y en la app Android."
+    "En Pases ahora ves primero tus pases; crear, escanear e importar están en el botón +.",
+    "Indicador Compartido y opción para gestionar o cancelar envíos desde cada pase, documento, credencial o carnet.",
+    "El filtro Compartidos permite encontrar rápido los pases que ya enviaste.",
+    "Familia se organiza en Contactos, Recibidos, Enviados y Solicitudes, con búsqueda y contadores.",
+    "Se corrigió la cabecera de Salud, los accesos rápidos y varios botones con texto.",
+    "La barra superior deja más espacio respecto al área de notificaciones."
   ],
   "en": [
-    "Selecting a card now scrolls the view straight to it.",
-    "In passes, documents, credentials and health, you no longer have to search for the selected card.",
-    "The same improvement is available in the web vault and the Android app."
+    "Passes now shows your passes first; create, scan and import live in the + button.",
+    "A Shared indicator and an option to manage or cancel sends from every pass, document, credential or medical card.",
+    "The Shared filter makes it easy to find passes you already sent.",
+    "Family is organized into Contacts, Received, Sent and Requests, with search and counters.",
+    "Fixed the Health header, quick actions and several text buttons.",
+    "The top bar now leaves more room below the notification area."
   ]
 }

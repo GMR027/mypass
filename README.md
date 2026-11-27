@@ -63,6 +63,14 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
 - Compartir archivos desde el menú de Android directamente a My Pass y atajos de la app para buscar, escanear o crear un pase.
 - Copia de seguridad cifrada completa, compatible entre web y Android.
 - Web instalable como PWA con share target para recibir archivos compartidos.
+- Campana con avisos de envíos, solicitudes de contacto y actualizaciones de la app, además de Web Push para recibirlos con la app cerrada.
+- Bandeja de Enviados en Familia con estado de cada pase o documento, y distintivo “Compartido” en las tarjetas.
+- Ventana de confirmación al recibir un pase, contacto o solicitud de documento, con opciones para aceptar, rechazar o bloquear.
+- Android consulta avisos en segundo plano cada 15 minutos y muestra notificaciones del sistema aunque la app esté cerrada; la web usa Web Push inmediato.
+- Estilos móviles corregidos para pantallas de 360–412 dp, modo fácil y tarjetas de contacto.
+- Pases muestra primero la billetera; crear, escanear e importar viven en el botón + y el filtro Compartidos agrupa los pases enviados.
+- Familia usa pestañas Contactos, Recibidos, Enviados y Solicitudes con búsqueda y contadores, en lugar de una lista vertical interminable.
+- Gestión de envíos por elemento para consultar destinatarios, estado y cancelar envíos pendientes desde el propio pase, documento, credencial o carnet.
 - Tablet: Xiaomi Pad 6, Android 13 (API 33), sin biometría fuerte.
 
 ## Requisitos locales
@@ -85,6 +93,10 @@ cd mypass
 No se versionan `.env`, `.env.testing`, `local.properties`, el keystore, los builds ni los APK. Hay que crearlos en el equipo nuevo siguiendo las secciones siguientes.
 
 Para el clúster, el backend debe publicarse con HTTPS y un dominio estable. Configura en `server/.env` al menos `APP_URL`, `DB_*`, `MAIL_*` y `SESSION_DOMAIN`, y mantén `upload_max_filesize` y `post_max_size` en 128 MB o más.
+
+Para los avisos Web Push de la PWA, genera las llaves VAPID con `php artisan mypass:vapid` y configura `WEBPUSH_ENABLED=true`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`. En Kubernetes, `deploy.sh` las guarda en `values.local.yaml` y las inyecta como secretos.
+
+En Android, los avisos se consultan cada 15 minutos con WorkManager y se muestran como notificación del sistema. En la web, el usuario debe activar los avisos desde la campana; en iPhone/iPad, Web Push requiere instalar la PWA en la pantalla de inicio (iOS 16.4 o posterior).
 
 ## Backend
 

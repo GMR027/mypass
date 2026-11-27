@@ -62,6 +62,9 @@ const contactList = document.getElementById('contact-list');
 const contactStatus = document.getElementById('contact-status');
 const contactError = document.getElementById('contact-error');
 const shareInbox = document.getElementById('share-inbox');
+const shareOutbox = document.getElementById('share-outbox');
+const shareOutboxEmpty = document.getElementById('share-outbox-empty');
+const shareOutboxStatus = document.getElementById('share-outbox-status');
 const shareStatus = document.getElementById('share-status');
 const shareError = document.getElementById('share-error');
 const shareModal = document.getElementById('share-modal');
@@ -102,6 +105,14 @@ const manageAccessTitle = document.getElementById('manage-access-title');
 const manageAccessList = document.getElementById('manage-access-list');
 const manageAccessClose = document.getElementById('manage-access-close');
 const manageAccessDone = document.getElementById('manage-access-done');
+const familyActionModal = document.getElementById('family-action-modal');
+const familyActionTitle = document.getElementById('family-action-title');
+const familyActionMessage = document.getElementById('family-action-message');
+const familyActionDetail = document.getElementById('family-action-detail');
+const familyActionLater = document.getElementById('family-action-later');
+const familyActionDecline = document.getElementById('family-action-decline');
+const familyActionAccept = document.getElementById('family-action-accept');
+const familyActionClose = document.getElementById('family-action-close');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmTitle = document.getElementById('confirm-title');
 const confirmMessage = document.getElementById('confirm-message');
@@ -178,6 +189,14 @@ let acceptedContacts = [];
 let sharingItem = null;
 let editingItem = null;
 let outgoingShares = [];
+let familyNotifications = [];
+let familyRequests = [];
+let familyPromptQueue = [];
+let familyPromptOpen = false;
+let familyPromptBusy = false;
+let familyPromptTimer = null;
+const promptedFamilyKeys = new Set();
+const PROMPTED_FAMILY_STORAGE = 'mypass.promptedFamily.v1';
 let currentFilter = 'all';
 let currentSearch = '';
 let selectedDocumentId = null;
@@ -1469,6 +1488,7 @@ async function loadContacts() {
         }
 
         renderItems();
+        scheduleFamilyPrompts();
     } catch (error) {
         showError(contactError, error.message || t('No se pudieron cargar los contactos.'));
     }
@@ -1476,12 +1496,12 @@ async function loadContacts() {
 
 function renderContactCard(contact) {
     const item = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
-    const info = el('div', 'flex items-start gap-3');
+    const info = el('div', 'flex min-w-0 items-start gap-3');
 
     const avatar = el('span', 'flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-lg font-bold uppercase text-primary', (contact.name || contact.email).slice(0, 1));
-    const body = el('div');
+    const body = el('div', 'min-w-0 flex-1');
     const titleRow = el('div', 'flex flex-wrap items-center gap-2');
-    titleRow.appendChild(el('p', 'font-semibold text-on-surface', contact.name));
+    titleRow.appendChild(el('p', 'min-w-0 max-w-full break-words font-semibold text-on-surface', contact.name));
     titleRow.appendChild(el('span', 'text-outline', '·'));
     titleRow.appendChild(el('span', 'text-sm text-on-surface-variant mp-break', contact.email));
     titleRow.appendChild(el(
@@ -1500,7 +1520,9 @@ function renderContactCard(contact) {
         contact.status === 'accepted'
             ? t('Llave de intercambio verificada · Envíos cifrados habilitados')
             : contact.status === 'pending'
-                ? t('Recibió invitación. Esperando confirmación de su llave de intercambio.')
+                ? contact.incoming
+                    ? t('Te envió una invitación. Acéptala para habilitar los envíos.')
+                    : t('Invitación enviada. Esperando que la otra persona la acepte.')
                 : t('Este contacto ya no puede recibir envíos.'),
     ));
 
@@ -1509,11 +1531,15 @@ function renderContactCard(contact) {
 
     const actions = el('div', 'flex flex-wrap items-center gap-2 self-start md:self-center');
 
-    if (contact.status === 'pending') {
+    if (contact.status === 'pending' && contact.incoming) {
         const accept = el('button', 'mp-btn mp-btn-primary mp-btn-sm', t('Aceptar contacto'));
         accept.type = 'button';
         accept.addEventListener('click', () => acceptContact(contact.id));
         actions.appendChild(accept);
+    }
+
+    if (contact.status === 'pending' && !contact.incoming) {
+        actions.appendChild(el('span', 'mp-badge mp-badge-warning self-center', t('Invitación enviada')));
     }
 
     if (contact.status === 'accepted') {
@@ -1563,6 +1589,7 @@ async function blockContact(contact, button) {
         }
         await loadContacts();
         await loadShares();
+        contactStatus.textContent = t('Contacto bloqueado.');
         showToast(t('Contacto bloqueado.'));
     } catch (error) {
         showError(contactError, error.message || t('No se pudo bloquear el contacto.'));
@@ -1693,8 +1720,8 @@ async function addContact(event) {
         }
 
         contactEmail.value = '';
-        contactStatus.textContent = t('Solicitud enviada. La otra persona debe aceptarla.');
         await loadContacts();
+        contactStatus.textContent = t('Solicitud enviada. La otra persona debe aceptarla.');
     } catch (error) {
         showError(contactError, error.message || t('No se pudo agregar el contacto.'));
     } finally {
@@ -1719,18 +1746,22 @@ async function acceptContact(id) {
             throw new Error(t('No se pudo aceptar el contacto.'));
         }
         await loadContacts();
+        await loadShares();
+        contactStatus.textContent = t('Contacto aceptado. Ya pueden compartir con cifrado de punto a punto.');
+        showToast(t('Contacto aceptado.'));
     } catch (error) {
         showError(contactError, error.message || t('No se pudo aceptar el contacto.'));
     }
 }
 
 async function loadShares() {
-    if (!shareInbox) {
+    if (!shareInbox && !shareOutbox) {
         return;
     }
 
     hideError(shareError);
-    shareInbox.replaceChildren();
+    shareInbox?.replaceChildren();
+    shareOutbox?.replaceChildren();
 
     try {
         const response = await fetch(sharesUrl, {
@@ -1744,12 +1775,23 @@ async function loadShares() {
         const body = await response.json();
         const incoming = (body.incoming ?? []).filter((share) => share.status === 'pending');
         outgoingShares = body.outgoing ?? [];
-        shareStatus.textContent = incoming.length === 0 ? '' : tf(':count envío(s) pendiente(s).', { count: incoming.length });
-        sharesEmpty.hidden = incoming.length > 0;
+        window.mypassSharedItemIds = new Set(
+            outgoingShares
+                .filter((share) => ['pending', 'accepted'].includes(share.status) && share.item_id)
+                .map((share) => share.item_id),
+        );
+        window.dispatchEvent(new CustomEvent('mypass:shares-updated'));
+
+        if (shareStatus) {
+            shareStatus.textContent = incoming.length === 0 ? '' : tf(':count envío(s) pendiente(s).', { count: incoming.length });
+        }
+        if (sharesEmpty) {
+            sharesEmpty.hidden = incoming.length > 0;
+        }
 
         for (const share of incoming) {
             const item = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
-            const info = el('div', 'flex items-start gap-3');
+            const info = el('div', 'flex min-w-0 items-start gap-3');
 
             const tile = el('span', share.mode === 'transfer' ? 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary-fixed text-on-secondary-fixed' : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary');
             tile.appendChild(icon(
@@ -1761,11 +1803,11 @@ async function loadShares() {
                 'text-[24px]',
             ));
 
-            const text = el('div');
+            const text = el('div', 'min-w-0 flex-1');
             const titleRow = el('div', 'flex flex-wrap items-center gap-2');
             titleRow.appendChild(el(
                 'p',
-                'font-semibold text-on-surface',
+                'min-w-0 max-w-full break-words font-semibold text-on-surface',
                 tf(
                     share.item_type === 'ticket'
                         ? ':sender te envió un boleto'
@@ -1798,11 +1840,373 @@ async function loadShares() {
             actions.appendChild(decline);
 
             item.appendChild(actions);
-            shareInbox.appendChild(item);
+            shareInbox?.appendChild(item);
         }
+
+        renderOutgoingShares();
+        scheduleFamilyPrompts();
     } catch (error) {
         showError(shareError, error.message || t('No se pudo consultar lo compartido.'));
     }
+}
+
+function renderOutgoingShares() {
+    if (!shareOutbox) {
+        return;
+    }
+
+    shareOutbox.replaceChildren();
+
+    const activeStatuses = ['pending', 'accepted'];
+    const active = outgoingShares.filter((share) => activeStatuses.includes(share.status));
+    const pending = outgoingShares.filter((share) => share.status === 'pending');
+
+    if (shareOutboxStatus) {
+        shareOutboxStatus.textContent = outgoingShares.length === 0
+            ? ''
+            : tf(':count envío(s) en total · :pending pendiente(s).', {
+                count: outgoingShares.length,
+                pending: pending.length,
+            });
+    }
+    if (shareOutboxEmpty) {
+        shareOutboxEmpty.hidden = outgoingShares.length > 0;
+    }
+
+    for (const share of outgoingShares) {
+        const localItem = items.find((item) => item.id === share.item_id);
+        const title = localItem?.metadata?.title || typeLabel(share.item_type);
+        const itemRow = el('li', 'mp-list-card flex flex-col justify-between gap-4 md:flex-row md:items-center');
+
+        const info = el('div', 'flex min-w-0 items-start gap-3');
+        const tile = el(
+            'span',
+            share.status === 'accepted'
+                ? 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary'
+                : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant',
+        );
+        tile.appendChild(icon(
+            share.item_type === 'ticket'
+                ? 'confirmation_number'
+                : share.item_type === 'medical_card'
+                    ? 'medical_services'
+                    : 'description',
+            'text-[24px]',
+        ));
+
+        const text = el('div', 'min-w-0 flex-1');
+        const titleRow = el('div', 'flex flex-wrap items-center gap-2');
+        titleRow.appendChild(el('p', 'min-w-0 max-w-full break-words font-semibold text-on-surface', title));
+        titleRow.appendChild(el(
+            'span',
+            share.status === 'pending'
+                ? 'mp-badge mp-badge-warning'
+                : share.status === 'accepted'
+                    ? 'mp-badge mp-badge-primary'
+                    : share.status === 'declined'
+                        ? 'mp-badge mp-badge-danger'
+                        : 'mp-badge mp-badge-neutral',
+            shareStatusLabel(share.status),
+        ));
+        titleRow.appendChild(el('span', 'mp-badge mp-badge-neutral', share.mode === 'transfer' ? t('Transferencia') : t('Copia')));
+        text.appendChild(titleRow);
+        text.appendChild(el(
+            'p',
+            'mt-1 text-sm text-on-surface-variant',
+            share.recipient
+                ? tf('Para :name · :date', {
+                    name: share.recipient,
+                    date: new Date(share.created_at || Date.now()).toLocaleDateString(dateLocale()),
+                })
+                : new Date(share.created_at || Date.now()).toLocaleDateString(dateLocale()),
+        ));
+
+        info.append(tile, text);
+        itemRow.appendChild(info);
+
+        if (share.status === 'pending') {
+            const actions = el('div', 'flex flex-wrap items-center gap-2 self-start md:self-center');
+            const revoke = el('button', 'mp-btn mp-btn-danger mp-btn-sm', t('Cancelar envío'));
+            revoke.type = 'button';
+            revoke.addEventListener('click', () => revokeShare(share.id, revoke));
+            actions.appendChild(revoke);
+            itemRow.appendChild(actions);
+        }
+
+        shareOutbox.appendChild(itemRow);
+    }
+
+    window.mypassSharedItemIds = new Set(active.filter((share) => share.item_id).map((share) => share.item_id));
+    window.dispatchEvent(new CustomEvent('mypass:shares-updated'));
+    renderItems();
+    wallet?.setItems(items);
+    credentials?.setItems(items);
+    medical?.setItems(items);
+}
+
+function loadPromptedFamilyKeys() {
+    if (promptedFamilyKeys.size > 0) {
+        return;
+    }
+
+    try {
+        const stored = JSON.parse(window.localStorage.getItem(PROMPTED_FAMILY_STORAGE) || '{}');
+        const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+        Object.entries(stored).forEach(([key, timestamp]) => {
+            if (Number(timestamp) >= cutoff) {
+                promptedFamilyKeys.add(key);
+            }
+        });
+    } catch {
+        // localStorage puede estar deshabilitado.
+    }
+}
+
+function rememberPromptedFamilyKey(key) {
+    loadPromptedFamilyKeys();
+    promptedFamilyKeys.add(key);
+
+    try {
+        const stored = JSON.parse(window.localStorage.getItem(PROMPTED_FAMILY_STORAGE) || '{}');
+        stored[key] = Date.now();
+        window.localStorage.setItem(PROMPTED_FAMILY_STORAGE, JSON.stringify(stored));
+    } catch {
+        // Sin persistencia; se recuerda solo en esta sesión.
+    }
+}
+
+async function loadFamilyNotifications() {
+    if (familyNotifications.length > 0) {
+        return familyNotifications;
+    }
+
+    try {
+        const response = await fetch('/api/web/notifications', {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            return familyNotifications;
+        }
+        const body = await response.json();
+        familyNotifications = body.data ?? [];
+    } catch {
+        familyNotifications = [];
+    }
+
+    return familyNotifications;
+}
+
+function matchingFamilyNotification(type, dataKey, id) {
+    if (!id) {
+        return null;
+    }
+
+    return familyNotifications.find((notification) => (
+        notification.type === type
+        && String(notification.data?.[dataKey] ?? '') === String(id)
+        && !notification.read_at
+    )) || null;
+}
+
+async function markFamilyNotificationRead(notification) {
+    if (!notification?.id) {
+        return;
+    }
+
+    try {
+        await fetch(`/api/web/notifications/${notification.id}/read`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        notification.read_at = new Date().toISOString();
+    } catch {
+        // No bloquea la acción principal.
+    }
+}
+
+function scheduleFamilyPrompts() {
+    clearTimeout(familyPromptTimer);
+    familyPromptTimer = setTimeout(() => {
+        void buildFamilyPromptQueue().then(() => showNextFamilyPrompt());
+    }, 250);
+}
+
+async function buildFamilyPromptQueue() {
+    loadPromptedFamilyKeys();
+    const notifications = await loadFamilyNotifications();
+
+    familyPromptQueue = [];
+    const queued = new Set();
+
+    for (const share of outgoingShares) {
+        queued.add(`share:${share.id}`);
+    }
+
+    const incomingShares = (await fetch(sharesUrl, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    }).then((response) => response.ok ? response.json() : { incoming: [] }).catch(() => ({ incoming: [] }))).incoming ?? [];
+
+    for (const share of incomingShares.filter((entry) => entry.status === 'pending')) {
+        const key = `share:${share.id}`;
+        if (promptedFamilyKeys.has(key) || queued.has(key)) {
+            continue;
+        }
+        familyPromptQueue.push({
+            key,
+            type: 'share',
+            id: share.id,
+            notification: matchingFamilyNotification('share_received', 'share_id', share.id),
+            title: t('Pase compartido contigo'),
+            message: tf(':name te envió un pase o documento cifrado. ¿Quieres guardarlo en tu bóveda?', { name: share.sender }),
+            detail: share.expires_at
+                ? tf('Caduca: :date', { date: new Date(share.expires_at).toLocaleDateString(dateLocale()) })
+                : t('Puedes aceptarlo o rechazarlo ahora.'),
+            acceptLabel: t('Aceptar y guardar'),
+            declineLabel: t('Rechazar'),
+        });
+    }
+
+    for (const contact of contacts.filter((entry) => entry.status === 'pending' && entry.incoming !== false)) {
+        const key = `contact:${contact.id}`;
+        if (promptedFamilyKeys.has(key)) {
+            continue;
+        }
+        familyPromptQueue.push({
+            key,
+            type: 'contact',
+            id: contact.id,
+            notification: matchingFamilyNotification('contact_request', 'contact_id', contact.id),
+            title: t('Solicitud de contacto'),
+            message: tf(':name quiere agregarte como contacto de confianza.', { name: contact.name }),
+            detail: contact.email,
+            acceptLabel: t('Aceptar contacto'),
+            declineLabel: t('Bloquear'),
+        });
+    }
+
+    for (const request of familyRequests) {
+        if (request.direction !== 'incoming' || request.status !== 'pending') {
+            continue;
+        }
+        const key = `request:${request.id}`;
+        if (promptedFamilyKeys.has(key)) {
+            continue;
+        }
+        familyPromptQueue.push({
+            key,
+            type: 'request',
+            id: request.id,
+            notification: matchingFamilyNotification('document_request', 'request_id', request.id),
+            title: t('Solicitud de documento'),
+            message: tf(':name te pidió un documento: :type.', {
+                name: request.requester,
+                type: request.document_type,
+            }),
+            detail: request.purpose || t('Puedes compartirlo desde tu bóveda o rechazar la solicitud.'),
+            acceptLabel: t('Ver cómo compartir'),
+            declineLabel: t('Rechazar'),
+        });
+    }
+
+    if (notifications.length === 0) {
+        // Los avisos pendientes siguen siendo útiles aunque no haya campana.
+    }
+}
+
+function showNextFamilyPrompt() {
+    if (familyPromptOpen || familyPromptQueue.length === 0 || !familyActionModal) {
+        return;
+    }
+
+    const prompt = familyPromptQueue.shift();
+    if (!prompt || promptedFamilyKeys.has(prompt.key)) {
+        showNextFamilyPrompt();
+        return;
+    }
+
+    familyPromptOpen = true;
+    familyActionTitle.textContent = prompt.title;
+    familyActionMessage.textContent = prompt.message;
+    familyActionDetail.textContent = prompt.detail;
+    familyActionAccept.textContent = prompt.acceptLabel;
+    familyActionDecline.textContent = prompt.declineLabel;
+    familyActionAccept.hidden = false;
+    familyActionDecline.hidden = false;
+    familyActionLater.hidden = false;
+    familyActionDecline.classList.toggle('mp-btn-danger', prompt.type !== 'request');
+
+    const finish = async (action) => {
+        familyPromptBusy = true;
+        familyActionAccept.disabled = true;
+        familyActionDecline.disabled = true;
+        familyActionLater.disabled = true;
+        closeDialog(familyActionModal);
+
+        try {
+            if (action === 'later') {
+                rememberPromptedFamilyKey(prompt.key);
+                return;
+            }
+
+            rememberPromptedFamilyKey(prompt.key);
+            await markFamilyNotificationRead(prompt.notification);
+
+            if (prompt.type === 'share') {
+                if (action === 'accept') {
+                    await acceptShare(prompt.id, familyActionAccept);
+                } else {
+                    await declineShare(prompt.id);
+                }
+            } else if (prompt.type === 'contact') {
+                if (action === 'accept') {
+                    await acceptContact(prompt.id);
+                } else {
+                    await blockFamilyContact(prompt.id);
+                }
+            } else if (prompt.type === 'request') {
+                if (action === 'accept') {
+                    closeDialog(familyActionModal);
+                    window.location.hash = 'family-shares';
+                    document.querySelector('[data-vault-tab="family"]')?.click();
+                } else {
+                    await declineRequest(prompt.id);
+                }
+            }
+        } finally {
+            familyPromptOpen = false;
+            familyPromptBusy = false;
+            showNextFamilyPrompt();
+        }
+    };
+
+    familyActionAccept.onclick = () => finish('accept');
+    familyActionDecline.onclick = () => finish('decline');
+    familyActionLater.onclick = () => finish('later');
+    familyActionClose.onclick = () => finish('later');
+
+    familyActionModal.addEventListener('close', () => {
+        familyPromptOpen = false;
+        familyActionAccept.disabled = false;
+        familyActionDecline.disabled = false;
+        familyActionLater.disabled = false;
+        if (!familyPromptBusy) {
+            rememberPromptedFamilyKey(prompt.key);
+            showNextFamilyPrompt();
+        }
+    }, { once: true });
+
+    familyActionModal.addEventListener('cancel', () => {
+        rememberPromptedFamilyKey(prompt.key);
+    }, { once: true });
+
+    openDialog(familyActionModal);
 }
 
 async function acceptShare(id, button) {
@@ -1898,6 +2302,27 @@ async function acceptShare(id, button) {
     } finally {
         button.disabled = false;
         button.textContent = t('Aceptar');
+    }
+}
+
+async function blockFamilyContact(id) {
+    try {
+        const response = await fetch(`${contactsUrl}/${id}/block`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo bloquear el contacto.'));
+        }
+        showToast(t('Contacto bloqueado.'));
+        await loadContacts();
+        await loadShares();
+    } catch (error) {
+        showError(contactError, error.message || t('No se pudo bloquear el contacto.'));
     }
 }
 
@@ -2015,7 +2440,16 @@ async function sendShare() {
         await loadItems();
         await loadShares();
         await loadRequests();
-        showToast(t('Solicitud enviada. La otra persona debe aceptarla.'));
+        showToast(
+            t('Enviado. La otra persona debe aceptarlo.'),
+            {
+                label: t('Ver enviados'),
+                onClick: () => {
+                    document.querySelector('[data-vault-tab="family"]')?.click();
+                    window.requestAnimationFrame(() => shareOutbox?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                },
+            },
+        );
     } catch (error) {
         showError(shareSendError, error.message || t('No se pudo enviar el documento.'));
     } finally {
@@ -2044,6 +2478,10 @@ async function loadRequests() {
         const body = await response.json();
         const incoming = (body.incoming ?? []).filter((item) => item.status === 'pending');
         const outgoing = (body.outgoing ?? []).filter((item) => item.status === 'pending');
+        familyRequests = [
+            ...(body.incoming ?? []).map((item) => ({ ...item, direction: 'incoming' })),
+            ...(body.outgoing ?? []).map((item) => ({ ...item, direction: 'outgoing' })),
+        ];
         requestStatus.textContent = (incoming.length + outgoing.length) === 0
             ? ''
             : tf(':count solicitud(es) pendiente(s).', { count: incoming.length + outgoing.length });
@@ -2092,6 +2530,7 @@ async function loadRequests() {
             li.appendChild(cancel);
             requestList.appendChild(li);
         }
+        scheduleFamilyPrompts();
     } catch (error) {
         showError(requestError, error.message || t('No se pudieron cargar las solicitudes.'));
     }
@@ -2643,6 +3082,9 @@ function documentHeader(item) {
     text.appendChild(el('h3', 'mt-0.5 truncate text-[19px] font-semibold text-on-surface', item.metadata.title || t('Sin título')));
 
     const badges = el('div', 'mt-2 flex flex-wrap items-center gap-1.5');
+    if (window.mypassSharedItemIds?.has(item.id)) {
+        badges.appendChild(el('span', 'mp-badge mp-badge-primary', t('Compartido')));
+    }
     if (item.state === 'transferred') {
         badges.appendChild(el('span', 'mp-badge mp-badge-neutral', t('Transferido')));
     }

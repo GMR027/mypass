@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Share;
 use App\Models\ShareRequest;
-use App\Models\UserNotification;
+use App\Services\AppNotifications;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,15 +82,14 @@ class ShareController extends Controller
             ])->save();
         }
 
-        UserNotification::create([
-            'user_id' => $contact->contact_user_id,
-            'type' => 'share_received',
-            'data' => [
-                'share_id' => $share->id,
-                'from' => $request->user()->name,
-                'item_type' => $item->type,
-            ],
-        ]);
+        AppNotifications::create($contact->contactUser, 'share_received', [
+            'share_id' => $share->id,
+            'item_id' => $item->id,
+            'item_type' => $item->type,
+            'mode' => $share->mode,
+            'expires_at' => $share->expires_at?->toIso8601String(),
+            'from' => $request->user()->name,
+        ], url: '/vault?tab=family&share='.$share->id);
 
         $audit->log($request->user(), 'share_sent', [
             'share_id' => $share->id,
@@ -150,14 +149,11 @@ class ShareController extends Controller
             ]);
         }
 
-        UserNotification::create([
-            'user_id' => $share->sender_id,
-            'type' => 'share_accepted',
-            'data' => [
-                'share_id' => $share->id,
-                'from' => $request->user()->name,
-            ],
-        ]);
+        AppNotifications::create($share->sender, 'share_accepted', [
+            'share_id' => $share->id,
+            'item_id' => $share->item_id,
+            'from' => $request->user()->name,
+        ], url: '/vault?tab=family&outbox=1');
 
         $audit->log($request->user(), 'share_accepted', [
             'share_id' => $share->id,
@@ -219,9 +215,13 @@ class ShareController extends Controller
             'direction' => $share->sender_id === $userId ? 'outgoing' : 'incoming',
             'sender' => $share->sender?->name,
             'recipient' => $share->recipient?->name,
+            'item_id' => $share->item_id,
+            'recipient_item_id' => $share->recipient_item_id,
             'item_type' => $share->item?->type,
             'share_request_id' => $share->share_request_id,
             'expires_at' => $share->expires_at?->toIso8601String(),
+            'accepted_at' => $share->accepted_at?->toIso8601String(),
+            'revoked_at' => $share->revoked_at?->toIso8601String(),
             'created_at' => $share->created_at?->toIso8601String(),
         ];
     }

@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\User;
-use App\Models\UserNotification;
 use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
@@ -190,11 +189,7 @@ class VaultRecoveryService
      */
     private function notify(User $user, string $type, array $data): void
     {
-        UserNotification::create([
-            'user_id' => $user->id,
-            'type' => $type,
-            'data' => $data,
-        ]);
+        AppNotifications::create($user, $type, $data);
     }
 
     private function cacheKey(User $user): string

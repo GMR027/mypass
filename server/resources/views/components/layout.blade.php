@@ -17,6 +17,9 @@
     <link rel="apple-touch-icon" href="{{ asset('images/favicon-180.png') }}">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="{{ $themePreference === 'dark' ? '#08120e' : '#012d1d' }}">
+    @if (config('webpush.enabled') && config('webpush.vapid.public_key'))
+        <meta name="vapid-public-key" content="{{ config('webpush.vapid.public_key') }}">
+    @endif
     <x-translations />
     <script nonce="{{ $cspNonce }}">
         (function () {

@@ -460,6 +460,22 @@
                         </section>
 
                         <section class="mp-card mp-card-pad">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h3 class="mp-title-md flex items-center gap-2">
+                                    <x-icon name="outbox" class="text-[24px] text-primary" />
+                                    {{ __('Enviados') }}
+                                </h3>
+                                <p id="share-outbox-status" class="text-[15px] font-medium text-primary" role="status"></p>
+                            </div>
+                            <p class="mp-hint mt-1">{{ __('Consulta qué pases y documentos has compartido y su estado.') }}</p>
+                            <div id="share-outbox-empty" class="mp-empty mt-3" hidden>
+                                <x-icon name="outbox" class="text-[34px] text-outline" />
+                                <p class="mt-2 font-semibold">{{ __('Todavía no has compartido nada.') }}</p>
+                            </div>
+                            <ul id="share-outbox" class="mt-3 space-y-3"></ul>
+                        </section>
+
+                        <section class="mp-card mp-card-pad">
                             <h3 class="mp-title-md flex items-center gap-2">
                                 <x-icon name="contact_support" class="text-[24px] text-primary" />
                                 {{ __('Solicitudes de documentos') }}
@@ -769,6 +785,31 @@
             <div id="manage-access-list" class="space-y-3"></div>
             <div class="mt-5 flex justify-end">
                 <button id="manage-access-done" type="button" class="mp-btn mp-btn-secondary">{{ __('Cerrar') }}</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="family-action-modal" class="mp-dialog" aria-labelledby="family-action-title">
+        <div class="mp-dialog-panel">
+            <div class="mp-dialog-header">
+                <div class="flex items-start gap-3">
+                    <span class="mp-icon-tile shrink-0">
+                        <x-icon name="mark_email_unread" class="text-[24px]" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <h2 id="family-action-title" class="mp-title-md">{{ __('Nuevo aviso') }}</h2>
+                        <p id="family-action-message" class="mp-hint mt-1"></p>
+                    </div>
+                </div>
+                <button id="family-action-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
+                    <x-icon name="close" class="text-[21px]" />
+                </button>
+            </div>
+            <div id="family-action-detail" class="rounded-xl bg-surface-container-low p-4 text-[15px] text-on-surface-variant"></div>
+            <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button id="family-action-later" type="button" class="mp-btn mp-btn-secondary">{{ __('Ahora no') }}</button>
+                <button id="family-action-decline" type="button" class="mp-btn mp-btn-danger">{{ __('Rechazar') }}</button>
+                <button id="family-action-accept" type="button" class="mp-btn mp-btn-primary">{{ __('Aceptar') }}</button>
             </div>
         </div>
     </dialog>

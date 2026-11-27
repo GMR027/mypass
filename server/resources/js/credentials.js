@@ -1415,6 +1415,9 @@ export class CredentialsApp {
         const names = el('div', 'min-w-0');
         names.appendChild(el('p', 'mp-credential-card__title', item.metadata?.title || t('Credencial')));
         names.appendChild(el('p', 'mp-credential-card__subtitle', typeLabelFor(parsed)));
+        if (window.mypassSharedItemIds?.has(item.id)) {
+            names.appendChild(el('span', 'mp-badge mp-badge-primary mt-1', t('Compartido')));
+        }
         identity.append(tile, names);
         head.appendChild(identity);
 

@@ -41,6 +41,20 @@ verde()    { printf '\033[32m%s\033[0m\n' "$*"; }
 amarillo() { printf '\033[33m%s\033[0m\n' "$*"; }
 rojo()     { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 
+vapid_pair() {
+    command -v node >/dev/null 2>&1 || return 1
+    node - <<'JS'
+const { generateKeyPairSync } = require('crypto');
+const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const spki = publicKey.export({ type: 'spki', format: 'der' });
+const pub = spki.subarray(spki.length - 65);
+const jwk = privateKey.export({ format: 'jwk' });
+const b64url = (value) => Buffer.from(value).toString('base64url');
+console.log(b64url(pub));
+console.log(jwk.d);
+JS
+}
+
 for arg in "$@"; do
     case "$arg" in
         --import-dump) IMPORT_DUMP=1 ;;
@@ -112,6 +126,17 @@ EOF
 fi
 
 chmod 600 "$VALUES_LOCAL"
+
+if ! grep -q 'vapidPublicKey:' "$VALUES_LOCAL"; then
+    if VAPID_OUTPUT="$(vapid_pair 2>/dev/null)" && [[ "$(printf '%s\n' "$VAPID_OUTPUT" | wc -l)" -ge 2 ]]; then
+        VAPID_PUBLIC="$(printf '%s\n' "$VAPID_OUTPUT" | sed -n '1p')"
+        VAPID_PRIVATE="$(printf '%s\n' "$VAPID_OUTPUT" | sed -n '2p')"
+        sed -i "/^secrets:/a\\  vapidPublicKey: \"$VAPID_PUBLIC\"\n  vapidPrivateKey: \"$VAPID_PRIVATE\"" "$VALUES_LOCAL"
+        verde "==> Generadas llaves VAPID para Web Push."
+    else
+        amarillo "    No se pudieron generar llaves VAPID; Web Push quedará desactivado."
+    fi
+fi
 
 if [[ "$IMPORT_DUMP" = "1" && ! -f "$DUMP_FILE" ]]; then
     rojo "No existe el dump: $DUMP_FILE"
@@ -326,6 +351,9 @@ PY
         'chown www-data:www-data /var/www/html/storage/app/private/downloads/mypass.apk /var/www/html/storage/app/private/downloads/version.json && chmod 644 /var/www/html/storage/app/private/downloads/mypass.apk /var/www/html/storage/app/private/downloads/version.json'
     verde "    APK publicado en https://$HOST/downloads/mypass.apk (v$APK_VERSION_CODE)"
     verde "    Manifiesto publicado en https://$HOST/api/v1/app/version"
+
+    kubectl exec -n "$NAMESPACE" "$pod" -- php artisan mypass:announce-update --no-interaction 2>/dev/null \
+        | sed 's/^/    /' || amarillo "    No se pudieron crear los avisos de actualización."
 }
 
 # --- Deploy -----------------------------------------------------------------

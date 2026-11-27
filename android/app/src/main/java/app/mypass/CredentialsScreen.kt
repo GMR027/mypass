@@ -156,8 +156,11 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
     var selectedCredentialId by remember { mutableStateOf<String?>(null) }
     var revealCredentialId by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<UiItem?>(null) }
+    var shareTarget by remember { mutableStateOf<UiItem?>(null) }
+    var manageSharesTarget by remember { mutableStateOf<UiItem?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val context = LocalContext.current
+    val acceptedContacts = state.contacts.filter { it.status == "accepted" }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -224,6 +227,33 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                 deleteTarget = null
             },
             onDismiss = { deleteTarget = null },
+        )
+    }
+
+    shareTarget?.let { item ->
+        ShareDialog(
+            item = item,
+            contacts = acceptedContacts,
+            onDismiss = { shareTarget = null },
+            onSend = { contactId, mode ->
+                viewModel.sendShare(item, contactId, mode)
+                shareTarget = null
+            },
+        )
+    }
+
+    manageSharesTarget?.let { item ->
+        ManageSharesDialog(
+            itemId = item.id,
+            itemTitle = item.title,
+            shares = state.outgoingShares,
+            canShare = acceptedContacts.isNotEmpty(),
+            onDismiss = { manageSharesTarget = null },
+            onShare = {
+                shareTarget = item
+                manageSharesTarget = null
+            },
+            onRevoke = viewModel::revokeShare,
         )
     }
 
@@ -386,10 +416,13 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                                             item = item,
                                             now = now,
                                             context = context,
+                                            shared = state.isItemShared(item.id),
                                             onEdit = { viewModel.editCredential(item) },
                                             onDelete = { deleteTarget = item },
                                             onFavorite = { viewModel.toggleCredentialFavorite(item) },
                                             onOpenAttachment = { viewModel.openItem(item) },
+                                            onShare = { shareTarget = item },
+                                            onManageShares = { manageSharesTarget = item },
                                         )
                                     }
                                 } else {
@@ -398,6 +431,7 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                                         now = now,
                                         context = context,
                                         headerOnly = true,
+                                        shared = state.isItemShared(item.id),
                                         onSelect = {
                                             selectedCredentialId = item.id
                                             revealCredentialId = item.id
@@ -406,6 +440,8 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                                         onDelete = { deleteTarget = item },
                                         onFavorite = { viewModel.toggleCredentialFavorite(item) },
                                         onOpenAttachment = { viewModel.openItem(item) },
+                                        onShare = { shareTarget = item },
+                                        onManageShares = { manageSharesTarget = item },
                                     )
                                 }
                             }
@@ -423,11 +459,14 @@ private fun CredentialCard(
     now: Long,
     context: Context,
     headerOnly: Boolean = false,
+    shared: Boolean = false,
     onSelect: (() -> Unit)? = null,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onFavorite: () -> Unit,
     onOpenAttachment: () -> Unit,
+    onShare: () -> Unit,
+    onManageShares: () -> Unit,
 ) {
     val credential = item.credential ?: return
     var revealPassword by remember(item.id) { mutableStateOf(false) }
@@ -467,6 +506,8 @@ private fun CredentialCard(
                 onEdit = onEdit,
                 onDelete = onDelete,
                 onOpenAttachment = onOpenAttachment,
+                onShare = onShare,
+                onManageShares = onManageShares,
             )
         }
 
@@ -476,7 +517,7 @@ private fun CredentialCard(
                 contentPadding = PaddingValues(padding),
             ) {
                 Column {
-                    CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
+                    CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite, shared = shared)
                     if (!headerOnly) {
                         body()
                     }
@@ -508,7 +549,7 @@ private fun CredentialCard(
                                 ),
                         )
                         Column(modifier = Modifier.padding(padding)) {
-                            CredentialHead(item, credential, dark = true, compact = compact, onFavorite = onFavorite)
+                            CredentialHead(item, credential, dark = true, compact = compact, onFavorite = onFavorite, shared = shared)
                         }
                     }
                     if (!headerOnly) {
@@ -540,7 +581,7 @@ private fun CredentialCard(
                                 .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
                                 .padding(padding),
                         ) {
-                            CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite)
+                            CredentialHead(item, credential, dark = false, compact = compact, onFavorite = onFavorite, shared = shared)
                             if (!headerOnly) {
                                 body()
                             }
@@ -557,10 +598,13 @@ private fun CredentialFlipCard(
     item: UiItem,
     now: Long,
     context: Context,
+    shared: Boolean = false,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onFavorite: () -> Unit,
     onOpenAttachment: () -> Unit,
+    onShare: () -> Unit,
+    onManageShares: () -> Unit,
 ) {
     val credential = item.credential ?: return
     var revealPassword by remember(item.id) { mutableStateOf(false) }
@@ -586,6 +630,7 @@ private fun CredentialFlipCard(
                         credential = credential,
                         compact = compact,
                         onFavorite = onFavorite,
+                        shared = shared,
                     )
                     Row(
                         modifier = Modifier
@@ -607,6 +652,7 @@ private fun CredentialFlipCard(
                         credential = credential,
                         compact = compact,
                         onFavorite = onFavorite,
+                        shared = shared,
                     )
                     Column(
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
@@ -623,6 +669,8 @@ private fun CredentialFlipCard(
                             onEdit = onEdit,
                             onDelete = onDelete,
                             onOpenAttachment = onOpenAttachment,
+                            onShare = onShare,
+                            onManageShares = onManageShares,
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -646,6 +694,7 @@ private fun CredentialFlipHeader(
     credential: UiCredential,
     compact: Boolean,
     onFavorite: () -> Unit,
+    shared: Boolean = false,
 ) {
     val bannerBitmap = remember(credential.appearanceImage) {
         credential.appearanceImage?.let(::decodeDataUrl)
@@ -664,6 +713,7 @@ private fun CredentialFlipHeader(
                 dark = false,
                 compact = compact,
                 onFavorite = onFavorite,
+                shared = shared,
             )
         }
         return
@@ -698,6 +748,7 @@ private fun CredentialFlipHeader(
                 dark = true,
                 compact = compact,
                 onFavorite = onFavorite,
+                shared = shared,
             )
         }
     }
@@ -710,6 +761,7 @@ private fun CredentialHead(
     dark: Boolean,
     compact: Boolean,
     onFavorite: () -> Unit,
+    shared: Boolean = false,
 ) {
     val logoBitmap = remember(credential.logo) { credential.logo?.let(::decodeDataUrl) }
     val tileSize = if (compact) 44 else 50
@@ -753,6 +805,9 @@ private fun CredentialHead(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (shared) {
+                MpBadge(text = stringResource(R.string.shared), tone = MpBadgeTone.Primary)
+            }
             if (credential.group.isNotBlank()) {
                 Text(
                     text = credential.group,
@@ -786,6 +841,7 @@ private fun CredentialHead(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CredentialBody(
     item: UiItem,
@@ -798,6 +854,8 @@ private fun CredentialBody(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpenAttachment: () -> Unit,
+    onShare: () -> Unit,
+    onManageShares: () -> Unit,
 ) {
     val usernameLabel = stringResource(R.string.username)
     val passwordLabel = stringResource(R.string.password)
@@ -969,16 +1027,22 @@ private fun CredentialBody(
         }
     }
 
-    Row(
+    androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         TextButton(onClick = onEdit) {
             Text(stringResource(R.string.edit))
         }
-        Spacer(modifier = Modifier.weight(1f))
+        TextButton(onClick = onShare) {
+            Text(stringResource(R.string.share))
+        }
+        TextButton(onClick = onManageShares) {
+            Text(stringResource(R.string.manage_shares))
+        }
         TextButton(onClick = onDelete) {
             Text(stringResource(R.string.delete), color = MpColors.Error)
         }

@@ -49,7 +49,7 @@ private const val AVATAR_CACHE_FILE = "profile-avatar"
 private const val MAX_AVATAR_SOURCE_BYTES = 20 * 1024 * 1024
 private const val MAX_AVATAR_UPLOAD_BYTES = 4 * 1024 * 1024
 private const val MAX_AVATAR_EDGE_PX = 512
-private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
+private const val UPDATE_CHECK_INTERVAL_MS = 15L * 60L * 1000L
 
 enum class Screen {
     Loading,
@@ -278,6 +278,8 @@ data class UiContact(
     val name: String,
     val email: String,
     val status: String,
+    val incoming: Boolean = false,
+    val direction: String = "unknown",
 )
 
 data class UiShare(
@@ -287,6 +289,9 @@ data class UiShare(
     val mode: String,
     val expiresAt: String?,
     val isOutgoing: Boolean = false,
+    val status: String = "pending",
+    val itemId: String? = null,
+    val createdAt: String? = null,
 )
 
 data class UiShareRequest(
@@ -304,6 +309,24 @@ data class UiNotification(
     val documentType: String,
     val read: Boolean,
     val createdAt: String?,
+    val shareId: String? = null,
+    val itemId: String? = null,
+    val contactId: String? = null,
+    val requestId: String? = null,
+    val versionCode: Int? = null,
+    val versionName: String? = null,
+)
+
+data class FamilyPrompt(
+    val key: String,
+    val type: String,
+    val id: String,
+    val title: String,
+    val message: String,
+    val detail: String,
+    val acceptLabel: String,
+    val declineLabel: String,
+    val notificationId: String? = null,
 )
 
 data class UiItem(
@@ -346,7 +369,11 @@ data class UiState(
     val sharedFiles: List<SharedFile> = emptyList(),
     val contacts: List<UiContact> = emptyList(),
     val incomingShares: List<UiShare> = emptyList(),
+    val outgoingShares: List<UiShare> = emptyList(),
     val shareRequests: List<UiShareRequest> = emptyList(),
+    val pendingPrompt: FamilyPrompt? = null,
+    val pendingPromptTotal: Int = 0,
+    val familyTab: String = "contacts",
     val notifications: List<UiNotification> = emptyList(),
     val familyStatus: String? = null,
     val twoFactorToken: String? = null,
@@ -376,6 +403,12 @@ data class UiState(
     val notificationsReturnScreen: Screen = Screen.Home,
     val notificationRefresh: Long = 0L,
 )
+
+fun UiState.isItemShared(itemId: String): Boolean {
+    return outgoingShares.any {
+        it.itemId == itemId && (it.status == "pending" || it.status == "accepted")
+    }
+}
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app: Application = application
@@ -1166,6 +1199,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 loadFamily(token)
                 loadNotifications(token)
                 Reminders.checkNow(getApplication())
+                FamilyNotifier.schedule(getApplication())
+                withContext(Dispatchers.Main) {
+                    checkForUpdates(manual = false)
+                }
             }.onFailure { error ->
                 if (error.message == "Celular bloqueado.") {
                     return@onFailure
@@ -1475,32 +1512,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     name = contact.getString("name"),
                     email = contact.getString("email"),
                     status = contact.getString("status"),
+                    incoming = contact.optBoolean("incoming", false),
+                    direction = contact.optString("direction", "unknown"),
                 ),
             )
         }
 
         val incoming = mutableListOf<UiShare>()
+        val outgoing = mutableListOf<UiShare>()
+
         for (direction in listOf("incoming" to false, "outgoing" to true)) {
             val array = sharesResponse.optJSONArray(direction.first) ?: JSONArray()
             for (index in 0 until array.length()) {
                 val share = array.getJSONObject(index)
-                if (share.optString("status") != "pending") {
+                val status = share.optString("status", "pending")
+
+                if (!direction.second && status != "pending") {
                     continue
                 }
-                incoming.add(
-                    UiShare(
-                        id = share.getString("id"),
-                        sender = if (direction.second) {
-                            share.optString("recipient")
-                        } else {
-                            share.optString("sender")
-                        },
-                        itemType = share.optString("item_type"),
-                        mode = share.optString("mode"),
-                        expiresAt = share.optString("expires_at").takeIf { it.isNotBlank() && it != "null" },
-                        isOutgoing = direction.second,
-                    ),
+
+                val parsed = UiShare(
+                    id = share.getString("id"),
+                    sender = if (direction.second) {
+                        share.optString("recipient")
+                    } else {
+                        share.optString("sender")
+                    },
+                    itemType = share.optString("item_type"),
+                    mode = share.optString("mode"),
+                    expiresAt = share.optString("expires_at").takeIf { it.isNotBlank() && it != "null" },
+                    isOutgoing = direction.second,
+                    status = status,
+                    itemId = share.optString("item_id").takeIf { it.isNotBlank() && it != "null" },
+                    createdAt = share.optString("created_at").takeIf { it.isNotBlank() && it != "null" },
                 )
+
+                if (direction.second) {
+                    outgoing.add(parsed)
+                } else {
+                    incoming.add(parsed)
+                }
             }
         }
 
@@ -1532,9 +1583,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.value = _state.value.copy(
                 contacts = contactList,
                 incomingShares = incoming,
+                outgoingShares = outgoing.sortedByDescending { it.createdAt.orEmpty() },
                 shareRequests = requestList,
-                familyStatus = null,
             )
+            queueFamilyPrompts()
         }
     }
 
@@ -1545,23 +1597,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         for (index in 0 until array.length()) {
             val json = array.getJSONObject(index)
+            val type = json.optString("type")
+
+            // La actualización de la app se controla con el manifiesto APK y
+            // tiene su propia sección en la campana. El aviso del servidor es
+            // para la web y no debe duplicarse aquí.
+            if (type == "app_update") {
+                continue
+            }
+
             val data = json.optJSONObject("data") ?: JSONObject()
             notifications.add(
                 UiNotification(
                     id = json.getString("id"),
-                    type = json.optString("type"),
+                    type = type,
                     from = data.optString("from"),
                     documentType = data.optString("document_type"),
                     read = !json.isNull("read_at") &&
                         json.optString("read_at").isNotBlank() &&
                         json.optString("read_at") != "null",
                     createdAt = json.optString("created_at").takeIf { it.isNotBlank() && it != "null" },
+                    shareId = data.optString("share_id").takeIf { it.isNotBlank() && it != "null" },
+                    itemId = data.optString("item_id").takeIf { it.isNotBlank() && it != "null" },
+                    contactId = data.optString("contact_id").takeIf { it.isNotBlank() && it != "null" },
+                    requestId = data.optString("request_id").takeIf { it.isNotBlank() && it != "null" },
+                    versionCode = data.optInt("version_code", 0).takeIf { it > 0 },
+                    versionName = data.optString("version_name").takeIf { it.isNotBlank() && it != "null" },
                 ),
             )
         }
 
         viewModelScope.launch(Dispatchers.Main) {
             _state.value = _state.value.copy(notifications = notifications)
+            queueFamilyPrompts()
         }
     }
 
@@ -1630,7 +1698,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshNotificationsAndUpdates() {
         markExpiryNotificationsSeen()
         refreshNotifications()
-        checkForUpdates(manual = false)
+        refreshFamily()
+        checkForUpdates(manual = true)
+    }
+
+    private fun refreshFamily() {
+        val token = store.token() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                loadFamily(token)
+            }
+        }
     }
 
     fun markExpiryNotificationsSeen() {
@@ -1670,12 +1748,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when (entry.activityType) {
                     "contact_request",
                     "contact_accepted",
-                    -> openFamily()
+                    -> openFamily("contacts")
 
-                    "share_received",
-                    "share_accepted",
-                    "document_request",
-                    -> openPasses()
+                    "share_received" -> openFamily("received")
+                    "share_accepted" -> openFamily("sent")
+                    "document_request" -> openFamily("requests")
 
                     else -> Unit
                 }
@@ -1696,6 +1773,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         _state.value = _state.value.copy(notificationRefresh = System.currentTimeMillis())
+
+        if (_state.value.screen !in setOf(
+                Screen.Loading,
+                Screen.Login,
+                Screen.Pair,
+                Screen.PinSetup,
+                Screen.TwoFactor,
+                Screen.RecoverVault,
+                Screen.Locked,
+            )
+        ) {
+            val token = store.token()
+            if (token != null) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching {
+                        loadFamily(token)
+                        loadNotifications(token)
+                    }
+                }
+            }
+        }
+
         checkForUpdates(manual = false)
     }
 
@@ -2118,12 +2217,143 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun openFamily() {
-        _state.value = _state.value.copy(screen = Screen.Family, error = null, familyStatus = null)
+    fun openFamily(tab: String = "contacts") {
+        _state.value = _state.value.copy(
+            screen = Screen.Family,
+            familyTab = tab,
+            error = null,
+            familyStatus = null,
+        )
         val token = store.token() ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { loadFamily(token) }
+            runCatching {
+                loadFamily(token)
+                loadNotifications(token)
+            }
         }
+    }
+
+    fun setFamilyTab(tab: String) {
+        _state.value = _state.value.copy(familyTab = tab)
+    }
+
+    private fun queueFamilyPrompts() {
+        val current = _state.value
+        val seen = notificationStore.promptedFamilyKeys()
+        val prompts = mutableListOf<FamilyPrompt>()
+
+        current.incomingShares
+            .filter { it.status == "pending" && !it.isOutgoing }
+            .forEach { share ->
+                val notification = current.notifications.firstOrNull {
+                    !it.read && it.type == "share_received" && it.shareId == share.id
+                }
+                prompts += FamilyPrompt(
+                    key = "share:${share.id}",
+                    type = "share",
+                    id = share.id,
+                    title = text(R.string.prompt_share_title),
+                    message = text(R.string.prompt_share_message, share.sender),
+                    detail = share.expiresAt?.let { text(R.string.prompt_expires, it.take(10)) }
+                        ?: text(R.string.prompt_share_detail),
+                    acceptLabel = text(R.string.accept_and_save),
+                    declineLabel = text(R.string.decline),
+                    notificationId = notification?.id,
+                )
+            }
+
+        current.contacts
+            .filter { it.status == "pending" && it.incoming }
+            .forEach { contact ->
+                val notification = current.notifications.firstOrNull {
+                    !it.read && it.type == "contact_request" && it.contactId == contact.id
+                }
+                prompts += FamilyPrompt(
+                    key = "contact:${contact.id}",
+                    type = "contact",
+                    id = contact.id,
+                    title = text(R.string.prompt_contact_title),
+                    message = text(R.string.prompt_contact_message, contact.name),
+                    detail = contact.email,
+                    acceptLabel = text(R.string.accept_contact),
+                    declineLabel = text(R.string.block),
+                    notificationId = notification?.id,
+                )
+            }
+
+        current.shareRequests
+            .filter { it.incoming }
+            .forEach { request ->
+                val notification = current.notifications.firstOrNull {
+                    !it.read && it.type == "document_request" && it.requestId == request.id
+                }
+                prompts += FamilyPrompt(
+                    key = "request:${request.id}",
+                    type = "request",
+                    id = request.id,
+                    title = text(R.string.prompt_request_title),
+                    message = text(R.string.prompt_request_message, request.person, request.documentType),
+                    detail = request.purpose.ifBlank { text(R.string.prompt_request_detail) },
+                    acceptLabel = text(R.string.prompt_view_request),
+                    declineLabel = text(R.string.decline),
+                    notificationId = notification?.id,
+                )
+            }
+
+        val pending = prompts.filterNot { seen.contains(it.key) }
+        _state.value = current.copy(
+            pendingPrompt = pending.firstOrNull(),
+            pendingPromptTotal = pending.size,
+        )
+    }
+
+    fun dismissFamilyPrompt() {
+        val prompt = _state.value.pendingPrompt ?: return
+        notificationStore.markFamilyPrompted(prompt.key)
+        _state.value = _state.value.copy(pendingPrompt = null, pendingPromptTotal = 0)
+        queueFamilyPrompts()
+    }
+
+    fun acceptFamilyPrompt() {
+        val prompt = _state.value.pendingPrompt ?: return
+        notificationStore.markFamilyPrompted(prompt.key)
+        prompt.notificationId?.let(::markNotificationRead)
+        _state.value = _state.value.copy(pendingPrompt = null, pendingPromptTotal = 0)
+
+        when (prompt.type) {
+            "share" -> acceptShare(prompt.id)
+            "contact" -> acceptContact(prompt.id)
+            "request" -> {
+                _state.value = _state.value.copy(
+                    screen = Screen.Family,
+                    familyTab = "requests",
+                    familyStatus = text(R.string.prompt_request_open),
+                )
+                val token = store.token()
+                if (token != null) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        runCatching { loadFamily(token) }
+                    }
+                }
+            }
+        }
+
+        queueFamilyPrompts()
+    }
+
+    fun declineFamilyPrompt() {
+        val prompt = _state.value.pendingPrompt ?: return
+        notificationStore.markFamilyPrompted(prompt.key)
+        prompt.notificationId?.let(::markNotificationRead)
+        _state.value = _state.value.copy(pendingPrompt = null, pendingPromptTotal = 0)
+
+        when (prompt.type) {
+            "share" -> declineShare(prompt.id)
+            "contact" -> blockContact(prompt.id)
+            "request" -> declineShareRequest(prompt.id)
+        }
+
+        queueFamilyPrompts()
     }
 
     fun openScanner(forPass: Boolean = false) {
@@ -2505,6 +2735,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "app.mypass.action.NEW_PASS",
             "app.mypass.action.CREDENTIALS",
             "app.mypass.action.NEXT_PASS",
+            "app.mypass.action.NOTIFICATIONS",
+            "app.mypass.action.FAMILY",
         )
         if (action == null || action !in supported) {
             return
@@ -2541,6 +2773,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "app.mypass.action.NEW_PASS" -> newPass("flight")
             "app.mypass.action.CREDENTIALS" -> openCredentials()
             "app.mypass.action.NEXT_PASS" -> openNextPass()
+            "app.mypass.action.NOTIFICATIONS" -> openNotifications()
+            "app.mypass.action.FAMILY" -> openFamily("contacts")
         }
     }
 
@@ -3807,6 +4041,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 ApiClient.addContact(token, normalized)
                 loadFamily(token)
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        status = text(R.string.status_contact_request_sent, normalized),
+                        familyStatus = text(R.string.status_contact_request_sent, normalized),
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(error = error.message ?: text(R.string.error_add_contact))
@@ -3821,6 +4063,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 ApiClient.blockContact(token, id)
                 loadFamily(token)
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        status = text(R.string.status_contact_blocked),
+                        familyStatus = text(R.string.status_contact_blocked),
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(error = error.message ?: text(R.string.error_block_contact))
@@ -3835,6 +4085,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 ApiClient.revokeShare(token, id)
                 loadFamily(token)
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        status = text(R.string.status_share_revoked),
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(error = error.message ?: text(R.string.error_revoke_share))
@@ -3849,6 +4106,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 ApiClient.acceptContact(token, id)
                 loadFamily(token)
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        status = text(R.string.status_contact_accepted),
+                        familyStatus = text(R.string.status_contact_accepted),
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(error = error.message ?: text(R.string.error_accept_contact))
@@ -3926,6 +4191,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 refreshItems(key)
                 loadFamily(token)
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        status = text(R.string.status_share_saved),
+                        error = null,
+                    )
+                }
             }.onFailure { error ->
                 withContext(Dispatchers.Main) {
                     _state.value = _state.value.copy(error = error.message ?: text(R.string.error_accept_share))
@@ -3940,6 +4212,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 ApiClient.declineShare(token, id)
                 loadFamily(token)
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(status = text(R.string.status_share_declined), error = null)
+                }
             }
         }
     }

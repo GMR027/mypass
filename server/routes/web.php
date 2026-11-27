@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\KeyController;
 use App\Http\Controllers\Api\V1\PairingController;
+use App\Http\Controllers\Api\V1\PushSubscriptionController;
 use App\Http\Controllers\Api\V1\ShareController;
 use App\Http\Controllers\Api\V1\ShareRequestController;
 use App\Http\Controllers\Api\V1\VaultItemController;
@@ -80,6 +81,11 @@ Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::get('/api/web/notifications', [NotificationController::class, 'json'])->name('web.notifications.json');
+    Route::post('/api/web/notifications/{notification}/read', [NotificationController::class, 'markReadJson'])->name('web.notifications.read');
+    Route::get('/api/web/push-subscriptions', [PushSubscriptionController::class, 'show'])->name('web.push.status');
+    Route::post('/api/web/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('web.push.store');
+    Route::delete('/api/web/push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('web.push.destroy');
 
     Route::get('/settings/profile', [ProfileController::class, 'show'])->name('settings.profile');
     Route::post('/settings/profile/birth-date', [ProfileController::class, 'updateBirthDate'])->name('settings.profile.birth-date.update');

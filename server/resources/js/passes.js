@@ -419,7 +419,7 @@ function codeFormatLabel(pass) {
     }[pass.code?.format || 'qr'] || 'QR';
 }
 
-function passHeader(pass, badge = null) {
+function passHeader(pass, badge = null, itemId = null) {
     const header = el('div', 'flex items-start justify-between gap-3');
     const identity = el('div', 'flex min-w-0 items-center gap-2.5');
     const tile = el('span', 'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/15');
@@ -437,6 +437,9 @@ function passHeader(pass, badge = null) {
     const names = el('div', 'min-w-0');
     names.appendChild(el('p', 'mp-pass-card__eyebrow truncate', pass.issuer || categoryLabel(pass.category)));
     names.appendChild(el('p', 'mp-pass-card__title truncate', pass.title));
+    if (itemId && window.mypassSharedItemIds?.has(itemId)) {
+        names.appendChild(el('span', 'mp-badge mp-badge-primary mt-1', t('Compartido')));
+    }
     identity.append(tile, names);
     header.append(identity, el('span', 'mp-pass-card__chip shrink-0', badge || badgeFor(pass)));
 
@@ -590,7 +593,7 @@ function passActionButton(action, iconName, label, primary = false) {
 function buildPassFrontFace(pass, item, options) {
     const face = el('div', 'mp-pass-flip__face mp-pass-flip__face--front');
     const body = el('div', 'mp-pass-card__body');
-    body.appendChild(passHeader(pass, options.badge));
+    body.appendChild(passHeader(pass, options.badge, item.id));
     appendPassContent(body, pass, item, options);
 
     const flipRow = el('div', 'mt-3 flex items-center justify-between gap-3 border-t border-white/15 pt-3');
@@ -757,7 +760,7 @@ function createPassCardElement(item, options = {}) {
     }
 
     const body = el('div', 'mp-pass-card__body');
-    body.appendChild(passHeader(pass, badge));
+    body.appendChild(passHeader(pass, badge, item.id));
 
     if (headerOnly) {
         const summary = stackSummary(pass);

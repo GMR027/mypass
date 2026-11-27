@@ -314,6 +314,79 @@ private fun UpdateNotes(release: AppRelease) {
     }
 }
 
+
+@Composable
+fun UpdateBellCard(state: UiState, viewModel: MainViewModel) {
+    val release = state.updateState.release
+
+    if (release != null) {
+        UpdateNotificationCard(state = state, viewModel = viewModel)
+        return
+    }
+
+    MpCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MpIconTile(icon = Icons.Filled.Refresh, size = 44)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.updates_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.updates_installed_version,
+                            BuildConfig.VERSION_NAME,
+                            BuildConfig.VERSION_CODE,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MpColors.OnSurfaceVariant,
+                    )
+                }
+            }
+
+            if (state.updateState is UpdateState.Idle) {
+                Text(
+                    text = stringResource(R.string.updates_idle_help),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MpColors.OnSurface,
+                )
+            } else {
+                UpdateStatus(state = state, release = null)
+            }
+
+            MpButton(
+                text = stringResource(R.string.updates_check),
+                onClick = viewModel::checkForUpdatesManually,
+                variant = MpButtonVariant.Secondary,
+                enabled = state.updateState !is UpdateState.Checking,
+                loading = state.updateState is UpdateState.Checking,
+                fillWidth = true,
+            )
+
+            Text(
+                text = if (state.lastUpdateCheck > 0L) {
+                    stringResource(
+                        R.string.updates_last_checked,
+                        DateUtils.getRelativeTimeSpanString(
+                            state.lastUpdateCheck,
+                            System.currentTimeMillis(),
+                            DateUtils.MINUTE_IN_MILLIS,
+                        ).toString(),
+                    )
+                } else {
+                    stringResource(R.string.updates_never_checked)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MpColors.OnSurfaceVariant,
+            )
+        }
+    }
+}
+
 @Composable
 fun UpdateDialog(state: UiState, viewModel: MainViewModel) {
     val release = state.updateState.release ?: return
