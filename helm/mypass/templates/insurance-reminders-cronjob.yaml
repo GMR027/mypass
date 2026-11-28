@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mypass-insurance-reminders
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mypass-insurance-reminders
+spec:
+  schedule: "0 9 * * *"
+  timeZone: America/Mexico_City
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: mypass-insurance-reminders
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsUser: 33
+            runAsGroup: 33
+            fsGroup: 33
+          containers:
+            - name: reminders
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["php", "artisan", "mypass:insurance-reminders", "--no-interaction"]
+              envFrom:
+                - secretRef:
+                    name: mypass
+              env:
+                - name: APP_ENV
+                  value: {{ .Values.app.env | quote }}
+                - name: APP_URL
+                  value: {{ .Values.app.url | quote }}
+                - name: APP_LOCALE
+                  value: {{ .Values.app.locale | quote }}
+                - name: APP_FALLBACK_LOCALE
+                  value: {{ .Values.app.fallbackLocale | quote }}
+                - name: DB_CONNECTION
+                  value: mysql
+                - name: DB_HOST
+                  value: mypass-mysql
+                - name: DB_PORT
+                  value: "3306"
+                - name: DB_DATABASE
+                  value: {{ .Values.mysql.database | quote }}
+                - name: DB_USERNAME
+                  value: {{ .Values.mysql.user | quote }}
+                - name: DB_CHARSET
+                  value: utf8mb4
+                - name: DB_COLLATION
+                  value: utf8mb4_unicode_ci
+                - name: CACHE_STORE
+                  value: array
+                - name: QUEUE_CONNECTION
+                  value: sync
+                - name: SESSION_DRIVER
+                  value: array
+                - name: LOG_CHANNEL
+                  value: stderr
+                - name: LOG_LEVEL
+                  value: {{ .Values.app.logLevel | quote }}
+                - name: WEBPUSH_ENABLED
+                  value: {{ if and .Values.secrets.vapidPublicKey .Values.secrets.vapidPrivateKey }}"true"{{ else }}"false"{{ end }}
+                - name: VAPID_SUBJECT
+                  value: {{ .Values.app.url | quote }}
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi

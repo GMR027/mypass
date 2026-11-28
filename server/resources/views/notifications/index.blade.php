@@ -66,6 +66,7 @@
                             'vault_recovery_enabled' => 'mark_email_read',
                             'vault_recovery_disabled' => 'link_off',
                             'vault_recovery_used' => 'lock_open',
+                            'insurance_expiring' => 'shield',
                             'app_update' => 'system_update',
                             default => 'notifications',
                         };
@@ -78,6 +79,7 @@
                             'vault_recovery_enabled' => __('Recuperación por correo activada'),
                             'vault_recovery_disabled' => __('Recuperación por correo desactivada'),
                             'vault_recovery_used' => __('Bóveda abierta con recuperación por correo'),
+                            'insurance_expiring' => __('Seguro por vencer'),
                             'app_update' => __('Nueva versión disponible'),
                             default => __('Actividad de la bóveda'),
                         };
@@ -88,6 +90,9 @@
                             'share_accepted' => __(':name aceptó el documento que le enviaste.', ['name' => $data['from'] ?? __('Alguien')]),
                             'document_request' => __(':name te pidió un documento: :type.', ['name' => $data['from'] ?? __('Alguien'), 'type' => $data['document_type'] ?? __('Documento')]),
                             'vault_recovery_enabled', 'vault_recovery_disabled', 'vault_recovery_used' => $data['message'] ?? __('Revisa la seguridad de tu bóveda.'),
+                            'insurance_expiring' => ($data['days'] ?? 0) === 0
+                                ? __('Tu póliza vence hoy.')
+                                : __('Tu póliza vence en :days días.', ['days' => $data['days'] ?? 0]),
                             'app_update' => __('My Pass :version ya está disponible. Revisa los cambios y actualiza cuando quieras.', ['version' => $data['version_name'] ?? '']),
                             default => __('Tienes actividad nueva en tu bóveda.'),
                         };
@@ -96,12 +101,13 @@
                             'share_received' => route('vault', ['tab' => 'family', 'share' => $data['share_id'] ?? '']),
                             'document_request' => route('vault', ['tab' => 'family', 'request' => $data['request_id'] ?? '']),
                             'share_accepted' => route('vault', ['tab' => 'family', 'outbox' => 1]),
+                            'insurance_expiring' => route('vault', ['tab' => 'insurance']),
                             'app_update' => $data['apk_url'] ?? route('app.download', ['v' => $data['version_code'] ?? $androidVersionCode]),
                             default => null,
                         };
                         $actionLabel = match ($type) {
                             'app_update' => __('Descargar actualización'),
-                            'contact_request', 'share_received', 'document_request', 'share_accepted' => __('Revisar'),
+                            'contact_request', 'share_received', 'document_request', 'share_accepted', 'insurance_expiring' => __('Revisar'),
                             default => null,
                         };
                         $notes = $type === 'app_update' && is_array($data['notes'] ?? null)

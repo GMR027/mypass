@@ -45,6 +45,7 @@ class AppNotifications
         $name = $data['from'] ?? trans('Alguien', [], $locale);
         $document = $data['document_type'] ?? trans('Documento', [], $locale);
         $version = $data['version_name'] ?? '';
+        $days = max(0, (int) ($data['days'] ?? 0));
 
         [$title, $body, $url] = match ($type) {
             'contact_request' => [
@@ -71,6 +72,13 @@ class AppNotifications
                 trans('Solicitud de documento', [], $locale),
                 trans(':name te pidió un documento: :type.', ['name' => $name, 'type' => $document], $locale),
                 '/vault?tab=family&request='.($data['request_id'] ?? ''),
+            ],
+            'insurance_expiring' => [
+                trans('Seguro por vencer', [], $locale),
+                $days === 0
+                    ? trans('Tu póliza vence hoy.', [], $locale)
+                    : trans('Tu póliza vence en :days días.', ['days' => $days], $locale),
+                '/vault?tab=insurance',
             ],
             'app_update' => [
                 trans('Nueva versión de My Pass', [], $locale),

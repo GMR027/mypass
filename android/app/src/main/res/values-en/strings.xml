@@ -1069,4 +1069,5 @@
     <string name="insurance_payment_reminder_title">Insurance payment due: %1$s</string>
     <string name="insurance_payment_reminder_body">%1$s has a payment on %2$s.</string>
     <string name="insurance_reminder_label">Reminder</string>
+    <string name="notif_insurance_expiring">Your insurance policy is about to expire.</string>
 </resources>

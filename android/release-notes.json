@@ -5,7 +5,8 @@
     "Pantalla global de Emergencia e historial de siniestros dentro de cada póliza.",
     "Recordatorios de vigencia y próximo pago, configurables a 1, 7, 15 o 30 días antes.",
     "El carnet médico puede vincularse a una póliza de salud o gastos médicos mayores.",
-    "Mejoras de búsqueda, papelera, copia de seguridad y sincronización para los seguros."
+    "Mejoras de búsqueda, papelera, copia de seguridad y sincronización para los seguros.",
+    "Web Push para avisar 7 días antes del vencimiento de una póliza, además de los recordatorios locales de vigencia y próximo pago."
   ],
   "en": [
     "New Insurance section for health, major medical, auto, motorcycle, home, life, travel, pet and business policies.",
@@ -13,6 +14,7 @@
     "Global Emergency screen and claim history inside each policy.",
     "Validity and next-payment reminders, configurable 1, 7, 15 or 30 days in advance.",
     "Medical cards can be linked to a health or major medical policy.",
-    "Search, trash, backup and sync improvements for insurance policies."
+    "Search, trash, backup and sync improvements for insurance policies.",
+    "Web Push to remind you 7 days before a policy expires, in addition to local validity and next-payment reminders."
   ]
 }

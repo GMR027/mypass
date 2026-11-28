@@ -1695,5 +1695,8 @@
   ":title — pago el :date": ":title — payment on :date",
   ":title — el pago venció el :date": ":title — payment was due on :date",
   "Aviso": "Reminder",
-  ":count días antes": ":count days before"
+  ":count días antes": ":count days before",
+  "Seguro por vencer": "Insurance expiring",
+  "Tu póliza vence hoy.": "Your policy expires today.",
+  "Tu póliza vence en :days días.": "Your policy expires in :days days."
 }

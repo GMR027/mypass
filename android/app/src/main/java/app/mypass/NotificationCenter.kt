@@ -162,6 +162,7 @@ private fun activityMessage(context: android.content.Context, notification: UiNo
         "vault_recovery_enabled" -> context.getString(R.string.notif_recovery_enabled)
         "vault_recovery_disabled" -> context.getString(R.string.notif_recovery_disabled)
         "vault_recovery_used" -> context.getString(R.string.notif_recovery_used)
+        "insurance_expiring" -> context.getString(R.string.notif_insurance_expiring)
         else -> context.getString(R.string.notif_default)
     }
 }

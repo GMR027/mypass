@@ -44,7 +44,7 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
   - aviso de documentos por vencer;
   - página de inicio pública;
   - interfaz completa en español e inglés, con selector de idioma.
-- Pruebas de API y de navegador pasando (103 pruebas, 512 aserciones).
+- Pruebas de API y de navegador pasando (105 pruebas, 524 aserciones).
 - App Android en Kotlin + Compose, instalada en la tablet de pruebas.
 - Billetera de pases con pestañas Documentos, Pases, Familia y Dispositivos.
 - Generador de pases con OCR local (Tesseract.js), PDF.js, ZXing y códigos QR/PDF417/Aztec/Code 128.
@@ -73,7 +73,7 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
 - Gestión de envíos por elemento para consultar destinatarios, estado y cancelar envíos pendientes desde el propio pase, documento, credencial o carnet.
 - Sección Seguros con pólizas de salud, gastos médicos mayores, auto, moto, hogar, vida, viaje, mascotas y negocio, con modo siniestro, llamadas con un toque, póliza adjunta e historial de siniestros.
 - El carnet médico puede vincularse a una póliza de salud o gastos médicos mayores para mostrar sus datos actualizados.
-- Recordatorios de seguros para vigencia y próximo pago, configurables a 1, 7, 15 o 30 días antes, con notificación local en Android y aviso dentro de la sección Seguros en web.
+- Recordatorios de seguros para vigencia y próximo pago, configurables a 1, 7, 15 o 30 días antes, con notificación local en Android, aviso dentro de la sección Seguros y Web Push a 7 días de la vigencia cuando el usuario tiene avisos activos.
 - Tablet: Xiaomi Pad 6, Android 13 (API 33), sin biometría fuerte.
 
 ## Requisitos locales
@@ -98,6 +98,8 @@ No se versionan `.env`, `.env.testing`, `local.properties`, el keystore, los bui
 Para el clúster, el backend debe publicarse con HTTPS y un dominio estable. Configura en `server/.env` al menos `APP_URL`, `DB_*`, `MAIL_*` y `SESSION_DOMAIN`, y mantén `upload_max_filesize` y `post_max_size` en 128 MB o más.
 
 Para los avisos Web Push de la PWA, genera las llaves VAPID con `php artisan mypass:vapid` y configura `WEBPUSH_ENABLED=true`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`. En Kubernetes, `deploy.sh` las guarda en `values.local.yaml` y las inyecta como secretos.
+
+El chart incluye un CronJob diario (`mypass:insurance-reminders`) que crea el aviso en la campana y envía Web Push cuando una póliza de seguro vence en los próximos 7 días.
 
 En Android, los avisos se consultan cada 15 minutos con WorkManager y se muestran como notificación del sistema. En la web, el usuario debe activar los avisos desde la campana; en iPhone/iPad, Web Push requiere instalar la PWA en la pantalla de inicio (iOS 16.4 o posterior).
 

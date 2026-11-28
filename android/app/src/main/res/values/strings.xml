@@ -1069,4 +1069,5 @@
     <string name="insurance_payment_reminder_title">Pago de seguro próximo: %1$s</string>
     <string name="insurance_payment_reminder_body">%1$s tiene un pago el %2$s.</string>
     <string name="insurance_reminder_label">Aviso</string>
+    <string name="notif_insurance_expiring">Tu póliza de seguro está por vencer.</string>
 </resources>
