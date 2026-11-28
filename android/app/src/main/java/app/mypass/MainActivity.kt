@@ -264,6 +264,8 @@ class MainActivity : FragmentActivity() {
                                 state.screen == Screen.CredentialEditor ||
                                 state.screen == Screen.Medical ||
                                 state.screen == Screen.MedicalEditor ||
+                                state.screen == Screen.Insurance ||
+                                state.screen == Screen.InsuranceEditor ||
                                 state.screen == Screen.Trash ||
                                 state.screen == Screen.Search ||
                                 state.screen == Screen.ShareImport ||
@@ -276,8 +278,9 @@ class MainActivity : FragmentActivity() {
                                 Screen.PassEditor -> viewModel.discardPassDraft()
                                 Screen.CredentialEditor -> viewModel.discardCredentialDraft()
                                 Screen.MedicalEditor -> viewModel.discardMedicalDraft()
+                                Screen.InsuranceEditor -> viewModel.discardInsuranceDraft()
                                 Screen.Notifications -> viewModel.closeNotifications()
-                                Screen.Credentials, Screen.Medical -> viewModel.backToVault()
+                                Screen.Credentials, Screen.Medical, Screen.Insurance -> viewModel.backToVault()
                                 Screen.Trash -> viewModel.openSettings()
                                 Screen.Search -> viewModel.closeSearch()
                                 Screen.ShareImport -> viewModel.discardSharedFiles()
@@ -332,11 +335,12 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
         Screen.Passes,
         Screen.Credentials,
         Screen.Medical,
+        Screen.Insurance,
         Screen.Settings,
     )
 
     LaunchedEffect(state.status, state.screen) {
-        if (state.status != null && state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Credentials, Screen.Medical, Screen.Settings)) {
+        if (state.status != null && state.screen in setOf(Screen.Home, Screen.Vault, Screen.Passes, Screen.Credentials, Screen.Medical, Screen.Insurance, Screen.Settings)) {
             delay(3500)
             viewModel.clearStatus()
         }
@@ -378,6 +382,8 @@ private fun MyPassApp(state: UiState, viewModel: MainViewModel) {
                     Screen.CredentialEditor -> CredentialEditorScreen(state = state, viewModel = viewModel)
                     Screen.Medical -> MedicalScreen(state = state, viewModel = viewModel)
                     Screen.MedicalEditor -> MedicalEditorScreen(state = state, viewModel = viewModel)
+                    Screen.Insurance -> InsuranceScreen(state = state, viewModel = viewModel)
+                    Screen.InsuranceEditor -> InsuranceEditorScreen(state = state, viewModel = viewModel)
                     Screen.Family -> FamilyScreen(state = state, viewModel = viewModel)
                     Screen.Trash -> TrashScreen(state = state, viewModel = viewModel)
                     Screen.Search -> SearchScreen(state = state, viewModel = viewModel)
@@ -1220,7 +1226,7 @@ private fun VaultScreen(
     }
 
     val vaultItems = remember(state.items) {
-        state.items.filter { it.pass == null && it.credential == null && it.medical == null }
+        state.items.filter { it.pass == null && it.credential == null && it.medical == null && it.insurance == null }
     }
     val visibleItems = remember(vaultItems, search, filter) {
         val query = search.trim()
@@ -1323,6 +1329,7 @@ private fun VaultScreen(
                         onDocuments = {},
                         onCredentials = viewModel::openCredentials,
                         onMedical = viewModel::openMedical,
+                        onInsurance = viewModel::openInsurance,
                     )
                     VaultStatusCard(state)
                     MpStatusBanner(state.status, state.error)
@@ -1771,6 +1778,7 @@ internal fun ItemTypeIcon(type: String, size: Int = 46) {
     val painter = when (type) {
         "ticket" -> painterResource(R.drawable.ic_ticket)
         "card", "medical_card" -> painterResource(R.drawable.ic_card)
+        "insurance" -> painterResource(R.drawable.ic_insurance)
         else -> painterResource(R.drawable.ic_document)
     }
     MpIconTile(painter = painter, size = size)
@@ -1782,6 +1790,7 @@ private fun typeLabel(type: String): String = when (type) {
     "card" -> stringResource(R.string.card)
     "credential" -> stringResource(R.string.credentials)
     "medical_card" -> stringResource(R.string.medical_card)
+    "insurance" -> stringResource(R.string.insurance)
     "other" -> stringResource(R.string.other)
     else -> stringResource(R.string.document)
 }
@@ -1917,6 +1926,7 @@ internal fun OutgoingShareCard(
         "ticket" -> stringResource(R.string.ticket)
         "medical_card" -> stringResource(R.string.medical_card)
         "credential" -> stringResource(R.string.credentials)
+        "insurance" -> stringResource(R.string.insurance)
         else -> stringResource(R.string.document)
     }
     val title = itemTitle?.takeIf { it.isNotBlank() } ?: typeName
@@ -2019,6 +2029,7 @@ internal fun ShareCard(share: UiShare, onAccept: () -> Unit, onDecline: () -> Un
                             when (share.itemType) {
                                 "ticket" -> R.string.share_received_ticket
                                 "medical_card" -> R.string.share_received_medical
+                                "insurance" -> R.string.share_received_insurance
                                 else -> R.string.share_received_document
                             },
                             share.sender,
@@ -3022,9 +3033,9 @@ private fun MpBottomBar(screen: Screen, viewModel: MainViewModel) {
                 colors = bottomBarColors(),
             )
             NavigationBarItem(
-                selected = screen == Screen.Vault || screen == Screen.Credentials || screen == Screen.Medical,
+                selected = screen == Screen.Vault || screen == Screen.Credentials || screen == Screen.Medical || screen == Screen.Insurance,
                 onClick = {
-                    if (screen != Screen.Vault && screen != Screen.Credentials && screen != Screen.Medical) {
+                    if (screen != Screen.Vault && screen != Screen.Credentials && screen != Screen.Medical && screen != Screen.Insurance) {
                         viewModel.backToVault()
                     }
                 },
@@ -3147,6 +3158,7 @@ internal fun ShareDialog(
         when (item.type) {
             "ticket" -> R.drawable.ic_ticket
             "card", "medical_card" -> R.drawable.ic_card
+            "insurance" -> R.drawable.ic_insurance
             else -> R.drawable.ic_document
         },
     )

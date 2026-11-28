@@ -6,6 +6,7 @@ import {
 } from './vault-secrets';
 import { downloadMedicalCalendar, medicalCalendar } from './calendar';
 import { centerCardInView, createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
+import { insuranceFromItem, isInsuranceItem } from './insurance';
 
 const t = (key) => (window.mypassT ? window.mypassT(key) : key);
 const tf = (key, values) => (window.mypassTF ? window.mypassTF(key, values) : key);
@@ -97,6 +98,7 @@ export function medicalFromItem(item) {
             policyNumber: typeof insurance.policy_number === 'string' ? insurance.policy_number : '',
             memberId: typeof insurance.member_id === 'string' ? insurance.member_id : '',
             phone: typeof insurance.phone === 'string' ? insurance.phone : '',
+            linkedInsuranceId: typeof insurance.linked_item_id === 'string' ? insurance.linked_item_id : '',
         },
         doctor: {
             name: typeof doctor.name === 'string' ? doctor.name : '',
@@ -163,6 +165,9 @@ export class MedicalApp {
         this.insurancePolicy = document.getElementById('medical-insurance-policy');
         this.insuranceMember = document.getElementById('medical-insurance-member');
         this.insurancePhone = document.getElementById('medical-insurance-phone');
+        this.insuranceLink = document.getElementById('medical-insurance-link');
+        this.insuranceLinkStatus = document.getElementById('medical-insurance-link-status');
+        this.insuranceGo = document.getElementById('medical-insurance-go');
         this.doctorName = document.getElementById('medical-doctor-name');
         this.doctorPhone = document.getElementById('medical-doctor-phone');
         this.doctorClinic = document.getElementById('medical-doctor-clinic');
@@ -191,6 +196,11 @@ export class MedicalApp {
         });
 
         this.form?.addEventListener('submit', (event) => this.save(event));
+        this.insuranceLink?.addEventListener('change', () => this.applyLinkedInsurance(this.insuranceLink.value));
+        this.insuranceGo?.addEventListener('click', () => {
+            this.close();
+            this.options.switchTab?.('insurance');
+        });
         this.medicationAdd?.addEventListener('click', () => this.addMedicationRow());
         this.appointmentAdd?.addEventListener('click', () => this.addAppointmentRow());
         this.medicationsList?.addEventListener('click', (event) => {
@@ -228,7 +238,92 @@ export class MedicalApp {
 
     setItems(items) {
         this.items = (Array.isArray(items) ? items : []).filter(isMedicalItem);
+        this.resolveLinkedInsurance();
         this.render();
+    }
+
+    insurancePolicies() {
+        return (this.options.getItems?.() || [])
+            .filter(isInsuranceItem)
+            .filter((item) => item.state !== 'transferred')
+            .filter((item) => ['health', 'major_medical'].includes(insuranceFromItem(item).category));
+    }
+
+    renderInsuranceLinkOptions(selectedId = '') {
+        if (!this.insuranceLink) {
+            return;
+        }
+        const policies = this.insurancePolicies();
+        this.insuranceLink.replaceChildren();
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = t('Sin vincular');
+        this.insuranceLink.appendChild(none);
+
+        for (const item of policies) {
+            const policy = insuranceFromItem(item);
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = [
+                policy.provider || t('Aseguradora'),
+                policy.product,
+                policy.policyNumber ? `#${policy.policyNumber}` : '',
+            ].filter(Boolean).join(' · ');
+            option.selected = item.id === selectedId;
+            this.insuranceLink.appendChild(option);
+        }
+
+        if (this.insuranceLinkStatus) {
+            this.insuranceLinkStatus.textContent = policies.length > 0
+                ? t('Elige una póliza para copiar sus datos. Si la póliza cambia, el carnet mostrará los datos actualizados.')
+                : t('Todavía no tienes una póliza de salud o gastos médicos mayores en Seguros. Puedes capturar los datos manualmente o crear una póliza.');
+        }
+    }
+
+    applyLinkedInsurance(policyId) {
+        if (!policyId) {
+            if (this.insuranceLinkStatus) {
+                this.insuranceLinkStatus.textContent = t('Puedes capturar los datos manualmente si todavía no tienes una póliza en Seguros.');
+            }
+            return;
+        }
+
+        const item = this.insurancePolicies().find((candidate) => candidate.id === policyId);
+        if (!item) {
+            return;
+        }
+        const policy = insuranceFromItem(item);
+        this.insuranceProvider.value = policy.provider;
+        this.insurancePlan.value = policy.product;
+        this.insurancePolicy.value = policy.policyNumber;
+        this.insuranceMember.value = policy.memberId;
+        this.insurancePhone.value = policy.emergencyPhone || policy.assistancePhone;
+        if (this.insuranceLinkStatus) {
+            this.insuranceLinkStatus.textContent = tf('Vinculado a :name. Los datos se actualizarán desde Seguros.', {
+                name: [policy.provider, policy.product].filter(Boolean).join(' · ') || t('la póliza'),
+            });
+        }
+    }
+
+    resolveLinkedInsurance() {
+        const policies = this.insurancePolicies();
+        for (const item of this.items) {
+            const insurance = item.metadata?.medical?.insurance;
+            const linkedId = typeof insurance?.linked_item_id === 'string' ? insurance.linked_item_id : '';
+            if (!linkedId) {
+                continue;
+            }
+            const policyItem = policies.find((candidate) => candidate.id === linkedId);
+            if (!policyItem) {
+                continue;
+            }
+            const policy = insuranceFromItem(policyItem);
+            insurance.provider = policy.provider || insurance.provider || '';
+            insurance.plan = policy.product || insurance.plan || '';
+            insurance.policy_number = policy.policyNumber || insurance.policy_number || '';
+            insurance.member_id = policy.memberId || insurance.member_id || '';
+            insurance.phone = policy.emergencyPhone || policy.assistancePhone || insurance.phone || '';
+        }
     }
 
     reset() {
@@ -461,6 +556,7 @@ export class MedicalApp {
         this.blobInput.value = '';
         this.renderMedicationRows([], []);
         this.renderAppointmentRows([]);
+        this.renderInsuranceLinkOptions('');
         this.renderFileState();
         this.hideError();
         this.modal.showModal();
@@ -502,6 +598,8 @@ export class MedicalApp {
         this.insurancePolicy.value = medical.insurance.policyNumber;
         this.insuranceMember.value = medical.insurance.memberId;
         this.insurancePhone.value = medical.insurance.phone;
+        this.renderInsuranceLinkOptions(medical.insurance.linkedInsuranceId);
+        this.applyLinkedInsurance(medical.insurance.linkedInsuranceId);
         this.doctorName.value = medical.doctor.name;
         this.doctorPhone.value = medical.doctor.phone;
         this.doctorClinic.value = medical.doctor.clinic;
@@ -613,6 +711,7 @@ export class MedicalApp {
                     policy_number: this.insurancePolicy.value.trim(),
                     member_id: this.insuranceMember.value.trim(),
                     phone: this.insurancePhone.value.trim(),
+                    linked_item_id: this.insuranceLink?.value || '',
                 },
                 doctor: {
                     name: this.doctorName.value.trim(),

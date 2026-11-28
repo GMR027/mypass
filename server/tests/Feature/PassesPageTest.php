@@ -40,7 +40,9 @@ class PassesPageTest extends TestCase
             ->assertSee('Agregar credencial')
             ->assertSee('Secreto TOTP')
             ->assertSee('Carnets médicos')
-            ->assertSee('Agregar carnet');
+            ->assertSee('Agregar carnet')
+            ->assertSee('Seguros y pólizas')
+            ->assertSee('Agregar seguro');
 
         $user->forceFill(['locale' => 'en'])->save();
 
@@ -51,7 +53,9 @@ class PassesPageTest extends TestCase
             ->assertSee('Add credential')
             ->assertSee('TOTP secret')
             ->assertSee('Medical cards')
-            ->assertSee('Add card');
+            ->assertSee('Add card')
+            ->assertSee('Insurance and policies')
+            ->assertSee('Add insurance');
     }
 
     public function test_vault_renders_the_passes_workspace(): void

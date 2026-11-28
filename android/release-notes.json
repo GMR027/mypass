@@ -1,18 +1,18 @@
 {
   "es": [
-    "En Pases ahora ves primero tus pases; crear, escanear e importar están en el botón +.",
-    "Indicador Compartido y opción para gestionar o cancelar envíos desde cada pase, documento, credencial o carnet.",
-    "El filtro Compartidos permite encontrar rápido los pases que ya enviaste.",
-    "Familia se organiza en Contactos, Recibidos, Enviados y Solicitudes, con búsqueda y contadores.",
-    "Se corrigió la cabecera de Salud, los accesos rápidos y varios botones con texto.",
-    "La barra superior deja más espacio respecto al área de notificaciones."
+    "Nueva sección Seguros con pólizas de salud, gastos médicos mayores, auto, moto, hogar, vida, viaje, mascotas y negocio.",
+    "Modo siniestro con teléfonos tocables, póliza visible, datos del bien asegurado y póliza adjunta.",
+    "Pantalla global de Emergencia e historial de siniestros dentro de cada póliza.",
+    "Recordatorios de vigencia y próximo pago, configurables a 1, 7, 15 o 30 días antes.",
+    "El carnet médico puede vincularse a una póliza de salud o gastos médicos mayores.",
+    "Mejoras de búsqueda, papelera, copia de seguridad y sincronización para los seguros."
   ],
   "en": [
-    "Passes now shows your passes first; create, scan and import live in the + button.",
-    "A Shared indicator and an option to manage or cancel sends from every pass, document, credential or medical card.",
-    "The Shared filter makes it easy to find passes you already sent.",
-    "Family is organized into Contacts, Received, Sent and Requests, with search and counters.",
-    "Fixed the Health header, quick actions and several text buttons.",
-    "The top bar now leaves more room below the notification area."
+    "New Insurance section for health, major medical, auto, motorcycle, home, life, travel, pet and business policies.",
+    "Claim mode with tap-to-call numbers, visible policy, insured property details and attached policy.",
+    "Global Emergency screen and claim history inside each policy.",
+    "Validity and next-payment reminders, configurable 1, 7, 15 or 30 days in advance.",
+    "Medical cards can be linked to a health or major medical policy.",
+    "Search, trash, backup and sync improvements for insurance policies."
   ]
 }

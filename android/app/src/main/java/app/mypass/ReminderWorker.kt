@@ -30,7 +30,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         var soon = 0
 
         for (item in VaultStore(context).allItems()) {
-            if (item.state == "trashed") {
+            if (item.state == "trashed" || item.type == "insurance") {
                 continue
             }
             val days = expiryDays(item.expiresAt, today) ?: continue

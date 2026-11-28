@@ -70,8 +70,11 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
     var revealMedicalId by remember { mutableStateOf<String?>(null) }
     val acceptedContacts = state.contacts.filter { it.status == "accepted" }
 
-    val all = remember(state.items) {
-        state.items.filter { it.medical != null && it.state != "transferred" }
+    val resolvedItems = remember(state.items) {
+        state.items.map { item -> item.copy(medical = resolveMedicalInsurance(item, state.items)) }
+    }
+    val all = remember(resolvedItems) {
+        resolvedItems.filter { it.medical != null && it.state != "transferred" }
     }
     val visible = remember(all, search) {
         val query = search.trim()
@@ -161,6 +164,7 @@ fun MedicalScreen(state: UiState, viewModel: MainViewModel) {
                         onDocuments = viewModel::backToVault,
                         onCredentials = viewModel::openCredentials,
                         onMedical = {},
+                        onInsurance = viewModel::openInsurance,
                     )
                     MpStatusBanner(state.status, state.error)
                     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -756,6 +760,11 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
     var insurancePolicy by remember(source) { mutableStateOf(source.insurancePolicy) }
     var insuranceMember by remember(source) { mutableStateOf(source.insuranceMember) }
     var insurancePhone by remember(source) { mutableStateOf(source.insurancePhone) }
+    var linkedInsuranceId by remember(source) { mutableStateOf(source.linkedInsuranceId) }
+    val healthPolicies = state.items.filter {
+        it.state != "transferred" &&
+            (it.insurance?.category == "health" || it.insurance?.category == "major_medical")
+    }
     var doctorName by remember(source) { mutableStateOf(source.doctorName) }
     var doctorPhone by remember(source) { mutableStateOf(source.doctorPhone) }
     var doctorClinic by remember(source) { mutableStateOf(source.doctorClinic) }
@@ -793,6 +802,7 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
         insurancePolicy = insurancePolicy,
         insuranceMember = insuranceMember,
         insurancePhone = insurancePhone,
+        linkedInsuranceId = linkedInsuranceId,
         doctorName = doctorName,
         doctorPhone = doctorPhone,
         doctorClinic = doctorClinic,
@@ -963,6 +973,49 @@ fun MedicalEditorScreen(state: UiState, viewModel: MainViewModel) {
                 MpCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.medical_insurance), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = stringResource(R.string.medical_insurance_link_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MpColors.OnSurfaceVariant,
+                        )
+                        if (healthPolicies.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.medical_insurance_link_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MpColors.OnSurfaceVariant,
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                MpFilterChip(
+                                    stringResource(R.string.medical_insurance_unlinked),
+                                    linkedInsuranceId.isBlank(),
+                                ) {
+                                    linkedInsuranceId = ""
+                                }
+                                healthPolicies.forEach { policyItem ->
+                                    val policy = policyItem.insurance ?: return@forEach
+                                    MpFilterChip(
+                                        listOf(policy.provider, policy.product)
+                                            .filter { it.isNotBlank() }
+                                            .joinToString(" · ")
+                                            .ifBlank { policyItem.title },
+                                        linkedInsuranceId == policyItem.id,
+                                    ) {
+                                        linkedInsuranceId = policyItem.id
+                                        insuranceProvider = policy.provider
+                                        insurancePlan = policy.product
+                                        insurancePolicy = policy.policyNumber
+                                        insuranceMember = policy.memberId
+                                        insurancePhone = policy.emergencyPhone.ifBlank { policy.assistancePhone }
+                                    }
+                                }
+                            }
+                        }
                         MpTextField(insuranceProvider, { insuranceProvider = it }, stringResource(R.string.insurance_provider))
                         MpTextField(insurancePlan, { insurancePlan = it }, stringResource(R.string.insurance_plan))
                         MpTextField(insurancePolicy, { insurancePolicy = it }, stringResource(R.string.policy_number))
@@ -1228,6 +1281,26 @@ private fun PresentationValue(label: String, value: String) {
             )
         }
     }
+}
+
+private fun resolveMedicalInsurance(item: UiItem, items: List<UiItem>): UiMedicalCard? {
+    val medical = item.medical ?: return null
+    val linkedId = medical.insurance.linkedItemId
+    if (linkedId.isBlank()) {
+        return medical
+    }
+    val policy = items.firstOrNull { it.id == linkedId }?.insurance ?: return medical
+    return medical.copy(
+        insurance = medical.insurance.copy(
+            provider = policy.provider.ifBlank { medical.insurance.provider },
+            plan = policy.product.ifBlank { medical.insurance.plan },
+            policyNumber = policy.policyNumber.ifBlank { medical.insurance.policyNumber },
+            memberId = policy.memberId.ifBlank { medical.insurance.memberId },
+            phone = policy.emergencyPhone
+                .ifBlank { policy.assistancePhone }
+                .ifBlank { medical.insurance.phone },
+        ),
+    )
 }
 
 private fun medicalDisplayName(context: Context, uri: Uri): String {

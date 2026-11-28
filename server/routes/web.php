@@ -60,6 +60,11 @@ Route::middleware(['auth', 'verified', 'email-2fa'])->group(function () {
                 ->where('state', '!=', 'transferred')
                 ->whereNull('deleted_at')
                 ->count(),
+            'insuranceCount' => $user->items()
+                ->where('type', VaultItem::TYPE_INSURANCE)
+                ->where('state', '!=', 'transferred')
+                ->whereNull('deleted_at')
+                ->count(),
             'passCount' => $user->items()
                 ->whereIn('type', VaultItem::PASS_TYPES)
                 ->where('state', '!=', 'transferred')

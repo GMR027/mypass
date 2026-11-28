@@ -48,4 +48,16 @@
             android:targetPackage="app.mypass"
             android:targetClass="app.mypass.MainActivity" />
     </shortcut>
+
+    <shortcut
+        android:shortcutId="insurance"
+        android:enabled="true"
+        android:icon="@drawable/ic_insurance"
+        android:shortcutShortLabel="@string/shortcut_insurance_short"
+        android:shortcutLongLabel="@string/shortcut_insurance_long">
+        <intent
+            android:action="app.mypass.action.INSURANCE"
+            android:targetPackage="app.mypass"
+            android:targetClass="app.mypass.MainActivity" />
+    </shortcut>
 </shortcuts>

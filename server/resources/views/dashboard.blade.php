@@ -161,6 +161,14 @@
             <p class="mt-3 text-[26px] font-bold leading-none tracking-tight text-on-surface">{{ $medicalCount }}</p>
             <p class="mt-1 text-[13px] font-semibold text-on-surface-variant">{{ __('Carnets médicos') }}</p>
         </a>
+        <a href="{{ route('vault', ['tab' => 'insurance']) }}" class="mp-stat-card group transition-all hover:-translate-y-0.5 hover:shadow-lift">
+            <div class="flex items-center justify-between">
+                <span class="mp-quick-tile__icon"><x-icon name="shield" class="text-[21px]" /></span>
+                <x-icon name="arrow_forward" class="text-[18px] text-outline transition-transform group-hover:translate-x-0.5" />
+            </div>
+            <p class="mt-3 text-[26px] font-bold leading-none tracking-tight text-on-surface">{{ $insuranceCount }}</p>
+            <p class="mt-1 text-[13px] font-semibold text-on-surface-variant">{{ __('Seguros y pólizas') }}</p>
+        </a>
         <a href="{{ route('vault', ['tab' => 'docs']) }}" class="mp-stat-card group transition-all hover:-translate-y-0.5 hover:shadow-lift">
             <div class="flex items-center justify-between">
                 <span class="mp-quick-tile__icon"><x-icon name="folder" class="text-[21px]" /></span>

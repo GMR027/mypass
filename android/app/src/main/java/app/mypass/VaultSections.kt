@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
@@ -30,6 +31,7 @@ fun VaultSectionTabs(
     onDocuments: () -> Unit,
     onCredentials: () -> Unit,
     onMedical: () -> Unit,
+    onInsurance: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -60,6 +62,13 @@ fun VaultSectionTabs(
                 icon = Icons.Filled.Info,
                 selected = current == "medical",
                 onClick = onMedical,
+                modifier = Modifier.weight(1f),
+            )
+            VaultTab(
+                label = stringResource(R.string.insurance),
+                icon = Icons.Filled.CheckCircle,
+                selected = current == "insurance",
+                onClick = onInsurance,
                 modifier = Modifier.weight(1f),
             )
         }

@@ -67,6 +67,8 @@ enum class Screen {
     CredentialEditor,
     Medical,
     MedicalEditor,
+    Insurance,
+    InsuranceEditor,
     Family,
     Trash,
     Search,
@@ -159,6 +161,7 @@ data class UiMedicalInsurance(
     val policyNumber: String = "",
     val memberId: String = "",
     val phone: String = "",
+    val linkedItemId: String = "",
 )
 
 data class UiMedicalDoctor(
@@ -203,6 +206,99 @@ data class UiMedicalCard(
     val notes: String = "",
 )
 
+data class UiInsuranceSubject(
+    val id: String = "",
+    val label: String = "",
+    val value: String = "",
+)
+
+data class UiInsuranceCoverage(
+    val id: String = "",
+    val name: String = "",
+    val amount: String = "",
+    val notes: String = "",
+)
+
+data class UiInsuranceClaim(
+    val id: String = "",
+    val date: String = "",
+    val claimNumber: String = "",
+    val type: String = "",
+    val description: String = "",
+    val status: String = "open",
+    val adjusterName: String = "",
+    val adjusterPhone: String = "",
+    val amount: String = "",
+    val notes: String = "",
+)
+
+data class UiInsurance(
+    val category: String = "other",
+    val provider: String = "",
+    val product: String = "",
+    val policyNumber: String = "",
+    val memberId: String = "",
+    val holder: String = "",
+    val validFrom: String = "",
+    val validUntil: String = "",
+    val status: String = "active",
+    val emergencyPhone: String = "",
+    val assistancePhone: String = "",
+    val agentName: String = "",
+    val agentPhone: String = "",
+    val email: String = "",
+    val website: String = "",
+    val premium: String = "",
+    val currency: String = "MXN",
+    val paymentFrequency: String = "",
+    val nextPaymentDate: String = "",
+    val insuredSum: String = "",
+    val deductible: String = "",
+    val subject: List<UiInsuranceSubject> = emptyList(),
+    val coverages: List<UiInsuranceCoverage> = emptyList(),
+    val notes: String = "",
+    val claims: List<UiInsuranceClaim> = emptyList(),
+    val reminderDays: Int = 7,
+)
+
+data class InsuranceDraft(
+    val itemId: String? = null,
+    val version: Int? = null,
+    val title: String = "",
+    val category: String = "auto",
+    val provider: String = "",
+    val product: String = "",
+    val policyNumber: String = "",
+    val memberId: String = "",
+    val holder: String = "",
+    val validFrom: String = "",
+    val validUntil: String = "",
+    val status: String = "active",
+    val emergencyPhone: String = "",
+    val assistancePhone: String = "",
+    val agentName: String = "",
+    val agentPhone: String = "",
+    val email: String = "",
+    val website: String = "",
+    val premium: String = "",
+    val currency: String = "MXN",
+    val paymentFrequency: String = "",
+    val nextPaymentDate: String = "",
+    val insuredSum: String = "",
+    val deductible: String = "",
+    val subject: List<UiInsuranceSubject> = emptyList(),
+    val coverages: List<UiInsuranceCoverage> = emptyList(),
+    val notes: String = "",
+    val claims: List<UiInsuranceClaim> = emptyList(),
+    val reminderDays: Int = 7,
+    val existingBlobId: String? = null,
+    val existingAttachmentName: String? = null,
+    val attachmentUri: String? = null,
+    val attachmentName: String? = null,
+    val clearAttachment: Boolean = false,
+    val isNew: Boolean = true,
+)
+
 data class MedicalDraft(
     val itemId: String? = null,
     val version: Int? = null,
@@ -224,6 +320,7 @@ data class MedicalDraft(
     val insurancePolicy: String = "",
     val insuranceMember: String = "",
     val insurancePhone: String = "",
+    val linkedInsuranceId: String = "",
     val doctorName: String = "",
     val doctorPhone: String = "",
     val doctorClinic: String = "",
@@ -347,6 +444,7 @@ data class UiItem(
     val pass: UiPass? = null,
     val credential: UiCredential? = null,
     val medical: UiMedicalCard? = null,
+    val insurance: UiInsurance? = null,
     val metadataJson: JSONObject? = null,
 )
 
@@ -392,6 +490,7 @@ data class UiState(
     val passDraft: PassDraft? = null,
     val credentialDraft: CredentialDraft? = null,
     val medicalDraft: MedicalDraft? = null,
+    val insuranceDraft: InsuranceDraft? = null,
     val scanForPass: Boolean = false,
     val scanForTotp: Boolean = false,
     val scanSourcePath: String? = null,
@@ -1667,6 +1766,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Screen.Passes,
                 Screen.Credentials,
                 Screen.Medical,
+                Screen.Insurance,
                 Screen.Settings,
             )
         ) {
@@ -1738,6 +1838,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when {
                     item.credential != null -> openCredentials()
                     item.medical != null -> openMedical()
+                    item.insurance != null -> openInsurance()
                     item.pass != null -> openPasses()
                     else -> openItem(item)
                 }
@@ -2051,6 +2152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             passDraft = null,
             credentialDraft = null,
             medicalDraft = null,
+            insuranceDraft = null,
         )
     }
 
@@ -2062,6 +2164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             passDraft = null,
             credentialDraft = null,
             medicalDraft = null,
+            insuranceDraft = null,
         )
     }
 
@@ -2087,6 +2190,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(
             screen = Screen.Medical,
             medicalDraft = null,
+            insuranceDraft = null,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun openInsurance() {
+        _state.value = _state.value.copy(
+            screen = Screen.Insurance,
+            insuranceDraft = null,
             error = null,
             status = null,
         )
@@ -2189,6 +2302,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 insurancePolicy = medical.insurance.policyNumber,
                 insuranceMember = medical.insurance.memberId,
                 insurancePhone = medical.insurance.phone,
+                linkedInsuranceId = medical.insurance.linkedItemId,
                 doctorName = medical.doctor.name,
                 doctorPhone = medical.doctor.phone,
                 doctorClinic = medical.doctor.clinic,
@@ -2215,6 +2329,142 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             error = null,
             status = null,
         )
+    }
+
+    fun newInsurance() {
+        _state.value = _state.value.copy(
+            screen = Screen.InsuranceEditor,
+            insuranceDraft = InsuranceDraft(
+                subject = insuranceTemplate("auto"),
+            ),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun editInsurance(item: UiItem) {
+        val insurance = item.insurance ?: return
+        recordRecentItem(item.id)
+        val local = store.findItem(item.id)
+        _state.value = _state.value.copy(
+            screen = Screen.InsuranceEditor,
+            insuranceDraft = InsuranceDraft(
+                itemId = item.id,
+                version = local?.version ?: 1,
+                title = item.title,
+                category = insurance.category,
+                provider = insurance.provider,
+                product = insurance.product,
+                policyNumber = insurance.policyNumber,
+                memberId = insurance.memberId,
+                holder = insurance.holder,
+                validFrom = insurance.validFrom,
+                validUntil = insurance.validUntil,
+                status = insurance.status,
+                emergencyPhone = insurance.emergencyPhone,
+                assistancePhone = insurance.assistancePhone,
+                agentName = insurance.agentName,
+                agentPhone = insurance.agentPhone,
+                email = insurance.email,
+                website = insurance.website,
+                premium = insurance.premium,
+                currency = insurance.currency,
+                paymentFrequency = insurance.paymentFrequency,
+                nextPaymentDate = insurance.nextPaymentDate,
+                insuredSum = insurance.insuredSum,
+                deductible = insurance.deductible,
+                subject = if (insurance.subject.isEmpty()) {
+                    insuranceTemplate(insurance.category)
+                } else {
+                    insurance.subject
+                },
+                coverages = insurance.coverages,
+                notes = insurance.notes,
+                claims = insurance.claims,
+                reminderDays = insurance.reminderDays,
+                existingBlobId = item.blobId,
+                existingAttachmentName = item.blobId?.let {
+                    item.metadataJson?.optString("original_name")
+                        ?.takeIf { name -> name.isNotBlank() && name != "null" }
+                },
+                isNew = false,
+            ),
+            error = null,
+            status = null,
+        )
+    }
+
+    fun discardInsuranceDraft() {
+        _state.value = _state.value.copy(
+            screen = Screen.Insurance,
+            insuranceDraft = null,
+            busy = false,
+            error = null,
+            status = null,
+        )
+    }
+
+    fun insuranceTemplate(category: String): List<UiInsuranceSubject> {
+        val labels = when (category) {
+            "health" -> listOf(
+                text(R.string.insurance_detail_plan),
+                text(R.string.insurance_detail_network),
+                text(R.string.insurance_detail_dependents),
+            )
+            "major_medical" -> listOf(
+                text(R.string.insurance_detail_plan),
+                text(R.string.insurance_detail_network),
+                text(R.string.insurance_detail_deductible),
+                text(R.string.insurance_detail_coinsurance),
+            )
+            "auto" -> listOf(
+                text(R.string.insurance_detail_vehicle),
+                text(R.string.insurance_detail_plate),
+                text(R.string.insurance_detail_vin),
+                text(R.string.insurance_detail_color),
+                text(R.string.insurance_detail_use),
+            )
+            "motorcycle" -> listOf(
+                text(R.string.insurance_detail_motorcycle),
+                text(R.string.insurance_detail_plate),
+                text(R.string.insurance_detail_vin),
+                text(R.string.insurance_detail_engine),
+                text(R.string.insurance_detail_color),
+            )
+            "home" -> listOf(
+                text(R.string.insurance_detail_address),
+                text(R.string.insurance_detail_property_type),
+                text(R.string.insurance_detail_contents),
+                text(R.string.insurance_detail_mortgage),
+            )
+            "life" -> listOf(
+                text(R.string.insurance_detail_beneficiaries),
+                text(R.string.insurance_detail_sum),
+            )
+            "travel" -> listOf(
+                text(R.string.insurance_detail_destination),
+                text(R.string.insurance_detail_travel_dates),
+                text(R.string.insurance_detail_passengers),
+            )
+            "pet" -> listOf(
+                text(R.string.insurance_detail_pet),
+                text(R.string.insurance_detail_species),
+                text(R.string.insurance_detail_breed),
+                text(R.string.insurance_detail_microchip),
+            )
+            "business" -> listOf(
+                text(R.string.insurance_detail_business),
+                text(R.string.insurance_detail_address),
+                text(R.string.insurance_detail_activity),
+            )
+            else -> listOf(text(R.string.insurance_detail_insured_item))
+        }
+        return labels.map {
+            UiInsuranceSubject(
+                id = java.util.UUID.randomUUID().toString(),
+                label = it,
+            )
+        }
     }
 
     fun openFamily(tab: String = "contacts") {
@@ -2734,6 +2984,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "app.mypass.action.SCAN",
             "app.mypass.action.NEW_PASS",
             "app.mypass.action.CREDENTIALS",
+            "app.mypass.action.INSURANCE",
             "app.mypass.action.NEXT_PASS",
             "app.mypass.action.NOTIFICATIONS",
             "app.mypass.action.FAMILY",
@@ -2759,6 +3010,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             item.pass != null -> openPassItem(item.id)
             item.credential != null -> editCredential(item)
             item.medical != null -> editMedicalCard(item)
+            item.insurance != null -> editInsurance(item)
             else -> openItem(item)
         }
     }
@@ -2772,6 +3024,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "app.mypass.action.SCAN" -> openScanner(false)
             "app.mypass.action.NEW_PASS" -> newPass("flight")
             "app.mypass.action.CREDENTIALS" -> openCredentials()
+            "app.mypass.action.INSURANCE" -> openInsurance()
             "app.mypass.action.NEXT_PASS" -> openNextPass()
             "app.mypass.action.NOTIFICATIONS" -> openNotifications()
             "app.mypass.action.FAMILY" -> openFamily("contacts")
@@ -2819,6 +3072,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openMedicalItem(id: String) {
         val item = _state.value.items.firstOrNull { it.id == id } ?: return
         editMedicalCard(item)
+    }
+
+    fun openInsuranceItem(id: String) {
+        val item = _state.value.items.firstOrNull { it.id == id } ?: return
+        editInsurance(item)
     }
 
     fun clearFocusItem() {
@@ -3471,7 +3729,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             .put("plan", draft.insurancePlan.trim())
                             .put("policy_number", draft.insurancePolicy.trim())
                             .put("member_id", draft.insuranceMember.trim())
-                            .put("phone", draft.insurancePhone.trim()),
+                            .put("phone", draft.insurancePhone.trim())
+                            .put("linked_item_id", draft.linkedInsuranceId.trim()),
                     )
                     .put(
                         "doctor",
@@ -3586,6 +3845,290 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         busy = false,
                         status = null,
                         error = error.message ?: text(R.string.error_save_medical),
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveInsurance(draft: InsuranceDraft) {
+        val key = masterKey ?: return
+        val token = store.token()
+        val id = draft.itemId ?: store.newItemId()
+        val expiresAt = draft.validUntil.ifBlank { draft.nextPaymentDate }.takeIf { it.isNotBlank() }
+
+        _state.value = _state.value.copy(
+            busy = true,
+            error = null,
+            status = text(R.string.status_saving_insurance),
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val title = draft.title.ifBlank {
+                    draft.provider.ifBlank { text(R.string.insurance_fallback_title) }
+                }
+                val existing = store.findItem(id)
+                val previousMetadata = existing?.let { local ->
+                    runCatching {
+                        JSONObject(String(Crypto.open(key, Base64.decode(local.encryptedMetadata, Base64.NO_WRAP))))
+                    }.getOrNull()
+                }
+                val metadata = previousMetadata?.let { JSONObject(it.toString()) } ?: JSONObject()
+                metadata
+                    .put("title", title)
+                    .put("type", "insurance")
+                    .put("expires_at", expiresAt ?: JSONObject.NULL)
+
+                val subjectArray = JSONArray()
+                draft.subject
+                    .filter { it.label.isNotBlank() || it.value.isNotBlank() }
+                    .forEach { entry ->
+                        subjectArray.put(
+                            JSONObject()
+                                .put("id", entry.id.ifBlank { java.util.UUID.randomUUID().toString() })
+                                .put("label", entry.label.trim())
+                                .put("value", entry.value.trim()),
+                        )
+                    }
+
+                val coverageArray = JSONArray()
+                draft.coverages
+                    .filter { it.name.isNotBlank() || it.amount.isNotBlank() || it.notes.isNotBlank() }
+                    .forEach { entry ->
+                        coverageArray.put(
+                            JSONObject()
+                                .put("id", entry.id.ifBlank { java.util.UUID.randomUUID().toString() })
+                                .put("name", entry.name.trim())
+                                .put("amount", entry.amount.trim())
+                                .put("notes", entry.notes.trim()),
+                        )
+                    }
+
+                val claimArray = JSONArray()
+                draft.claims.forEach { claim ->
+                    claimArray.put(
+                        JSONObject()
+                            .put("id", claim.id.ifBlank { java.util.UUID.randomUUID().toString() })
+                            .put("date", claim.date)
+                            .put("claim_number", claim.claimNumber.trim())
+                            .put("type", claim.type.trim())
+                            .put("description", claim.description.trim())
+                            .put("status", claim.status)
+                            .put("adjuster_name", claim.adjusterName.trim())
+                            .put("adjuster_phone", claim.adjusterPhone.trim())
+                            .put("amount", claim.amount.trim())
+                            .put("notes", claim.notes.trim()),
+                    )
+                }
+
+                val insuranceJson = metadata.optJSONObject("insurance") ?: JSONObject()
+                insuranceJson
+                    .put("category", draft.category)
+                    .put("provider", draft.provider.trim())
+                    .put("product", draft.product.trim())
+                    .put("policy_number", draft.policyNumber.trim())
+                    .put("member_id", draft.memberId.trim())
+                    .put("holder", draft.holder.trim())
+                    .put("valid_from", draft.validFrom)
+                    .put("valid_until", draft.validUntil)
+                    .put("status", draft.status)
+                    .put("emergency_phone", draft.emergencyPhone.trim())
+                    .put("assistance_phone", draft.assistancePhone.trim())
+                    .put("agent_name", draft.agentName.trim())
+                    .put("agent_phone", draft.agentPhone.trim())
+                    .put("email", draft.email.trim())
+                    .put("website", draft.website.trim())
+                    .put("premium", draft.premium.trim())
+                    .put("currency", draft.currency.trim().ifBlank { "MXN" })
+                    .put("payment_frequency", draft.paymentFrequency)
+                    .put("next_payment_date", draft.nextPaymentDate)
+                    .put("insured_sum", draft.insuredSum.trim())
+                    .put("deductible", draft.deductible.trim())
+                    .put("subject", subjectArray)
+                    .put("coverages", coverageArray)
+                    .put("notes", draft.notes.trim())
+                    .put("claims", claimArray)
+                    .put("reminder_days", draft.reminderDays.coerceIn(1, 90))
+                metadata.put("insurance", insuranceJson)
+
+                var localPath = existing?.localPath
+                var blobId = existing?.blobId
+                var changedAttachment = false
+
+                if (draft.clearAttachment) {
+                    localPath?.let { runCatching { File(it).delete() } }
+                    localPath = null
+                    blobId = null
+                    changedAttachment = true
+                    metadata.remove("original_name")
+                    metadata.remove("mime")
+                    metadata.remove("size")
+                }
+
+                draft.attachmentUri?.let { uri ->
+                    val attachment = readAttachment(Uri.parse(uri))
+                    if (attachment.bytes.size > 25 * 1024 * 1024) {
+                        error(text(R.string.error_file_too_large))
+                    }
+                    val encryptedFile = Crypto.encryptFile(key, attachment.bytes)
+                    localPath = store.writeVaultFile(id, encryptedFile).absolutePath
+                    changedAttachment = true
+                    metadata
+                        .put("original_name", attachment.name)
+                        .put("mime", attachment.mime)
+                        .put("size", attachment.bytes.size)
+                    if (!draft.isNew && existing?.pendingUpload != true) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        blobId = ApiClient.uploadBlob(activeToken, encryptedFile)
+                    }
+                }
+
+                val encryptedMetadata = Base64.encodeToString(
+                    Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                    Base64.NO_WRAP,
+                )
+
+                if (draft.isNew) {
+                    store.upsert(
+                        LocalItem(
+                            id = id,
+                            type = "insurance",
+                            state = "active",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = null,
+                            version = 1,
+                            expiresAt = expiresAt,
+                            localPath = localPath,
+                            pendingUpload = true,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                } else {
+                    val local = existing ?: error(text(R.string.error_document_not_found))
+                    var version = local.version
+                    if (!local.pendingUpload) {
+                        val activeToken = token ?: error(text(R.string.error_sign_in_again))
+                        ApiClient.updateItem(
+                            token = activeToken,
+                            id = id,
+                            encryptedMetadata = encryptedMetadata,
+                            expiresAt = expiresAt,
+                            version = local.version,
+                            blobId = blobId,
+                            updateBlob = changedAttachment,
+                        )
+                        version += 1
+                    }
+                    store.upsert(
+                        local.copy(
+                            type = "insurance",
+                            encryptedMetadata = encryptedMetadata,
+                            blobId = blobId,
+                            expiresAt = expiresAt,
+                            localPath = localPath,
+                            version = version,
+                            updatedAt = VaultStore.now(),
+                        ),
+                    )
+                }
+
+                refreshItems(key)
+                Reminders.checkNow(getApplication())
+                if (draft.isNew) {
+                    sync()
+                }
+
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        screen = Screen.Insurance,
+                        insuranceDraft = null,
+                        busy = false,
+                        status = text(R.string.status_insurance_saved),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_save_insurance),
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveInsuranceClaims(item: UiItem, claims: List<UiInsuranceClaim>) {
+        val key = masterKey ?: return
+        val local = store.findItem(item.id) ?: return
+        _state.value = _state.value.copy(busy = true, error = null, status = text(R.string.status_saving_claim))
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val metadata = JSONObject(
+                    String(Crypto.open(key, Base64.decode(local.encryptedMetadata, Base64.NO_WRAP))),
+                )
+                val insuranceJson = metadata.optJSONObject("insurance") ?: JSONObject()
+                val claimArray = JSONArray()
+                claims.forEach { claim ->
+                    claimArray.put(
+                        JSONObject()
+                            .put("id", claim.id.ifBlank { java.util.UUID.randomUUID().toString() })
+                            .put("date", claim.date)
+                            .put("claim_number", claim.claimNumber.trim())
+                            .put("type", claim.type.trim())
+                            .put("description", claim.description.trim())
+                            .put("status", claim.status)
+                            .put("adjuster_name", claim.adjusterName.trim())
+                            .put("adjuster_phone", claim.adjusterPhone.trim())
+                            .put("amount", claim.amount.trim())
+                            .put("notes", claim.notes.trim()),
+                    )
+                }
+                insuranceJson.put("claims", claimArray)
+                metadata.put("insurance", insuranceJson)
+
+                val encryptedMetadata = Base64.encodeToString(
+                    Crypto.seal(key, metadata.toString().toByteArray(Charsets.UTF_8)),
+                    Base64.NO_WRAP,
+                )
+                var version = local.version
+                if (!local.pendingUpload) {
+                    val token = store.token() ?: error(text(R.string.error_sign_in_again))
+                    ApiClient.updateItem(
+                        token = token,
+                        id = item.id,
+                        encryptedMetadata = encryptedMetadata,
+                        expiresAt = local.expiresAt,
+                        version = local.version,
+                        blobId = local.blobId,
+                        updateBlob = false,
+                    )
+                    version += 1
+                }
+                store.upsert(
+                    local.copy(
+                        encryptedMetadata = encryptedMetadata,
+                        version = version,
+                        updatedAt = VaultStore.now(),
+                    ),
+                )
+                refreshItems(key)
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = text(R.string.status_claim_saved),
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                withContext(Dispatchers.Main) {
+                    _state.value = _state.value.copy(
+                        busy = false,
+                        status = null,
+                        error = error.message ?: text(R.string.error_save_claim),
                     )
                 }
             }
@@ -4428,6 +4971,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val credential = metadata?.optJSONObject("credential")?.let(::parseUiCredential)
             val medical = metadata?.optJSONObject("medical")?.let(::parseUiMedical)
+            val insurance = metadata?.optJSONObject("insurance")?.let(::parseUiInsurance)
 
             UiItem(
                 id = item.id,
@@ -4447,6 +4991,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 pass = pass,
                 credential = credential,
                 medical = medical,
+                insurance = insurance,
                 metadataJson = metadata,
             )
         }
@@ -4618,6 +5163,90 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return parseStringList(json.optString(key).takeIf { it != "null" })
     }
 
+    private fun parseUiInsurance(json: JSONObject): UiInsurance {
+        val subject = mutableListOf<UiInsuranceSubject>()
+        json.optJSONArray("subject")?.let { array ->
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                subject.add(
+                    UiInsuranceSubject(
+                        id = entry.optString("id").takeIf { it.isNotBlank() && it != "null" }
+                            ?: java.util.UUID.randomUUID().toString(),
+                        label = entry.optString("label").takeIf { it != "null" }.orEmpty(),
+                        value = entry.optString("value").takeIf { it != "null" }.orEmpty(),
+                    ),
+                )
+            }
+        }
+
+        val coverages = mutableListOf<UiInsuranceCoverage>()
+        json.optJSONArray("coverages")?.let { array ->
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                coverages.add(
+                    UiInsuranceCoverage(
+                        id = entry.optString("id").takeIf { it.isNotBlank() && it != "null" }
+                            ?: java.util.UUID.randomUUID().toString(),
+                        name = entry.optString("name").takeIf { it != "null" }.orEmpty(),
+                        amount = entry.optString("amount").takeIf { it != "null" }.orEmpty(),
+                        notes = entry.optString("notes").takeIf { it != "null" }.orEmpty(),
+                    ),
+                )
+            }
+        }
+
+        val claims = mutableListOf<UiInsuranceClaim>()
+        json.optJSONArray("claims")?.let { array ->
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                claims.add(
+                    UiInsuranceClaim(
+                        id = entry.optString("id").takeIf { it.isNotBlank() && it != "null" }
+                            ?: java.util.UUID.randomUUID().toString(),
+                        date = entry.optString("date").takeIf { it != "null" }.orEmpty(),
+                        claimNumber = entry.optString("claim_number").takeIf { it != "null" }.orEmpty(),
+                        type = entry.optString("type").takeIf { it != "null" }.orEmpty(),
+                        description = entry.optString("description").takeIf { it != "null" }.orEmpty(),
+                        status = entry.optString("status").takeIf { it != "null" && it.isNotBlank() } ?: "open",
+                        adjusterName = entry.optString("adjuster_name").takeIf { it != "null" }.orEmpty(),
+                        adjusterPhone = entry.optString("adjuster_phone").takeIf { it != "null" }.orEmpty(),
+                        amount = entry.optString("amount").takeIf { it != "null" }.orEmpty(),
+                        notes = entry.optString("notes").takeIf { it != "null" }.orEmpty(),
+                    ),
+                )
+            }
+        }
+
+        return UiInsurance(
+            category = json.optString("category").takeIf { it != "null" && it.isNotBlank() } ?: "other",
+            provider = json.optString("provider").takeIf { it != "null" }.orEmpty(),
+            product = json.optString("product").takeIf { it != "null" }.orEmpty(),
+            policyNumber = json.optString("policy_number").takeIf { it != "null" }.orEmpty(),
+            memberId = json.optString("member_id").takeIf { it != "null" }.orEmpty(),
+            holder = json.optString("holder").takeIf { it != "null" }.orEmpty(),
+            validFrom = json.optString("valid_from").takeIf { it != "null" }.orEmpty(),
+            validUntil = json.optString("valid_until").takeIf { it != "null" }.orEmpty(),
+            status = json.optString("status").takeIf { it != "null" && it.isNotBlank() } ?: "active",
+            emergencyPhone = json.optString("emergency_phone").takeIf { it != "null" }.orEmpty(),
+            assistancePhone = json.optString("assistance_phone").takeIf { it != "null" }.orEmpty(),
+            agentName = json.optString("agent_name").takeIf { it != "null" }.orEmpty(),
+            agentPhone = json.optString("agent_phone").takeIf { it != "null" }.orEmpty(),
+            email = json.optString("email").takeIf { it != "null" }.orEmpty(),
+            website = json.optString("website").takeIf { it != "null" }.orEmpty(),
+            premium = json.optString("premium").takeIf { it != "null" }.orEmpty(),
+            currency = json.optString("currency").takeIf { it != "null" && it.isNotBlank() } ?: "MXN",
+            paymentFrequency = json.optString("payment_frequency").takeIf { it != "null" }.orEmpty(),
+            nextPaymentDate = json.optString("next_payment_date").takeIf { it != "null" }.orEmpty(),
+            insuredSum = json.optString("insured_sum").takeIf { it != "null" }.orEmpty(),
+            deductible = json.optString("deductible").takeIf { it != "null" }.orEmpty(),
+            subject = subject,
+            coverages = coverages,
+            notes = json.optString("notes").takeIf { it != "null" }.orEmpty(),
+            claims = claims,
+            reminderDays = json.optInt("reminder_days", 7).coerceIn(1, 90),
+        )
+    }
+
     private fun parseUiMedical(json: JSONObject): UiMedicalCard {
         val contacts = mutableListOf<UiMedicalContact>()
         json.optJSONArray("emergency_contacts")?.let { array ->
@@ -4705,6 +5334,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 policyNumber = insurance?.optString("policy_number").orEmpty(),
                 memberId = insurance?.optString("member_id").orEmpty(),
                 phone = insurance?.optString("phone").orEmpty(),
+                linkedItemId = insurance?.optString("linked_item_id").takeIf { it != "null" }.orEmpty(),
             ),
             doctor = UiMedicalDoctor(
                 name = doctor?.optString("name").orEmpty(),

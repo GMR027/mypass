@@ -44,7 +44,7 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
   - aviso de documentos por vencer;
   - página de inicio pública;
   - interfaz completa en español e inglés, con selector de idioma.
-- Pruebas de API y de navegador pasando (97 pruebas, 467 aserciones).
+- Pruebas de API y de navegador pasando (103 pruebas, 512 aserciones).
 - App Android en Kotlin + Compose, instalada en la tablet de pruebas.
 - Billetera de pases con pestañas Documentos, Pases, Familia y Dispositivos.
 - Generador de pases con OCR local (Tesseract.js), PDF.js, ZXing y códigos QR/PDF417/Aztec/Code 128.
@@ -71,6 +71,9 @@ Bóveda personal cifrada para boletos, documentos y tarjetas. Android + web, con
 - Pases muestra primero la billetera; crear, escanear e importar viven en el botón + y el filtro Compartidos agrupa los pases enviados.
 - Familia usa pestañas Contactos, Recibidos, Enviados y Solicitudes con búsqueda y contadores, en lugar de una lista vertical interminable.
 - Gestión de envíos por elemento para consultar destinatarios, estado y cancelar envíos pendientes desde el propio pase, documento, credencial o carnet.
+- Sección Seguros con pólizas de salud, gastos médicos mayores, auto, moto, hogar, vida, viaje, mascotas y negocio, con modo siniestro, llamadas con un toque, póliza adjunta e historial de siniestros.
+- El carnet médico puede vincularse a una póliza de salud o gastos médicos mayores para mostrar sus datos actualizados.
+- Recordatorios de seguros para vigencia y próximo pago, configurables a 1, 7, 15 o 30 días antes, con notificación local en Android y aviso dentro de la sección Seguros en web.
 - Tablet: Xiaomi Pad 6, Android 13 (API 33), sin biometría fuerte.
 
 ## Requisitos locales

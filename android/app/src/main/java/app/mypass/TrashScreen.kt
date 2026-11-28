@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -91,6 +92,7 @@ fun TrashScreen(state: UiState, viewModel: MainViewModel) {
                                         item.pass != null -> Icons.Filled.DateRange
                                         item.credential != null -> Icons.Filled.Lock
                                         item.medical != null -> Icons.Filled.Person
+                                        item.insurance != null -> Icons.Filled.CheckCircle
                                         else -> Icons.Filled.Info
                                     },
                                     size = 46,
@@ -154,6 +156,7 @@ private fun trashTypeLabel(item: UiItem): String = when {
     item.pass != null -> stringResource(R.string.trash_type_pass)
     item.credential != null -> stringResource(R.string.trash_type_credential)
     item.medical != null -> stringResource(R.string.trash_type_medical)
+    item.insurance != null -> stringResource(R.string.trash_type_insurance)
     else -> stringResource(R.string.trash_type_document)
 }
 

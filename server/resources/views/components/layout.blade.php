@@ -68,6 +68,7 @@
                             ['key' => 'inicio', 'label' => __('Inicio'), 'href' => route('dashboard'), 'tab' => null, 'active' => $activeNav === 'inicio'],
                             ['key' => 'pases', 'label' => __('Pases & Boletos'), 'href' => route('vault', ['tab' => 'pases']), 'tab' => 'pases', 'active' => $activeNav === 'pases'],
                             ['key' => 'boveda', 'label' => __('Bóveda'), 'href' => route('vault', ['tab' => 'docs']), 'tab' => 'docs', 'active' => $activeNav === 'boveda' && $vaultTab === 'docs'],
+                            ['key' => 'insurance', 'label' => __('Seguros'), 'href' => route('vault', ['tab' => 'insurance']), 'tab' => 'insurance', 'active' => $vaultTab === 'insurance'],
                             ['key' => 'family', 'label' => __('Familia'), 'href' => route('vault', ['tab' => 'family']), 'tab' => 'family', 'active' => $vaultTab === 'family'],
                             ['key' => 'devices', 'label' => __('Dispositivos'), 'href' => route('vault', ['tab' => 'devices']), 'tab' => 'devices', 'active' => $vaultTab === 'devices'],
                         ];

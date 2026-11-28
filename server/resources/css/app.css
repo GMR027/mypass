@@ -551,9 +551,15 @@ html.dark .mp-pass-card__mobile-code .text-outline {
         }
     }
 
+    @media (min-width: 640px) {
+        .mp-tabs {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+    }
+
     @media (min-width: 1280px) {
         .mp-tabs {
-            grid-template-columns: repeat(6, minmax(0, 1fr));
+            grid-template-columns: repeat(7, minmax(0, 1fr));
         }
     }
 
@@ -2270,6 +2276,38 @@ html.dark .mp-pass-card__mobile-code .text-outline {
 
     .mp-medical-card__actions .mp-btn-quiet {
         @apply bg-surface-container text-on-surface hover:bg-surface-container-high;
+    }
+
+    .mp-insurance-card {
+        background:
+            radial-gradient(circle at 100% 0%, rgb(255 224 178 / 0.5), transparent 42%),
+            var(--color-paper);
+    }
+
+    .mp-insurance-card::after {
+        background: radial-gradient(circle, rgb(255 214 153 / 0.48), transparent 70%);
+    }
+
+    .mp-insurance-card__policy {
+        @apply relative z-10 mt-3 rounded-xl border border-primary/15 bg-primary-fixed/35 px-3 py-2 font-mono text-[15px] font-bold tracking-[0.04em] text-primary;
+        overflow-wrap: anywhere;
+    }
+
+    .mp-insurance-phone {
+        @apply mt-1 inline-flex items-center gap-1.5 text-[15px] font-bold text-primary underline decoration-primary/30 underline-offset-4;
+    }
+
+    .mp-insurance-presentation .mp-insurance-policy-number {
+        @apply font-mono text-[clamp(1.35rem,4vw,2rem)] font-bold tracking-[0.06em] text-primary;
+        overflow-wrap: anywhere;
+    }
+
+    .mp-insurance-presentation a.mp-btn {
+        text-decoration: none;
+    }
+
+    .mp-insurance-presentation #insurance-presentation-grid .mp-medical-presentation__value {
+        overflow-wrap: anywhere;
     }
 
     .mp-medical-presentation {

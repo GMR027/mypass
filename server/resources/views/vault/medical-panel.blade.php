@@ -160,6 +160,18 @@
 
             <div class="sm:col-span-2">
                 <h3 class="mp-title-sm">{{ __('Seguro médico') }}</h3>
+                <p class="mp-hint mt-1">{{ __('Si guardaste la póliza en Seguros, vincúlala para usar sus datos actualizados.') }}</p>
+            </div>
+            <div class="sm:col-span-2 rounded-xl border border-primary/15 bg-primary-fixed/30 p-4">
+                <label for="medical-insurance-link" class="mp-label">{{ __('Póliza vinculada') }}</label>
+                <select id="medical-insurance-link" class="mp-select mt-1">
+                    <option value="">{{ __('Sin vincular') }}</option>
+                </select>
+                <p id="medical-insurance-link-status" class="mp-hint mt-2">{{ __('Puedes capturar los datos manualmente si todavía no tienes una póliza en Seguros.') }}</p>
+                <button id="medical-insurance-go" type="button" class="mp-btn mp-btn-secondary mp-btn-sm mt-3">
+                    <x-icon name="shield" class="text-[18px]" />
+                    {{ __('Ir a Seguros') }}
+                </button>
             </div>
             <div>
                 <label for="medical-insurance-provider" class="mp-label">{{ __('Aseguradora') }}</label>

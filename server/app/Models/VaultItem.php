@@ -23,6 +23,8 @@ class VaultItem extends Model
 
     public const TYPE_MEDICAL_CARD = 'medical_card';
 
+    public const TYPE_INSURANCE = 'insurance';
+
     public const TYPE_OTHER = 'other';
 
     public const TYPES = [
@@ -31,6 +33,7 @@ class VaultItem extends Model
         self::TYPE_CARD,
         self::TYPE_CREDENTIAL,
         self::TYPE_MEDICAL_CARD,
+        self::TYPE_INSURANCE,
         self::TYPE_OTHER,
     ];
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -109,6 +110,7 @@ fun SearchScreen(state: UiState, viewModel: MainViewModel) {
                                 "pass" -> viewModel.openPassItem(hit.item.id)
                                 "credential" -> viewModel.openCredentialItem(hit.item.id)
                                 "medical" -> viewModel.openMedicalItem(hit.item.id)
+                                "insurance" -> viewModel.openInsuranceItem(hit.item.id)
                                 else -> viewModel.openItem(hit.item)
                             }
                         },
@@ -137,6 +139,7 @@ private fun SearchResultRow(hit: SearchHit, onClick: () -> Unit) {
                     "pass" -> Icons.Filled.DateRange
                     "credential" -> Icons.Filled.Lock
                     "medical" -> Icons.Filled.Person
+                    "insurance" -> Icons.Filled.CheckCircle
                     else -> Icons.Filled.Info
                 },
                 size = 44,
@@ -174,6 +177,7 @@ private fun sectionLabel(section: String): String = stringResource(
         "pass" -> R.string.trash_type_pass
         "credential" -> R.string.trash_type_credential
         "medical" -> R.string.trash_type_medical
+        "insurance" -> R.string.trash_type_insurance
         else -> R.string.trash_type_document
     },
 )
@@ -192,6 +196,11 @@ private fun searchSubtitle(hit: SearchHit): String {
         "medical" -> listOfNotNull(
             item.medical?.holder?.takeIf { it.isNotBlank() },
             item.medical?.insurance?.provider?.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+        "insurance" -> listOfNotNull(
+            item.insurance?.provider?.takeIf { it.isNotBlank() },
+            item.insurance?.policyNumber?.takeIf { it.isNotBlank() }?.let { "#$it" },
+            item.insurance?.holder?.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
         else -> listOfNotNull(
             item.originalName.takeIf { it.isNotBlank() && it != "documento" },

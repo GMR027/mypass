@@ -279,6 +279,7 @@ fun CredentialsScreen(state: UiState, viewModel: MainViewModel) {
                         onDocuments = viewModel::backToVault,
                         onCredentials = {},
                         onMedical = viewModel::openMedical,
+                        onInsurance = viewModel::openInsurance,
                     )
                     MpStatusBanner(state.status, state.error)
                     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {

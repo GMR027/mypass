@@ -35,6 +35,32 @@ class VaultSearchTest {
     }
 
     @Test
+    fun findsInsuranceByProviderPolicyAndClaimNumber() {
+        val insurance = item(
+            "insurance",
+            "Seguro del Versa",
+            insurance = UiInsurance(
+                category = "auto",
+                provider = "GNP",
+                policyNumber = "ABC-998877",
+                subject = listOf(UiInsuranceSubject(label = "Placas", value = "XYZ-123-A")),
+                claims = listOf(
+                    UiInsuranceClaim(
+                        id = "claim-1",
+                        claimNumber = "SIN-2026-0042",
+                        description = "Choque por alcance",
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals("insurance", VaultSearch.search(listOf(insurance), "gnp").first().section)
+        assertEquals("insurance", VaultSearch.search(listOf(insurance), "998877").first().section)
+        assertEquals("insurance", VaultSearch.search(listOf(insurance), "2026-0042").first().section)
+        assertEquals("insurance", VaultSearch.search(listOf(insurance), "xyz-123").first().section)
+    }
+
+    @Test
     fun ignoresTrashedItemsAndRanksTitleMatchesFirst() {
         val trashed = item("trashed", "Vuelo viejo").copy(state = "trashed")
         val other = item("other", "Documento con vuelo dentro", original = "vuelo.pdf")
@@ -51,10 +77,16 @@ class VaultSearchTest {
         original: String = "$id.pdf",
         credential: UiCredential? = null,
         medical: UiMedicalCard? = null,
+        insurance: UiInsurance? = null,
     ): UiItem {
         return UiItem(
             id = id,
-            type = if (credential != null) "credential" else if (medical != null) "medical_card" else "document",
+            type = when {
+                credential != null -> "credential"
+                medical != null -> "medical_card"
+                insurance != null -> "insurance"
+                else -> "document"
+            },
             title = title,
             mime = "application/pdf",
             originalName = original,
@@ -64,6 +96,7 @@ class VaultSearchTest {
             expiresAt = null,
             credential = credential,
             medical = medical,
+            insurance = insurance,
         )
     }
 }

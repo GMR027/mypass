@@ -66,9 +66,17 @@ class VaultTest extends TestCase
             ->assertJsonPath('data.type', 'medical_card')
             ->assertJsonPath('data.expires_at', '2027-06-30T00:00:00+00:00');
 
+        $this->postJson('/api/v1/items', [
+            'type' => 'insurance',
+            'encrypted_metadata' => base64_encode('poliza-cifrada'),
+            'expires_at' => '2027-02-15',
+        ])->assertCreated()
+            ->assertJsonPath('data.type', 'insurance')
+            ->assertJsonPath('data.expires_at', '2027-02-15T00:00:00+00:00');
+
         $this->getJson('/api/v1/items')
             ->assertOk()
-            ->assertJsonCount(2, 'data');
+            ->assertJsonCount(3, 'data');
     }
 
     public function test_unknown_item_types_are_rejected(): void

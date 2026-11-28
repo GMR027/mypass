@@ -103,6 +103,10 @@ object AgendaReminders {
                 reminders.addAll(passReminders(context, item, pass, now))
             }
 
+            item.insurance?.let { insurance ->
+                reminders.addAll(insuranceReminders(context, item, insurance, now))
+            }
+
             item.medical?.let { medical ->
                 for (medication in medical.medicationSchedule) {
                     if (medication.name.isBlank() || medication.times.isEmpty()) {
@@ -163,6 +167,63 @@ object AgendaReminders {
         }
 
         return reminders.sortedBy { it.triggerAt }.take(120)
+    }
+
+    private fun insuranceReminders(
+        context: Context,
+        item: UiItem,
+        insurance: UiInsurance,
+        now: Long,
+    ): List<AgendaReminder> {
+        val reminderDays = insurance.reminderDays.coerceIn(1, 90)
+        val zone = ZoneId.systemDefault()
+        val result = mutableListOf<AgendaReminder>()
+        val label = listOf(item.title, insurance.provider, insurance.policyNumber)
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+
+        fun add(dateValue: String, kind: String, titleRes: Int, bodyRes: Int) {
+            val date = runCatching { LocalDate.parse(dateValue.take(10)) }.getOrNull() ?: return
+            val trigger = date.minusDays(reminderDays.toLong())
+                .atTime(LocalTime.of(9, 0))
+                .atZone(zone)
+                .toInstant()
+                .toEpochMilli()
+            if (trigger <= now) {
+                return
+            }
+            result.add(
+                AgendaReminder(
+                    id = "insurance-$kind-${item.id}",
+                    kind = "insurance_$kind",
+                    itemId = item.id,
+                    title = context.getString(titleRes, label),
+                    body = context.getString(bodyRes, label, formatInsuranceReminderDate(dateValue)),
+                    triggerAt = trigger,
+                ),
+            )
+        }
+
+        add(
+            insurance.validUntil.ifBlank { item.expiresAt.orEmpty() },
+            "expiry",
+            R.string.insurance_expiry_reminder_title,
+            R.string.insurance_expiry_reminder_body,
+        )
+        add(
+            insurance.nextPaymentDate,
+            "payment",
+            R.string.insurance_payment_reminder_title,
+            R.string.insurance_payment_reminder_body,
+        )
+        return result
+    }
+
+    private fun formatInsuranceReminderDate(value: String): String {
+        return runCatching {
+            LocalDate.parse(value.take(10))
+                .format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()))
+        }.getOrDefault(value.take(10))
     }
 
     private fun passReminders(context: Context, item: UiItem, pass: UiPass, now: Long): List<AgendaReminder> {
@@ -314,18 +375,20 @@ object AgendaReminders {
             return
         }
 
-        val channelId = when (reminder.kind) {
-            "medication" -> "mypass_medications"
-            "appointment" -> "mypass_appointments"
+        val channelId = when {
+            reminder.kind == "medication" -> "mypass_medications"
+            reminder.kind == "appointment" -> "mypass_appointments"
+            reminder.kind.startsWith("insurance_") -> "mypass_insurance"
             else -> "mypass_passes"
         }
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(
                 channelId,
-                when (reminder.kind) {
-                    "medication" -> context.getString(R.string.reminder_channel_medications)
-                    "appointment" -> context.getString(R.string.reminder_channel_appointments)
+                when {
+                    reminder.kind == "medication" -> context.getString(R.string.reminder_channel_medications)
+                    reminder.kind == "appointment" -> context.getString(R.string.reminder_channel_appointments)
+                    reminder.kind.startsWith("insurance_") -> context.getString(R.string.reminder_channel_insurance)
                     else -> context.getString(R.string.reminder_channel_passes)
                 },
                 if (reminder.kind == "medication") {

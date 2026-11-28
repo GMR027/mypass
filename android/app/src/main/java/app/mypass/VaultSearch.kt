@@ -19,6 +19,7 @@ object VaultSearch {
     fun section(item: UiItem): String = when {
         item.credential != null -> "credential"
         item.medical != null -> "medical"
+        item.insurance != null -> "insurance"
         item.pass != null -> "pass"
         else -> "document"
     }
@@ -94,6 +95,30 @@ object VaultSearch {
             values += medical.doctor.name
             values += medical.doctor.clinic
             values += medical.contacts.flatMap { listOf(it.name, it.relation, it.phone) }
+        }
+
+        item.insurance?.let { insurance ->
+            values += insurance.provider
+            values += insurance.product
+            values += insurance.policyNumber
+            values += insurance.memberId
+            values += insurance.holder
+            values += insurance.emergencyPhone
+            values += insurance.assistancePhone
+            values += insurance.agentName
+            values += insurance.deductible
+            values += insurance.notes
+            values += insurance.subject.flatMap { listOf(it.label, it.value) }
+            values += insurance.coverages.flatMap { listOf(it.name, it.amount, it.notes) }
+            values += insurance.claims.flatMap {
+                listOf(
+                    it.claimNumber,
+                    it.type,
+                    it.description,
+                    it.adjusterName,
+                    it.notes,
+                )
+            }
         }
 
         return values.filter { it.isNotBlank() }.joinToString(" ")

@@ -4,6 +4,7 @@ import { WalletApp } from './passes';
 import { PassGenerator } from './pass-generator';
 import { CredentialsApp, credentialFromItem, isCredentialItem } from './credentials';
 import { MedicalApp, medicalFromItem, isMedicalItem } from './medical';
+import { InsuranceApp, insuranceFromItem, isInsuranceItem } from './insurance';
 import { centerCardInView, createCompactCard, createFlipCard, setDeckFlipped, syncDeckHeight } from './card-deck';
 
 const t = (key) => window.mypassT ? window.mypassT(key) : key;
@@ -178,6 +179,7 @@ let wallet = null;
 let passGenerator = null;
 let credentials = null;
 let medical = null;
+let insurance = null;
 let items = [];
 let keysCache = null;
 let pairingTimer = null;
@@ -1799,7 +1801,9 @@ async function loadShares() {
                     ? 'confirmation_number'
                     : share.item_type === 'medical_card'
                         ? 'medical_services'
-                        : 'description',
+                        : share.item_type === 'insurance'
+                            ? 'shield'
+                            : 'description',
                 'text-[24px]',
             ));
 
@@ -1813,7 +1817,9 @@ async function loadShares() {
                         ? ':sender te envió un boleto'
                         : share.item_type === 'medical_card'
                             ? ':sender te envió un carnet médico'
-                            : ':sender te envió un documento',
+                            : share.item_type === 'insurance'
+                                ? ':sender te envió un seguro'
+                                : ':sender te envió un documento',
                     { sender: share.sender },
                 ),
             ));
@@ -1890,7 +1896,9 @@ function renderOutgoingShares() {
                 ? 'confirmation_number'
                 : share.item_type === 'medical_card'
                     ? 'medical_services'
-                    : 'description',
+                    : share.item_type === 'insurance'
+                        ? 'shield'
+                        : 'description',
             'text-[24px]',
         ));
 
@@ -1942,6 +1950,7 @@ function renderOutgoingShares() {
     wallet?.setItems(items);
     credentials?.setItems(items);
     medical?.setItems(items);
+    insurance?.setItems(items);
 }
 
 function loadPromptedFamilyKeys() {
@@ -2693,6 +2702,7 @@ async function loadItems() {
     wallet?.setItems(items);
     credentials?.setItems(items);
     medical?.setItems(items);
+    insurance?.setItems(items);
     buildSearchIndex();
     if (searchModal?.open) {
         renderSearch(searchInput?.value || '');
@@ -2714,6 +2724,9 @@ function itemSection(item) {
     if (isMedicalItem(item)) {
         return 'medical';
     }
+    if (isInsuranceItem(item)) {
+        return 'insurance';
+    }
     if (item.metadata?.pass) {
         return 'pass';
     }
@@ -2725,6 +2738,7 @@ function sectionLabel(section) {
         pass: t('Pase'),
         credential: t('Credencial'),
         medical: t('Salud'),
+        insurance: t('Seguro'),
         document: t('Documento'),
     }[section] || t('Documento');
 }
@@ -2734,6 +2748,7 @@ function sectionIcon(section) {
         pass: 'wallet',
         credential: 'key',
         medical: 'medical_services',
+        insurance: 'shield',
         document: 'folder',
     }[section] || 'folder';
 }
@@ -2752,6 +2767,14 @@ function searchSubtitle(item, section) {
     if (section === 'medical') {
         const medical = medicalFromItem(item);
         return [medical.holder, medical.insurance?.provider].filter(Boolean).join(' · ');
+    }
+    if (section === 'insurance') {
+        const policy = insuranceFromItem(item);
+        return [
+            policy.provider,
+            policy.policyNumber ? `#${policy.policyNumber}` : '',
+            policy.holder,
+        ].filter(Boolean).join(' · ');
     }
     const expiry = item.expires_at
         ? new Date(item.expires_at).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' })
@@ -2795,6 +2818,29 @@ function buildSearchIndex() {
                 ...(medical.medications || []),
                 ...(medical.medicationSchedule || []).map((entry) => `${entry.name} ${entry.dose}`),
                 ...(medical.appointments || []).map((entry) => `${entry.title} ${entry.location}`),
+            );
+        } else if (section === 'insurance') {
+            const policy = insuranceFromItem(item);
+            values.push(
+                policy.provider,
+                policy.product,
+                policy.policyNumber,
+                policy.memberId,
+                policy.holder,
+                policy.emergencyPhone,
+                policy.assistancePhone,
+                policy.agentName,
+                policy.deductible,
+                policy.notes,
+                ...policy.subject.flatMap((entry) => [entry.label, entry.value]),
+                ...policy.coverages.flatMap((entry) => [entry.name, entry.amount, entry.notes]),
+                ...policy.claims.flatMap((claim) => [
+                    claim.claimNumber,
+                    claim.type,
+                    claim.description,
+                    claim.adjusterName,
+                    claim.notes,
+                ]),
             );
         }
 
@@ -2923,6 +2969,9 @@ function openSearchResult(entry) {
     } else if (entry.section === 'medical') {
         switchTab('medical');
         medical?.openEdit(entry.item);
+    } else if (entry.section === 'insurance') {
+        switchTab('insurance');
+        insurance?.openEdit(entry.item);
     } else {
         switchTab('docs');
         currentFilter = 'all';
@@ -2989,6 +3038,7 @@ function typeLabel(type) {
         card: t('Tarjeta'),
         credential: t('Credencial'),
         medical_card: t('Carnet médico'),
+        insurance: t('Seguro'),
         other: t('Otro'),
     }[type] ?? type;
 }
@@ -3000,12 +3050,13 @@ function typeIcon(type) {
         card: 'credit_card',
         credential: 'key',
         medical_card: 'medical_services',
+        insurance: 'shield',
         other: 'description',
     }[type] ?? 'description';
 }
 
 function renderItems() {
-    const documentItems = items.filter((item) => !item.metadata?.pass && !isCredentialItem(item) && !isMedicalItem(item));
+    const documentItems = items.filter((item) => !item.metadata?.pass && !isCredentialItem(item) && !isMedicalItem(item) && !isInsuranceItem(item));
     const query = currentSearch.trim().toLowerCase();
     const filteredItems = documentItems.filter((item) => {
         if (currentFilter !== 'all' && item.type !== currentFilter) {
@@ -3324,6 +3375,39 @@ async function saveItemMetadata(event) {
     } finally {
         editItemSubmit.disabled = false;
         setButtonText(editItemSubmit, t('Guardar cambios'));
+    }
+}
+
+async function openItemFile(item) {
+    if (!item.blob_id || !item.metadata) {
+        showToast(t('Este elemento no tiene un archivo adjunto.'));
+        return;
+    }
+
+    const tab = window.open('', '_blank');
+    try {
+        const response = await fetch(`${blobBase}/${item.blob_id}`, {
+            credentials: 'same-origin',
+        });
+        if (!response.ok) {
+            throw new Error(t('No se pudo abrir el archivo.'));
+        }
+        const decrypted = decryptFile(new Uint8Array(await response.arrayBuffer()));
+        const url = URL.createObjectURL(new Blob([decrypted], {
+            type: item.metadata.mime || 'application/octet-stream',
+        }));
+        if (tab) {
+            tab.location.href = url;
+        } else {
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = item.metadata.original_name || 'documento';
+            anchor.click();
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (error) {
+        tab?.close();
+        showError(vaultError, error.message || t('No se pudo abrir el archivo.'));
     }
 }
 
@@ -3871,6 +3955,7 @@ function lock(reason = '') {
     passGenerator?.reset();
     credentials?.reset();
     medical?.reset();
+    insurance?.reset();
     setVaultStatus(false);
     unlocked.hidden = true;
     locked.hidden = false;
@@ -3916,7 +4001,7 @@ function lock(reason = '') {
 
 function initialTab() {
     const tab = new URLSearchParams(window.location.search).get('tab');
-    return ['docs', 'pases', 'generador', 'credentials', 'medical', 'family', 'devices'].includes(tab) ? tab : 'pases';
+    return ['docs', 'pases', 'generador', 'credentials', 'medical', 'insurance', 'family', 'devices'].includes(tab) ? tab : 'pases';
 }
 
 function setVaultStatus(open) {
@@ -3930,7 +4015,7 @@ function updateNavState(tab) {
     const desktopTab = tab === 'generador' ? 'pases' : tab;
     const bottomTab = tab === 'generador'
         ? 'pases'
-        : (['docs', 'credentials', 'medical', 'family', 'devices'].includes(tab) ? 'docs' : tab);
+        : (['docs', 'credentials', 'medical', 'insurance', 'family', 'devices'].includes(tab) ? 'docs' : tab);
 
     document.querySelectorAll('[data-vault-tab]').forEach((link) => {
         const isBottom = link.classList.contains('mp-bottom-link');
@@ -3953,7 +4038,7 @@ function switchTab(tab) {
         button.setAttribute('aria-selected', button.dataset.tab === selectedTab ? 'true' : 'false');
     });
 
-    for (const panel of ['docs', 'passes', 'generador', 'credentials', 'medical', 'family', 'devices']) {
+    for (const panel of ['docs', 'passes', 'generador', 'credentials', 'medical', 'insurance', 'family', 'devices']) {
         const element = document.getElementById(`panel-${panel}`);
         if (element) {
             const panelKey = panel === 'passes' ? 'pases' : panel;
@@ -3967,6 +4052,8 @@ function switchTab(tab) {
         credentials?.render();
     } else if (tab === 'medical') {
         medical?.render();
+    } else if (tab === 'insurance') {
+        insurance?.render();
     }
 
     updateNavState(tab);
@@ -4278,6 +4365,22 @@ if (app) {
         openShare: (item) => openShareModal(item),
         downloadItem: (item, button) => downloadItem(item, button),
         deleteItem: (item, button) => deleteItem(item, button),
+        getItems: () => items,
+        switchTab: (tab) => switchTab(tab),
+    });
+
+    insurance = new InsuranceApp({
+        saveItem: (payload) => saveVaultItem({
+            ...payload,
+            changedMessage: t('El seguro cambió en otro dispositivo. Vuelve a cargarlo.'),
+            saveMessage: t('No se pudo guardar el seguro.'),
+        }),
+        toast: (message) => showToast(message),
+        canShare: () => acceptedContacts.length > 0,
+        openShare: (item) => openShareModal(item),
+        openItem: (item) => openItemFile(item),
+        deleteItem: (item, button) => deleteItem(item, button),
+        confirm: (options) => confirmAction(options),
     });
 
     document.addEventListener('click', (event) => {

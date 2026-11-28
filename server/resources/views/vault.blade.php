@@ -325,6 +325,10 @@
                     <x-icon name="medical_services" class="text-[22px]" />
                     {{ __('Salud') }}
                 </button>
+                <button id="tab-btn-insurance" type="button" role="tab" aria-selected="false" aria-controls="panel-insurance" data-tab="insurance" class="mp-tab">
+                    <x-icon name="shield" class="text-[22px]" />
+                    {{ __('Seguros') }}
+                </button>
                 <button id="tab-btn-family" type="button" role="tab" aria-selected="false" aria-controls="panel-family" data-tab="family" class="mp-tab">
                     <x-icon name="groups" class="text-[22px]" />
                     {{ __('Familia') }}
@@ -397,6 +401,7 @@
                 @include('vault.pass-generator')
                 @include('vault.credentials-panel')
                 @include('vault.medical-panel')
+                @include('vault.insurance-panel')
 
                 <section id="panel-family" role="tabpanel" aria-labelledby="tab-btn-family" hidden>
                     <div class="space-y-5">
@@ -843,7 +848,7 @@
                     </span>
                     <div>
                         <h2 id="backup-modal-title" class="mp-title-md">{{ __('Copia de seguridad') }}</h2>
-                        <p class="mp-hint mt-1">{{ __('Cifrada en tu navegador. Incluye documentos, pases, credenciales y salud.') }}</p>
+                        <p class="mp-hint mt-1">{{ __('Cifrada en tu navegador. Incluye documentos, pases, credenciales, salud y seguros.') }}</p>
                     </div>
                 </div>
                 <button id="backup-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
@@ -907,7 +912,7 @@
                     </span>
                     <div>
                         <h2 id="vault-search-title" class="mp-title-md">{{ __('Buscar en mi bóveda') }}</h2>
-                        <p class="mp-hint mt-1">{{ __('Documentos, pases, credenciales y salud. Todo se busca en este dispositivo.') }}</p>
+                        <p class="mp-hint mt-1">{{ __('Documentos, pases, credenciales, salud y seguros. Todo se busca en este dispositivo.') }}</p>
                     </div>
                 </div>
                 <button id="vault-search-close" type="button" class="mp-btn mp-btn-quiet mp-btn-icon" aria-label="{{ __('Cerrar') }}">
